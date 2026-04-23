@@ -9,137 +9,150 @@ local CfgC_Upgrades = {}
 
 CfgC_Upgrades.dCfgUpgrade = {}
 CfgC_Upgrades.allCfgUpgrades = {
-    "speed",
-    "carry",
-    "atk",
-    "atkspd",
-    "range",
-    "gold",
-    "spawn",
-    "ore_luck",
-    "slow",
-    "repair",
-    "armor",
-    "multi",
-    "turret_arrow",
-    "turret_minigun",
-    "turret_flame",
-    "turret_sniper",
-    "turret_electric",
-    "turret_rocket",
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
 }
 local _createCfgUpgrade = {
-    ["speed"] = function()
+    [1] = function()
         return {
-            Id = "speed",
+            Id = 1,
+            Key = "speed",
             Name = "急行军",
             Desc = "移动速度+25%",
             Icon = "boot",
             IsTurret = false,
         }
     end,
-    ["carry"] = function()
+    [2] = function()
         return {
-            Id = "carry",
+            Id = 2,
+            Key = "carry",
             Name = "军用背包",
             Desc = "携带上限+5",
             Icon = "bag",
             IsTurret = false,
         }
     end,
-    ["atk"] = function()
+    [3] = function()
         return {
-            Id = "atk",
+            Id = 3,
+            Key = "atk",
             Name = "利刃强化",
             Desc = "攻击力+1",
             Icon = "sword",
             IsTurret = false,
         }
     end,
-    ["atkspd"] = function()
+    [4] = function()
         return {
-            Id = "atkspd",
+            Id = 4,
+            Key = "atkspd",
             Name = "疾风斩",
             Desc = "攻击速度+30%",
             Icon = "wind",
             IsTurret = false,
         }
     end,
-    ["range"] = function()
+    [5] = function()
         return {
-            Id = "range",
+            Id = 5,
+            Key = "range",
             Name = "长臂猿",
             Desc = "攻击范围+35%",
             Icon = "magnet",
             IsTurret = false,
         }
     end,
-    ["gold"] = function()
+    [6] = function()
         return {
-            Id = "gold",
+            Id = 6,
+            Key = "gold",
             Name = "物资交换",
             Desc = "提交金币+50%",
             Icon = "coin",
             IsTurret = false,
         }
     end,
-    ["spawn"] = function()
+    [7] = function()
         return {
-            Id = "spawn",
+            Id = 7,
+            Key = "spawn",
             Name = "丰收区域",
             Desc = "资源生成+30%",
             Icon = "star",
             IsTurret = false,
         }
     end,
-    ["ore_luck"] = function()
+    [8] = function()
         return {
-            Id = "ore_luck",
+            Id = 8,
+            Key = "ore_luck",
             Name = "探矿直觉",
             Desc = "矿石出现率翻倍",
             Icon = "gem",
             IsTurret = false,
         }
     end,
-    ["slow"] = function()
+    [9] = function()
         return {
-            Id = "slow",
+            Id = 9,
+            Key = "slow",
             Name = "制动系统",
             Desc = "列车速度-15%",
             Icon = "gear",
             IsTurret = false,
         }
     end,
-    ["repair"] = function()
+    [10] = function()
         return {
-            Id = "repair",
+            Id = 10,
+            Key = "repair",
             Name = "应急维修",
             Desc = "列车回复30HP",
             Icon = "shield",
             IsTurret = false,
         }
     end,
-    ["armor"] = function()
+    [11] = function()
         return {
-            Id = "armor",
+            Id = 11,
+            Key = "armor",
             Name = "装甲强化",
             Desc = "列车最大HP+25",
             Icon = "x2",
             IsTurret = false,
         }
     end,
-    ["multi"] = function()
+    [12] = function()
         return {
-            Id = "multi",
+            Id = 12,
+            Key = "multi",
             Name = "双倍搜刮",
             Desc = "采集掉落概率×2",
             Icon = "fairy",
             IsTurret = false,
         }
     end,
-    ["turret_arrow"] = function()
+    [13] = function()
         return {
-            Id = "turret_arrow",
+            Id = 13,
+            Key = "turret_arrow",
             Name = "弓箭炮塔",
             Desc = "解锁弓箭炮塔",
             Icon = "turret_arrow",
@@ -147,9 +160,10 @@ local _createCfgUpgrade = {
             TurretType = "arrow",
         }
     end,
-    ["turret_minigun"] = function()
+    [14] = function()
         return {
-            Id = "turret_minigun",
+            Id = 14,
+            Key = "turret_minigun",
             Name = "机关枪塔",
             Desc = "解锁机关枪炮塔",
             Icon = "turret_minigun",
@@ -157,9 +171,10 @@ local _createCfgUpgrade = {
             TurretType = "minigun",
         }
     end,
-    ["turret_flame"] = function()
+    [15] = function()
         return {
-            Id = "turret_flame",
+            Id = 15,
+            Key = "turret_flame",
             Name = "喷火炮塔",
             Desc = "解锁喷火炮塔",
             Icon = "turret_flame",
@@ -167,9 +182,10 @@ local _createCfgUpgrade = {
             TurretType = "flame",
         }
     end,
-    ["turret_sniper"] = function()
+    [16] = function()
         return {
-            Id = "turret_sniper",
+            Id = 16,
+            Key = "turret_sniper",
             Name = "狙击炮塔",
             Desc = "解锁狙击炮塔",
             Icon = "turret_sniper",
@@ -177,9 +193,10 @@ local _createCfgUpgrade = {
             TurretType = "sniper",
         }
     end,
-    ["turret_electric"] = function()
+    [17] = function()
         return {
-            Id = "turret_electric",
+            Id = 17,
+            Key = "turret_electric",
             Name = "电能炮塔",
             Desc = "解锁电能炮塔",
             Icon = "turret_electric",
@@ -187,9 +204,10 @@ local _createCfgUpgrade = {
             TurretType = "electric",
         }
     end,
-    ["turret_rocket"] = function()
+    [18] = function()
         return {
-            Id = "turret_rocket",
+            Id = 18,
+            Key = "turret_rocket",
             Name = "火箭炮塔",
             Desc = "解锁火箭炮塔",
             Icon = "turret_rocket",

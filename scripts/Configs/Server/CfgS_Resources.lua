@@ -9,48 +9,58 @@ local CfgS_Resources = {}
 
 CfgS_Resources.dCfgResource = {}
 CfgS_Resources.allCfgResources = {
-    "wood",
-    "stone",
-    "ore",
-    "bush",
-    "pebble",
+    1,
+    2,
+    3,
+    4,
+    5,
 }
 local _createCfgResource = {
-    ["wood"] = function()
+    [1] = function()
         return {
-            Id = "wood",
+            Id = 1,
+            Key = "wood",
+            Name = "木材",
             Freq = 0.35,
             Hp = 80,
             Drop = 2,
         }
     end,
-    ["stone"] = function()
+    [2] = function()
         return {
-            Id = "stone",
+            Id = 2,
+            Key = "stone",
+            Name = "岩石",
             Freq = 0.3,
             Hp = 100,
             Drop = 2,
         }
     end,
-    ["ore"] = function()
+    [3] = function()
         return {
-            Id = "ore",
+            Id = 3,
+            Key = "ore",
+            Name = "矿石",
             Freq = 0.1,
             Hp = 150,
             Drop = 1,
         }
     end,
-    ["bush"] = function()
+    [4] = function()
         return {
-            Id = "bush",
+            Id = 4,
+            Key = "bush",
+            Name = "灌木",
             Freq = 0.15,
             Hp = 50,
             Drop = 1,
         }
     end,
-    ["pebble"] = function()
+    [5] = function()
         return {
-            Id = "pebble",
+            Id = 5,
+            Key = "pebble",
+            Name = "碎石",
             Freq = 0.1,
             Hp = 60,
             Drop = 1,

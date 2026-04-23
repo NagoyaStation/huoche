@@ -9,78 +9,110 @@ local CfgS_MetaData = {}
 
 CfgS_MetaData.dCfgTalent = {}
 CfgS_MetaData.allCfgTalents = {
-    "hp",
-    "atk",
-    "atkspd",
-    "def",
-    "speed",
-    "gold",
-    "carry",
-    "unlock",
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
 }
 local _createCfgTalent = {
-    ["hp"] = function()
+    [1] = function()
         return {
-            Id = "hp",
+            Id = 1,
+            Key = "hp",
+            Name = "生命强化",
+            Desc = "列车最大HP+10",
             MaxLv = 10,
             CostBase = 50,
             CostGrow = 1.3,
+            Icon = "image/talent_hp_20260421065056.png",
         }
     end,
-    ["atk"] = function()
+    [2] = function()
         return {
-            Id = "atk",
+            Id = 2,
+            Key = "atk",
+            Name = "力量提升",
+            Desc = "攻击力+1",
             MaxLv = 10,
             CostBase = 60,
             CostGrow = 1.3,
+            Icon = "image/talent_atk_20260421065251.png",
         }
     end,
-    ["atkspd"] = function()
+    [3] = function()
         return {
-            Id = "atkspd",
+            Id = 3,
+            Key = "atkspd",
+            Name = "疾速打击",
+            Desc = "攻击速度+5%",
             MaxLv = 8,
             CostBase = 80,
             CostGrow = 1.4,
+            Icon = "image/talent_atkspd_20260421065058.png",
         }
     end,
-    ["def"] = function()
+    [4] = function()
         return {
-            Id = "def",
+            Id = 4,
+            Key = "def",
+            Name = "铁壁防御",
+            Desc = "减少列车受伤-5%",
             MaxLv = 8,
             CostBase = 70,
             CostGrow = 1.3,
+            Icon = "image/talent_def_20260421065053.png",
         }
     end,
-    ["speed"] = function()
+    [5] = function()
         return {
-            Id = "speed",
+            Id = 5,
+            Key = "speed",
+            Name = "轻身术",
+            Desc = "移动速度+8%",
             MaxLv = 6,
             CostBase = 60,
             CostGrow = 1.4,
+            Icon = "image/talent_speed_20260421065223.png",
         }
     end,
-    ["gold"] = function()
+    [6] = function()
         return {
-            Id = "gold",
+            Id = 6,
+            Key = "gold",
+            Name = "聚财术",
+            Desc = "金币收益+10%",
             MaxLv = 8,
             CostBase = 100,
             CostGrow = 1.5,
+            Icon = "image/talent_gold_20260421065059.png",
         }
     end,
-    ["carry"] = function()
+    [7] = function()
         return {
-            Id = "carry",
+            Id = 7,
+            Key = "carry",
+            Name = "负重训练",
+            Desc = "携带上限+2",
             MaxLv = 5,
             CostBase = 80,
             CostGrow = 1.4,
+            Icon = "image/talent_carry_20260421065057.png",
         }
     end,
-    ["unlock"] = function()
+    [8] = function()
         return {
-            Id = "unlock",
+            Id = 8,
+            Key = "unlock",
+            Name = "求生本能",
+            Desc = "解锁新技能",
             MaxLv = 3,
             CostBase = 200,
             CostGrow = 2,
+            Icon = "image/talent_unlock_20260421065109.png",
         }
     end,
 }
@@ -119,6 +151,7 @@ local _createCfgLevel = {
     [1] = function()
         return {
             Id = 1,
+            Name = "荒原前哨",
             Waves = 5,
             RewardGold = 50,
             Chest = "bronze",
@@ -128,6 +161,7 @@ local _createCfgLevel = {
     [2] = function()
         return {
             Id = 2,
+            Name = "冰封隧道",
             Waves = 7,
             RewardGold = 80,
             Chest = "bronze",
@@ -137,6 +171,7 @@ local _createCfgLevel = {
     [3] = function()
         return {
             Id = 3,
+            Name = "暴风雪谷",
             Waves = 8,
             RewardGold = 100,
             Chest = "silver",
@@ -146,6 +181,7 @@ local _createCfgLevel = {
     [4] = function()
         return {
             Id = 4,
+            Name = "死寂车站",
             Waves = 10,
             RewardGold = 150,
             Chest = "silver",
@@ -155,6 +191,7 @@ local _createCfgLevel = {
     [5] = function()
         return {
             Id = 5,
+            Name = "钢铁废墟",
             Waves = 12,
             RewardGold = 200,
             Chest = "gold",
@@ -164,6 +201,7 @@ local _createCfgLevel = {
     [6] = function()
         return {
             Id = 6,
+            Name = "末日核心",
             Waves = 15,
             RewardGold = 300,
             Chest = "gold",
@@ -195,60 +233,78 @@ end
 
 CfgS_MetaData.dCfgTurretUpgrade = {}
 CfgS_MetaData.allCfgTurretUpgrades = {
-    "arrow",
-    "minigun",
-    "flame",
-    "sniper",
-    "electric",
-    "rocket",
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
 }
 local _createCfgTurretUpgrade = {
-    ["arrow"] = function()
+    [1] = function()
         return {
-            Id = "arrow",
+            Id = 1,
+            Key = "arrow",
+            Name = "弓箭炮塔",
             MaxLv = 5,
             FragBase = 5,
             FragGrow = 1.5,
+            Icon = "image/turret_arrow_v3_20260420035036.png",
         }
     end,
-    ["minigun"] = function()
+    [2] = function()
         return {
-            Id = "minigun",
+            Id = 2,
+            Key = "minigun",
+            Name = "机关枪塔",
             MaxLv = 5,
             FragBase = 8,
             FragGrow = 1.5,
+            Icon = "image/turret_minigun_v3_20260420035022.png",
         }
     end,
-    ["flame"] = function()
+    [3] = function()
         return {
-            Id = "flame",
+            Id = 3,
+            Key = "flame",
+            Name = "喷火炮塔",
             MaxLv = 5,
             FragBase = 8,
             FragGrow = 1.5,
+            Icon = "image/edited_turret_flame_nofire_20260423065123.png",
         }
     end,
-    ["sniper"] = function()
+    [4] = function()
         return {
-            Id = "sniper",
+            Id = 4,
+            Key = "sniper",
+            Name = "狙击炮塔",
             MaxLv = 5,
             FragBase = 10,
             FragGrow = 1.6,
+            Icon = "image/turret_sniper_v3_20260420035021.png",
         }
     end,
-    ["electric"] = function()
+    [5] = function()
         return {
-            Id = "electric",
+            Id = 5,
+            Key = "electric",
+            Name = "电能炮塔",
             MaxLv = 5,
             FragBase = 10,
             FragGrow = 1.6,
+            Icon = "image/turret_electric_v10_20260423040517.png",
         }
     end,
-    ["rocket"] = function()
+    [6] = function()
         return {
-            Id = "rocket",
+            Id = 6,
+            Key = "rocket",
+            Name = "火箭炮塔",
             MaxLv = 5,
             FragBase = 12,
             FragGrow = 1.8,
+            Icon = "image/turret_rocket_v3_20260420035019.png",
         }
     end,
 }

@@ -7,98 +7,130 @@
 
 local CfgS_Turrets = {}
 
+CfgS_Turrets.ARROW_SPEED = 280 -- 弓箭飞行速度
+CfgS_Turrets.ARROW_LIFE = 1.5 -- 弓箭最大存活时间
+CfgS_Turrets.ARROW_HIT_RADIUS_SQ = 144 -- 弓箭命中判定距离²
+CfgS_Turrets.MINIGUN_SPEED = 500 -- 机关枪弹速
+CfgS_Turrets.MINIGUN_LIFE = 0.8 -- 机关枪弹存活时间
+CfgS_Turrets.MINIGUN_SPREAD = 0.12 -- 机关枪散布角度
+CfgS_Turrets.MINIGUN_HIT_RADIUS_SQ = 144 -- 机关枪命中距离²
+CfgS_Turrets.ROCKET_SPEED = 150 -- 火箭飞行速度
+CfgS_Turrets.ROCKET_LIFE = 3 -- 火箭最大存活时间
+CfgS_Turrets.ROCKET_AOE_RADIUS = 80 -- 火箭爆炸半径(像素)
+CfgS_Turrets.ROCKET_AOE_FALLOFF = 0.5 -- 火箭AOE边缘衰减比
+CfgS_Turrets.ROCKET_HIT_RADIUS_SQ = 225 -- 火箭命中判定距离²
+CfgS_Turrets.ROCKET_TRAIL_INTERVAL = 0.03 -- 火箭烟尾生成间隔
+CfgS_Turrets.SNIPER_SEGMENTS_PER10 = 1 -- 狙击射线每10px段数
+CfgS_Turrets.SNIPER_LIFE = 0.35 -- 狙击射线存活时间
+CfgS_Turrets.SNIPER_SPARK_COUNT = 6 -- 狙击命中火花数
+CfgS_Turrets.ELECTRIC_LIFE = 0.3 -- 闪电弧存活时间
+CfgS_Turrets.ELECTRIC_OFFSET = 22 -- 闪电弧偏移量
+CfgS_Turrets.ELECTRIC_SPARK_COUNT = 4 -- 闪电命中火花数
+CfgS_Turrets.FLAME_HALF_SPREAD = 0.45 -- 火焰半扩散角(弧度)
+CfgS_Turrets.FLAME_DRAW_H = 130 -- 火焰视觉长度
+CfgS_Turrets.TURRET_H = 48 -- 炮塔渲染高度
+CfgS_Turrets.TURRET_W = 36 -- 炮塔渲染宽度
+CfgS_Turrets.SLOT1_OFFSET_X = -18 -- 左侧槽位X偏移
+CfgS_Turrets.SLOT1_OFFSET_Y = 6 -- 左侧槽位Y偏移
+CfgS_Turrets.SLOT2_OFFSET_X = 18 -- 右侧槽位X偏移
+CfgS_Turrets.SLOT2_OFFSET_Y = 6 -- 右侧槽位Y偏移
+CfgS_Turrets.SLOT3_OFFSET_X = 0 -- 车头槽位X偏移
+CfgS_Turrets.SLOT3_OFFSET_Y = 36 -- 车头槽位Y偏移
+CfgS_Turrets.SLOT4_OFFSET_X = 0 -- 车尾槽位X偏移
+CfgS_Turrets.SLOT4_OFFSET_Y = -32 -- 车尾槽位Y偏移
+
 CfgS_Turrets.dCfgTurret = {}
 CfgS_Turrets.allCfgTurrets = {
-    "arrow",
-    "sniper",
-    "flame",
-    "electric",
-    "rocket",
-    "minigun",
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
 }
 local _createCfgTurret = {
-    ["arrow"] = function()
+    [1] = function()
         return {
-            Id = "arrow",
+            Id = 1,
+            Name = "弓箭炮塔",
+            ImgKey = "arrow",
             Range = 220,
             Damage = 8,
             Cooldown = 1,
+            ColorR = 180,
+            ColorG = 140,
+            ColorB = 80,
             ProjType = "arrow",
-            ProjSpeed = 300,
-            ProjLife = 0.8,
-            AoeRadius = 0,
-            AoeFalloff = 0,
-            ConeHalfAngle = 0,
         }
     end,
-    ["sniper"] = function()
+    [2] = function()
         return {
-            Id = "sniper",
+            Id = 2,
+            Name = "狙击炮塔",
+            ImgKey = "sniper",
             Range = 350,
             Damage = 35,
             Cooldown = 5,
+            ColorR = 255,
+            ColorG = 60,
+            ColorB = 40,
             ProjType = "sniper",
-            ProjSpeed = 0,
-            ProjLife = 0,
-            AoeRadius = 0,
-            AoeFalloff = 0,
-            ConeHalfAngle = 0,
         }
     end,
-    ["flame"] = function()
+    [3] = function()
         return {
-            Id = "flame",
+            Id = 3,
+            Name = "喷火炮塔",
+            ImgKey = "flame",
             Range = 200,
             Damage = 5,
             Cooldown = 0.12,
+            ColorR = 255,
+            ColorG = 120,
+            ColorB = 30,
             ProjType = "flame",
-            ProjSpeed = 0,
-            ProjLife = 0,
-            AoeRadius = 0,
-            AoeFalloff = 0,
-            ConeHalfAngle = 0.45,
         }
     end,
-    ["electric"] = function()
+    [4] = function()
         return {
-            Id = "electric",
+            Id = 4,
+            Name = "电能炮塔",
+            ImgKey = "electric",
             Range = 200,
             Damage = 12,
             Cooldown = 0.7,
+            ColorR = 60,
+            ColorG = 160,
+            ColorB = 255,
             ProjType = "electric",
-            ProjSpeed = 0,
-            ProjLife = 0,
-            AoeRadius = 0,
-            AoeFalloff = 0,
-            ConeHalfAngle = 0,
         }
     end,
-    ["rocket"] = function()
+    [5] = function()
         return {
-            Id = "rocket",
+            Id = 5,
+            Name = "火箭炮塔",
+            ImgKey = "rocket",
             Range = 280,
             Damage = 40,
             Cooldown = 8,
+            ColorR = 80,
+            ColorG = 120,
+            ColorB = 60,
             ProjType = "rocket",
-            ProjSpeed = 150,
-            ProjLife = 0,
-            AoeRadius = 80,
-            AoeFalloff = 0.5,
-            ConeHalfAngle = 0,
         }
     end,
-    ["minigun"] = function()
+    [6] = function()
         return {
-            Id = "minigun",
+            Id = 6,
+            Name = "机关枪炮塔",
+            ImgKey = "minigun",
             Range = 250,
             Damage = 3,
             Cooldown = 0.1,
+            ColorR = 255,
+            ColorG = 230,
+            ColorB = 80,
             ProjType = "minigun",
-            ProjSpeed = 500,
-            ProjLife = 0.8,
-            AoeRadius = 0,
-            AoeFalloff = 0,
-            ConeHalfAngle = 0,
         }
     end,
 }
