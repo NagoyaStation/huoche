@@ -315,7 +315,7 @@ function Start()
     turretImgs = {
         arrow    = nvgCreateImage(vg, "image/turret_arrow_v3_20260420035036.png", NVG_IMAGE_NEAREST),
         sniper   = nvgCreateImage(vg, "image/turret_sniper_v3_20260420035021.png", NVG_IMAGE_NEAREST),
-        flame    = nvgCreateImage(vg, "image/turret_flame_v3_20260420035013.png", NVG_IMAGE_NEAREST),
+        flame    = nvgCreateImage(vg, "image/edited_turret_flame_nofire_20260423065123.png", NVG_IMAGE_NEAREST),
         electric = nvgCreateImage(vg, "image/turret_electric_v10_20260423040517.png", NVG_IMAGE_NEAREST),
         rocket   = nvgCreateImage(vg, "image/turret_rocket_v3_20260420035019.png", NVG_IMAGE_NEAREST),
         minigun  = nvgCreateImage(vg, "image/turret_minigun_v3_20260420035022.png", NVG_IMAGE_NEAREST),

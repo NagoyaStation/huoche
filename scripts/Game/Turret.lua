@@ -3,7 +3,11 @@
 -- 数据定义 + 槽位 + 自动索敌 + 6种专属攻击动画
 ------------------------------------------------------------------------
 local C = require "Game.Config"
+local E = require "Game.Entities"
 local T = {}
+
+-- 飙血颜色
+local BLOOD_COLOR = {180, 30, 20}
 
 ------------------------------------------------------------------------
 -- 炮塔类型定义
@@ -11,10 +15,10 @@ local T = {}
 T.TYPES = {
     arrow    = { name = "弓箭炮塔",   imgKey = "arrow",    range = 220, damage = 8,  cooldown = 1.0,  color = {180, 140, 80},  projType = "arrow"    },
     sniper   = { name = "狙击炮塔",   imgKey = "sniper",   range = 350, damage = 35, cooldown = 5.0,  color = {255, 60, 40},   projType = "sniper"   },
-    flame    = { name = "喷火炮塔",   imgKey = "flame",    range = 120, damage = 5,  cooldown = 0.12, color = {255, 120, 30},  projType = "flame"    },
+    flame    = { name = "喷火炮塔",   imgKey = "flame",    range = 200, damage = 5,  cooldown = 0.12, color = {255, 120, 30},  projType = "flame"    },
     electric = { name = "电能炮塔",   imgKey = "electric", range = 200, damage = 12, cooldown = 0.7,  color = {60, 160, 255},  projType = "electric" },
     rocket   = { name = "火箭炮塔",   imgKey = "rocket",   range = 280, damage = 40, cooldown = 8.0,  color = {80, 120, 60},   projType = "rocket"   },
-    minigun  = { name = "机关枪炮塔", imgKey = "minigun",  range = 180, damage = 3,  cooldown = 0.1,  color = {255, 230, 80},  projType = "minigun"  },
+    minigun  = { name = "机关枪炮塔", imgKey = "minigun",  range = 250, damage = 3,  cooldown = 0.1,  color = {255, 230, 80},  projType = "minigun"  },
 }
 
 T.TYPE_LIST = { "arrow", "sniper", "flame", "electric", "rocket", "minigun" }
@@ -185,7 +189,7 @@ local function spawnProjectile(G, projType, sx, sy, tx, ty, angle, targetEnemy, 
         end
     elseif projType == "minigun" then
         -- 机关枪曳光弹（追踪目标，到达后造成伤害）
-        local spd = 400
+        local spd = 500
         local spread = (math.random() - 0.5) * 0.12
         local a = angle + spread
         table.insert(G.turretProjectiles, {
@@ -194,7 +198,7 @@ local function spawnProjectile(G, projType, sx, sy, tx, ty, angle, targetEnemy, 
             vx = math.cos(a) * spd,
             vy = math.sin(a) * spd,
             speed = spd,
-            life = 0.6, maxLife = 0.6,
+            life = 0.8, maxLife = 0.8,
             target = targetEnemy,
             damage = damage or 3,
             tx = tx, ty = ty,
@@ -293,14 +297,33 @@ function T.Update(G, dt)
             if turret.coolTimer <= 0 then
                 turret.coolTimer = def.cooldown
 
-                -- 喷火炮台：持续喷射，不发射弹道
+                -- 喷火炮台：持续喷射，对火焰锥形范围内所有敌人造成伤害
                 if turret.typeKey == "flame" then
-                    -- 直接对目标造成伤害
-                    nearEnemy.hp = nearEnemy.hp - def.damage
-                    nearEnemy.hitAnim = 0.3
-                    if nearEnemy.hp <= 0 then
-                        nearEnemy.dead = true
-                        G.gold = (G.gold or 0) + (nearEnemy.reward or 5)
+                    local flameLen = def.range  -- 火焰长度与炮塔索敌范围一致
+                    local halfSpread = 0.45   -- 火焰半扩散角（弧度，约50度锥形）
+                    local cosA = math.cos(turret.angle)
+                    local sinA = math.sin(turret.angle)
+                    local flameLenSq = flameLen * flameLen
+                    for _, z in ipairs(G.zombies) do
+                        if not z.dead then
+                            local fdx = z.x - tx
+                            local fdy = z.y - ty
+                            local distSq = fdx * fdx + fdy * fdy
+                            if distSq < flameLenSq and distSq > 0 then
+                                -- 检查是否在火焰锥形方向内
+                                local dist = math.sqrt(distSq)
+                                local dot = (fdx * cosA + fdy * sinA) / dist
+                                if dot > math.cos(halfSpread) then
+                                    z.hp = z.hp - def.damage
+                                    z.hitAnim = 0.3
+                                    E.SpawnParticles(G, z.x, z.y, BLOOD_COLOR, 3)
+                                    if z.hp <= 0 then
+                                        z.dead = true
+                                        G.gold = (G.gold or 0) + (z.reward or 5)
+                                    end
+                                end
+                            end
+                        end
                     end
                 else
                     -- 弹道类武器不即时造成伤害，弹道到达后才扣血
@@ -308,6 +331,7 @@ function T.Update(G, dt)
                     if not isProjectile then
                         nearEnemy.hp = nearEnemy.hp - def.damage
                         nearEnemy.hitAnim = 1.0
+                        E.SpawnParticles(G, nearEnemy.x, nearEnemy.y, BLOOD_COLOR, 4)
                         if nearEnemy.hp <= 0 then
                             nearEnemy.dead = true
                             G.gold = (G.gold or 0) + (nearEnemy.reward or 5)
@@ -416,6 +440,7 @@ function T.UpdateProjectiles(G, dt)
                     if p.target and not p.target.dead then
                         p.target.hp = p.target.hp - (p.damage or 8)
                         p.target.hitAnim = 1.0
+                        E.SpawnParticles(G, p.target.x, p.target.y, BLOOD_COLOR, 5)
                         if p.target.hp <= 0 then
                             p.target.dead = true
                             G.gold = (G.gold or 0) + (p.target.reward or 5)
@@ -448,6 +473,7 @@ function T.UpdateProjectiles(G, dt)
                     if p.target and not p.target.dead then
                         p.target.hp = p.target.hp - (p.damage or 3)
                         p.target.hitAnim = 1.0
+                        E.SpawnParticles(G, p.target.x, p.target.y, BLOOD_COLOR, 2)
                         if p.target.hp <= 0 then
                             p.target.dead = true
                             G.gold = (G.gold or 0) + (p.target.reward or 5)
@@ -561,7 +587,7 @@ function T.Draw(vg, G)
             local frameIdx = math.floor((turret.flameTime or 0) * fps) % frameCount + 1
             local fImg = G.flameFrames[frameIdx]
             if fImg and fImg ~= 0 then
-                local drawH = 80
+                local drawH = 130
                 local drawW = drawH * (101 / 235)
                 -- 翻转火焰图片，让火焰尖端朝外喷射
                 nvgSave(vg)
@@ -856,6 +882,7 @@ function T.RocketAOE(G, ex, ey)
                 local finalDmg = math.floor(dmg * falloff)
                 z.hp = z.hp - finalDmg
                 z.hitAnim = 1.0
+                E.SpawnParticles(G, z.x, z.y, BLOOD_COLOR, 4)
                 if z.hp <= 0 then
                     z.dead = true
                     G.gold = (G.gold or 0) + (z.reward or 5)

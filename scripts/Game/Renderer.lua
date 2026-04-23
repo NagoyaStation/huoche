@@ -1008,13 +1008,7 @@ function R.DrawZombies(vg, G)
             nvgFillPaint(vg, imgPaint)
             nvgFill(vg)
 
-            -- 受击红色叠加
-            if hitFlash then
-                nvgBeginPath(vg)
-                nvgRect(vg, drawX, drawY, drawW, drawH)
-                nvgFillColor(vg, nvgRGBA(200, 50, 30, 100))
-                nvgFill(vg)
-            end
+            -- 受击闪白（通过降低透明度实现，不绘制红框）
 
             nvgRestore(vg)
         end
