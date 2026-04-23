@@ -25,6 +25,8 @@ local zombieIdleHandle = 0  -- 僵尸1 idle图片句柄
 local zombieWalkHandles = {} -- 僵尸1 行走序列帧: {a, b, c, d}
 local zombie2IdleHandle = 0  -- 僵尸2 idle图片句柄
 local zombie2WalkHandles = {} -- 僵尸2 行走序列帧: {a, b, c, d}
+local crawlerIdleHandle = 0   -- 爬行僵尸 idle图片句柄
+local crawlerWalkHandles = {} -- 爬行僵尸 行走序列帧: {a, b, c, d}
 local trainImgHandle = 0     -- 火车精灵图片句柄
 local trainFrontHandle = 0   -- 火车正面图（升级UI用）
 local titleBannerHandle = 0  -- 标题横幅背景
@@ -145,6 +147,8 @@ local function MountImageHandles()
     G.zombieWalkFrames = zombieWalkHandles
     G.zombie2IdleImg = zombie2IdleHandle
     G.zombie2WalkFrames = zombie2WalkHandles
+    G.crawlerIdleImg = crawlerIdleHandle
+    G.crawlerWalkFrames = crawlerWalkHandles
     G.trainImg = trainImgHandle
     G.trainCarriageImg = trainCarriageHandle
     G.trainFrontImg = trainFrontHandle
@@ -278,6 +282,20 @@ function Start()
         zombie2WalkHandles[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
     end
     print("Loaded zombie2 frames: idle + " .. #zombie2WalkHandles .. " walk")
+
+    -- 加载爬行僵尸序列帧 (快速爬行版)
+    crawlerIdleHandle = nvgCreateImage(vg, "image/zombie_crawler_idle_20260423100303.png", NVG_IMAGE_NEAREST)
+    local crawlerWalkFiles = {
+        "image/zombie_crawler_walk_a_20260423100306.png",
+        "image/zombie_crawler_walk_b_20260423100302.png",
+        "image/zombie_crawler_walk_c_20260423100302.png",
+        "image/zombie_crawler_walk_d_20260423100317.png",
+    }
+    crawlerWalkHandles = {}
+    for i, path in ipairs(crawlerWalkFiles) do
+        crawlerWalkHandles[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
+    end
+    print("Loaded crawler frames: idle + " .. #crawlerWalkHandles .. " walk")
 
     -- 火车精灵（干净版，无烟雾，烟雾由程序化粒子绘制）
     trainImgHandle = nvgCreateImage(vg, "image/edited_train_clean_edge_20260416031151.png", NVG_IMAGE_NEAREST)

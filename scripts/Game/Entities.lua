@@ -459,21 +459,43 @@ function E.SpawnZombie(G)
     end
     local zy = math.floor(G.screenH) + 20 + math.random(0, 30)
 
+    -- 决定僵尸类型: 3级后有概率生成爬行僵尸(type 3)
+    local zType
+    if G.level >= C.CRAWLER_SPAWN_LEVEL and math.random() < C.CRAWLER_CHANCE then
+        zType = 3  -- 爬行僵尸
+    else
+        zType = math.random(1, 2)  -- 1=白T恤僵尸, 2=棕外套僵尸
+    end
+
+    local zSpeed
+    if zType == 3 then
+        zSpeed = C.CRAWLER_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
+    else
+        zSpeed = C.ZOMBIE_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
+    end
+
     table.insert(zombies, {
         x = zx,
         y = zy,
         facing = 1,
         phase = math.random() * math.pi * 2,
-        speed = C.ZOMBIE_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL,
+        speed = zSpeed,
         dead = false,
         hitAnim = 0,
         walkAnim = 0,        -- 行走动画计数器
         atkTimer = 0,        -- 攻击列车冷却
         atTrain = false,     -- 是否已到达列车
-        zombieType = math.random(1, 2), -- 1=白T恤僵尸, 2=棕外套僵尸
+        zombieType = zType,
     })
     local z = zombies[#zombies]
-    local baseHp = (z.zombieType == 1) and 80 or 100
+    local baseHp
+    if zType == 1 then
+        baseHp = 80
+    elseif zType == 2 then
+        baseHp = 100
+    else -- 爬行僵尸: 脆皮快速
+        baseHp = C.CRAWLER_HP_BASE
+    end
     z.hp = baseHp + math.floor(G.level / 3) * 5  -- 每3级+5HP
     z.maxHp = z.hp
 end

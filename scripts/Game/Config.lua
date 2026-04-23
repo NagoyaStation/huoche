@@ -20,7 +20,7 @@ C.PATH_WIDTH_RATIO = 0.30        -- 路径(铁轨/雪道)宽度占屏幕比例
 ------------------------------------------------------------------------
 -- 列车 HP
 ------------------------------------------------------------------------
-C.TRAIN_MAX_HP = 100             -- 列车最大生命值
+C.TRAIN_MAX_HP = 1000            -- 列车最大生命值
 C.TRAIN_HP_REGEN = 0             -- 列车每秒自动回复(默认不回)
 
 ------------------------------------------------------------------------
@@ -60,6 +60,10 @@ C.ZOMBIE_SPAWN_INTERVAL_MIN = 1.0 -- 最小生成间隔(秒)
 C.ZOMBIE_SPAWN_INTERVAL_REDUCE = 0.3 -- 每级减少间隔(秒)
 C.ZOMBIE_SPEED = 30              -- 向列车移动速度 px/s (慢慢逼近)
 C.ZOMBIE_SPEED_PER_LEVEL = 1.5   -- 每级加速 (更平缓)
+C.CRAWLER_SPEED = 60             -- 爬行僵尸速度 px/s (快速)
+C.CRAWLER_HP_BASE = 50           -- 爬行僵尸基础血量 (脆皮)
+C.CRAWLER_SPAWN_LEVEL = 3        -- 爬行僵尸最低出现关卡
+C.CRAWLER_CHANCE = 0.25          -- 爬行僵尸生成概率 (25%)
 C.ZOMBIE_SIZE = 20               -- 碰撞半径
 C.ZOMBIE_HP = 3                  -- 丧尸生命值
 C.ZOMBIE_DAMAGE = 8              -- 对列车伤害

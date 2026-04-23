@@ -934,6 +934,8 @@ function R.DrawZombies(vg, G)
     local walkFrames1 = G.zombieWalkFrames
     local idleImg2 = G.zombie2IdleImg
     local walkFrames2 = G.zombie2WalkFrames
+    local idleImg3 = G.crawlerIdleImg
+    local walkFrames3 = G.crawlerWalkFrames
 
     for _, z in ipairs(G.zombies or {}) do
         if z.dead then goto continue_z end
@@ -961,8 +963,17 @@ function R.DrawZombies(vg, G)
 
         -- 根据僵尸类型选择精灵集
         local zType = z.zombieType or 1
-        local idleImg = (zType == 2) and idleImg2 or idleImg1
-        local walkFrames = (zType == 2) and walkFrames2 or walkFrames1
+        local idleImg, walkFrames
+        if zType == 3 then
+            idleImg = idleImg3
+            walkFrames = walkFrames3
+        elseif zType == 2 then
+            idleImg = idleImg2
+            walkFrames = walkFrames2
+        else
+            idleImg = idleImg1
+            walkFrames = walkFrames1
+        end
 
         -- 选择精灵帧
         local frameImg = idleImg  -- 默认idle
@@ -974,15 +985,30 @@ function R.DrawZombies(vg, G)
 
         if frameImg and frameImg ~= 0 then
             -- 僵尸精灵尺寸：比碰撞框稍大
-            local drawW = C.ZOMBIE_SIZE + 16
-            local drawH = drawW * 1.24  -- 保持512x636原图比例
+            local drawW, drawH
+            if zType == 3 then
+                -- 爬行僵尸：更扁平，贴地
+                drawW = C.ZOMBIE_SIZE + 20
+                drawH = drawW * 1.0  -- 正方形比例(爬行姿态)
+            else
+                drawW = C.ZOMBIE_SIZE + 16
+                drawH = drawW * 1.24  -- 保持512x636原图比例
+            end
 
             -- 程序化行走摇晃：弹跳 + 倾斜（僵尸比玩家更夸张）
             local isMoving = (wa > 0.5)
             local wobbleY = 0
             local wobbleTilt = 0
 
-            if isMoving then
+            if zType == 3 then
+                -- 爬行僵尸：快速左右摇摆，不弹跳
+                if isMoving then
+                    local phase = wa * math.pi * 0.5
+                    wobbleTilt = math.sin(phase) * 0.10  -- 爬行时身体左右大幅摇摆
+                else
+                    wobbleTilt = math.sin(t * 3 + z.phase) * 0.04  -- 蠕动感
+                end
+            elseif isMoving then
                 local phase = wa * math.pi * 0.5
                 wobbleY = -math.abs(math.sin(phase)) * 2.0
                 wobbleTilt = math.sin(phase) * 0.06  -- 僵尸摇摆更大

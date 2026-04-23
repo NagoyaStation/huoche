@@ -59,8 +59,8 @@ def make_game_config():
     # --- #Train ---
     ws2 = wb.create_sheet("#Train")
     rows2 = [
-        ("int", "MAX_HP",     100, "列车最大生命值"),
-        ("int", "HP_REGEN",   0,   "列车每秒自动回复"),
+        ("int", "MAX_HP",     1000, "列车最大生命值"),
+        ("int", "HP_REGEN",   0,    "列车每秒自动回复"),
     ]
     for r in rows2: ws2.append(r)
     auto_width(ws2)
@@ -98,6 +98,10 @@ def make_game_config():
         ("int",   "TYPE1_BASE_HP",        80,   "白T恤僵尸基础HP"),
         ("int",   "TYPE2_BASE_HP",        100,  "棕外套僵尸基础HP"),
         ("int",   "HP_PER_3LEVELS",       5,    "每3级+HP"),
+        ("int",   "CRAWLER_SPEED",        60,   "爬行僵尸速度 px/s"),
+        ("int",   "CRAWLER_HP_BASE",      50,   "爬行僵尸基础血量(脆皮)"),
+        ("int",   "CRAWLER_SPAWN_LEVEL",  3,    "爬行僵尸最低出现关卡"),
+        ("float", "CRAWLER_CHANCE",       0.25, "爬行僵尸生成概率"),
     ]
     for r in rows4: ws4.append(r)
     auto_width(ws4)
