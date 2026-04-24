@@ -972,8 +972,8 @@ function R.DrawZombies(vg, G)
             nvgFill(vg)
         end
 
-        -- 翻转
-        if z.facing < 0 then nvgScale(vg, -1, 1) end
+        -- 翻转（俯视角爬行僵尸朝上，不做水平翻转）
+        if zType ~= 3 and z.facing < 0 then nvgScale(vg, -1, 1) end
 
         -- 选择精灵集
         local idleImg, walkFrames
