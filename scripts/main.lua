@@ -288,9 +288,9 @@ function Start()
     local crawlerWalkFiles = {
         "image/edited_crawler_td_f1_20260424025443.png",  -- 帧1: 左手前伸抓地，右膝前顶，身体右倾
         "image/edited_crawler_td_f2_20260424025528.png",  -- 帧2: 左手撑地发力，右手前移过渡
-        "image/edited_crawler_td_f3_20260424025615.png",  -- 帧3: 双手对称撑地，中间过渡帧
+        "image/edited_crawler_td_f3_20260424031336.png",  -- 帧3: 双手对称撑地，中间过渡帧
         "image/edited_crawler_td_f4_20260424025700.png",  -- 帧4: 右手开始前伸，左手后收，身体左倾
-        "image/edited_crawler_td_f5_20260424025749.png",  -- 帧5: 右手前伸抓地，左膝前顶，身体左倾
+        "image/edited_crawler_td_f5_20260424031411.png",  -- 帧5: 右手前伸抓地，左膝前顶，身体左倾
         "image/edited_crawler_td_f6_20260424025839.png",  -- 帧6: 右手撑地发力，左手前移过渡
         "image/edited_crawler_td_f7_20260424025920.png",  -- 帧7: 双手撑地，过渡回左手周期
         "image/edited_crawler_td_f8_20260424030008.png",  -- 帧8: 左手开始前伸，循环回帧1
