@@ -283,13 +283,13 @@ function Start()
     end
     print("Loaded zombie2 frames: idle + " .. #zombie2WalkHandles .. " walk")
 
-    -- 加载爬行僵尸序列帧 (快速爬行版)
+    -- 加载爬行僵尸序列帧 (快速爬行版, v2统一风格)
     crawlerIdleHandle = nvgCreateImage(vg, "image/zombie_crawler_idle_20260423100303.png", NVG_IMAGE_NEAREST)
     local crawlerWalkFiles = {
-        "image/zombie_crawler_walk_a_20260423100306.png",
-        "image/zombie_crawler_walk_b_20260423100302.png",
-        "image/zombie_crawler_walk_c_20260423100302.png",
-        "image/zombie_crawler_walk_d_20260423100317.png",
+        "image/edited_zombie_crawler_walk_a_v2_20260424015443.png",
+        "image/edited_zombie_crawler_walk_b_v2_20260424015536.png",
+        "image/edited_zombie_crawler_walk_c_v2_20260424015627.png",
+        "image/edited_zombie_crawler_walk_d_v2_20260424015717.png",
     }
     crawlerWalkHandles = {}
     for i, path in ipairs(crawlerWalkFiles) do
