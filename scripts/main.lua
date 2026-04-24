@@ -286,14 +286,14 @@ function Start()
     -- 加载爬行僵尸序列帧 (8帧爬行动画，手脚交替运动)
     crawlerIdleHandle = nvgCreateImage(vg, "image/zombie_crawler_idle_20260423100303.png", NVG_IMAGE_NEAREST)
     local crawlerWalkFiles = {
-        "image/edited_zombie_crawler_walk_a_v2_20260424015443.png",  -- 帧1: 左手前伸+右腿蹬
-        "image/edited_zombie_crawler_f2_20260424021117.png",         -- 帧2: 左手前伸过渡
-        "image/edited_zombie_crawler_walk_b_v2_20260424015536.png",  -- 帧3: 双手收拢
-        "image/edited_zombie_crawler_f4_20260424021149.png",         -- 帧4: 蜷缩过渡
-        "image/edited_zombie_crawler_walk_c_v2_20260424015627.png",  -- 帧5: 右手前伸+左腿蹬
-        "image/edited_zombie_crawler_f6_20260424021236.png",         -- 帧6: 右手前伸过渡
-        "image/edited_zombie_crawler_walk_d_v2_20260424015717.png",  -- 帧7: 双手前扑
-        "image/edited_zombie_crawler_f8_20260424021304.png",         -- 帧8: 完全伸展过渡
+        "image/edited_crawler_crawl_f1_20260424022419.png",  -- 帧1: 左手前伸抓地，右手收胸旁，右膝前顶
+        "image/edited_crawler_crawl_f2_20260424022501.png",  -- 帧2: 左手撑地发力，身体前移过渡
+        "image/edited_crawler_crawl_f3_20260424022721.png",  -- 帧3: 双手两侧撑地，中间位过渡
+        "image/edited_crawler_crawl_f4_20260424022808.png",  -- 帧4: 右手开始前伸，左手后收
+        "image/edited_crawler_crawl_f5_20260424023034.png",  -- 帧5: 右手前伸抓地，左手收胸旁，左膝前顶
+        "image/edited_crawler_crawl_f6_20260424023116.png",  -- 帧6: 右手撑地发力，身体前移过渡
+        "image/edited_crawler_crawl_f7_20260424023202.png",  -- 帧7: 双手两侧撑地，中间位过渡
+        "image/edited_crawler_crawl_f8_20260424023340.png",  -- 帧8: 左手开始前伸，循环回帧1
     }
     crawlerWalkHandles = {}
     for i, path in ipairs(crawlerWalkFiles) do
