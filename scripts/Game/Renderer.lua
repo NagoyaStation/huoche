@@ -948,12 +948,26 @@ function R.DrawZombies(vg, G)
         nvgSave(vg)
         nvgTranslate(vg, zx, zy)
 
-        -- 柔阴影 (径向渐变)
+        -- 根据僵尸类型选择精灵集
+        local zType = z.zombieType or 1
+
+        -- 柔阴影 (径向渐变，爬行僵尸阴影贴地)
         do
-            local shPaint = nvgRadialGradient(vg, 2, C.ZOMBIE_SIZE * 0.9, 2, 14,
+            local shY, shRx, shRy
+            if zType == 3 then
+                -- 爬行僵尸：阴影在身体正下方，更扁更宽（贴地）
+                shY = 4
+                shRx = 16
+                shRy = 6
+            else
+                shY = C.ZOMBIE_SIZE * 0.9
+                shRx = 14
+                shRy = 5
+            end
+            local shPaint = nvgRadialGradient(vg, 2, shY, 2, shRx,
                 nvgRGBA(8, 10, 5, 75), nvgRGBA(8, 10, 5, 0))
             nvgBeginPath(vg)
-            nvgEllipse(vg, 2, C.ZOMBIE_SIZE * 0.9, 14, 5)
+            nvgEllipse(vg, 2, shY, shRx, shRy)
             nvgFillPaint(vg, shPaint)
             nvgFill(vg)
         end
@@ -961,8 +975,7 @@ function R.DrawZombies(vg, G)
         -- 翻转
         if z.facing < 0 then nvgScale(vg, -1, 1) end
 
-        -- 根据僵尸类型选择精灵集
-        local zType = z.zombieType or 1
+        -- 选择精灵集
         local idleImg, walkFrames
         if zType == 3 then
             idleImg = idleImg3
@@ -975,11 +988,12 @@ function R.DrawZombies(vg, G)
             walkFrames = walkFrames1
         end
 
-        -- 选择精灵帧
+        -- 选择精灵帧（支持动态帧数）
         local frameImg = idleImg  -- 默认idle
         local wa = z.walkAnim or 0
-        if walkFrames and #walkFrames >= 4 and wa > 0.5 then
-            local walkIdx = (math.floor(wa) % 4) + 1
+        local frameCount = walkFrames and #walkFrames or 0
+        if walkFrames and frameCount >= 1 and wa > 0.5 then
+            local walkIdx = (math.floor(wa) % frameCount) + 1
             frameImg = walkFrames[walkIdx]
         end
 
@@ -1026,15 +1040,19 @@ function R.DrawZombies(vg, G)
             end
 
             local drawX = -drawW / 2
-            local drawY = -drawH / 2 - 2
+            local drawY
+            if zType == 3 then
+                -- 爬行僵尸：贴地绘制，中心偏下
+                drawY = -drawH / 2 + 4
+            else
+                drawY = -drawH / 2 - 2
+            end
             local alpha = hitFlash and 0.5 or 1.0
             local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, frameImg, alpha)
             nvgBeginPath(vg)
             nvgRect(vg, drawX, drawY, drawW, drawH)
             nvgFillPaint(vg, imgPaint)
             nvgFill(vg)
-
-            -- 受击闪白（通过降低透明度实现，不绘制红框）
 
             nvgRestore(vg)
         end
@@ -1046,7 +1064,13 @@ function R.DrawZombies(vg, G)
             local barW = 24
             local barH = 3
             local bx = zx - barW / 2
-            local by = zy - (C.ZOMBIE_SIZE + 16) * 1.24 / 2 - 6
+            local by
+            if zType == 3 then
+                -- 爬行僵尸血条：在身体上方（爬行姿态更矮）
+                by = zy - (C.ZOMBIE_SIZE + 20) * 0.5 / 2 - 6
+            else
+                by = zy - (C.ZOMBIE_SIZE + 16) * 1.24 / 2 - 6
+            end
             local ratio = z.hp / z.maxHp
             -- 背景
             nvgBeginPath(vg)

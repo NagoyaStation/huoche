@@ -26,7 +26,7 @@ local zombieWalkHandles = {} -- 僵尸1 行走序列帧: {a, b, c, d}
 local zombie2IdleHandle = 0  -- 僵尸2 idle图片句柄
 local zombie2WalkHandles = {} -- 僵尸2 行走序列帧: {a, b, c, d}
 local crawlerIdleHandle = 0   -- 爬行僵尸 idle图片句柄
-local crawlerWalkHandles = {} -- 爬行僵尸 行走序列帧: {a, b, c, d}
+local crawlerWalkHandles = {} -- 爬行僵尸 行走序列帧: 8帧爬行动画
 local trainImgHandle = 0     -- 火车精灵图片句柄
 local trainFrontHandle = 0   -- 火车正面图（升级UI用）
 local titleBannerHandle = 0  -- 标题横幅背景
@@ -283,13 +283,17 @@ function Start()
     end
     print("Loaded zombie2 frames: idle + " .. #zombie2WalkHandles .. " walk")
 
-    -- 加载爬行僵尸序列帧 (快速爬行版, v2统一风格)
+    -- 加载爬行僵尸序列帧 (8帧爬行动画，手脚交替运动)
     crawlerIdleHandle = nvgCreateImage(vg, "image/zombie_crawler_idle_20260423100303.png", NVG_IMAGE_NEAREST)
     local crawlerWalkFiles = {
-        "image/edited_zombie_crawler_walk_a_v2_20260424015443.png",
-        "image/edited_zombie_crawler_walk_b_v2_20260424015536.png",
-        "image/edited_zombie_crawler_walk_c_v2_20260424015627.png",
-        "image/edited_zombie_crawler_walk_d_v2_20260424015717.png",
+        "image/edited_zombie_crawler_walk_a_v2_20260424015443.png",  -- 帧1: 左手前伸+右腿蹬
+        "image/edited_zombie_crawler_f2_20260424021117.png",         -- 帧2: 左手前伸过渡
+        "image/edited_zombie_crawler_walk_b_v2_20260424015536.png",  -- 帧3: 双手收拢
+        "image/edited_zombie_crawler_f4_20260424021149.png",         -- 帧4: 蜷缩过渡
+        "image/edited_zombie_crawler_walk_c_v2_20260424015627.png",  -- 帧5: 右手前伸+左腿蹬
+        "image/edited_zombie_crawler_f6_20260424021236.png",         -- 帧6: 右手前伸过渡
+        "image/edited_zombie_crawler_walk_d_v2_20260424015717.png",  -- 帧7: 双手前扑
+        "image/edited_zombie_crawler_f8_20260424021304.png",         -- 帧8: 完全伸展过渡
     }
     crawlerWalkHandles = {}
     for i, path in ipairs(crawlerWalkFiles) do
