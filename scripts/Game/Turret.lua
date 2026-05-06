@@ -13,12 +13,12 @@ local BLOOD_COLOR = {180, 30, 20}
 -- 炮塔类型定义
 ------------------------------------------------------------------------
 T.TYPES = {
-    arrow    = { name = "弓箭炮塔",   imgKey = "arrow",    range = 220, damage = 8,  cooldown = 1.0,  color = {180, 140, 80},  projType = "arrow"    },
-    sniper   = { name = "狙击炮塔",   imgKey = "sniper",   range = 350, damage = 35, cooldown = 5.0,  color = {255, 60, 40},   projType = "sniper"   },
-    flame    = { name = "喷火炮塔",   imgKey = "flame",    range = 200, damage = 5,  cooldown = 0.12, color = {255, 120, 30},  projType = "flame"    },
-    electric = { name = "电能炮塔",   imgKey = "electric", range = 200, damage = 12, cooldown = 0.7,  color = {60, 160, 255},  projType = "electric" },
-    rocket   = { name = "火箭炮塔",   imgKey = "rocket",   range = 280, damage = 40, cooldown = 8.0,  color = {80, 120, 60},   projType = "rocket"   },
-    minigun  = { name = "机关枪炮塔", imgKey = "minigun",  range = 250, damage = 3,  cooldown = 0.1,  color = {255, 230, 80},  projType = "minigun"  },
+    arrow    = { name = "弓箭炮塔",   imgKey = "arrow",    range = 220, damage = 8,  cooldown = 1.0,  color = {180, 140, 80},  projType = "arrow",    activeDuration = 6,  restDuration = 3 },
+    sniper   = { name = "狙击炮塔",   imgKey = "sniper",   range = 350, damage = 35, cooldown = 5.0,  color = {255, 60, 40},   projType = "sniper",   activeDuration = 10, restDuration = 5 },
+    flame    = { name = "喷火炮塔",   imgKey = "flame",    range = 200, damage = 5,  cooldown = 0.12, color = {255, 120, 30},  projType = "flame",    activeDuration = 4,  restDuration = 3 },
+    electric = { name = "电能炮塔",   imgKey = "electric", range = 200, damage = 12, cooldown = 0.7,  color = {60, 160, 255},  projType = "electric", activeDuration = 5,  restDuration = 3 },
+    rocket   = { name = "火箭炮塔",   imgKey = "rocket",   range = 280, damage = 40, cooldown = 8.0,  color = {80, 120, 60},   projType = "rocket",   activeDuration = 8,  restDuration = 5 },
+    minigun  = { name = "机关枪炮塔", imgKey = "minigun",  range = 250, damage = 3,  cooldown = 0.1,  color = {255, 230, 80},  projType = "minigun",  activeDuration = 5,  restDuration = 4 },
 }
 
 T.TYPE_LIST = { "arrow", "sniper", "flame", "electric", "rocket", "minigun" }
@@ -64,12 +64,15 @@ function T.UnlockTurret(G, typeKey)
     -- 找第一个空槽位
     for _, slot in ipairs(T.SLOTS) do
         if not usedSlots[slot.id] then
+            local tDef = T.TYPES[typeKey]
             table.insert(G.turrets, {
                 slotId = slot.id,
                 typeKey = typeKey,
                 coolTimer = 0,
                 angle = math.pi / 2,
                 recoil = 0,
+                phase = "active",                          -- "active" 攻击中 / "resting" 冷却中
+                phaseTimer = tDef.activeDuration or 6,     -- 当前阶段剩余时间
             })
             print("[Turret] Unlocked " .. typeKey .. " at slot " .. slot.id)
             return true
@@ -90,10 +93,13 @@ end
 function T.SetTurrets(G, selections)
     G.turrets = {}
     for i, typeKey in ipairs(selections) do
-        if i <= #T.SLOTS and T.TYPES[typeKey] then
+        local tDef = T.TYPES[typeKey]
+        if i <= #T.SLOTS and tDef then
             table.insert(G.turrets, {
                 slotId = i, typeKey = typeKey, coolTimer = 0,
                 angle = math.pi / 2, recoil = 0,
+                phase = "active",
+                phaseTimer = tDef.activeDuration or 6,
             })
         end
     end
@@ -257,6 +263,44 @@ function T.Update(G, dt)
             if turret.recoil < 0 then turret.recoil = 0 end
         end
 
+        -- ===== 攻击/冷却双阶段计时 =====
+        if not turret.phase then turret.phase = "active" end
+        if not turret.phaseTimer then turret.phaseTimer = def.activeDuration or 6 end
+
+        -- 只有 active 阶段在有目标时才消耗 phaseTimer
+        -- resting 阶段一直倒计时
+        if turret.phase == "resting" then
+            turret.phaseTimer = turret.phaseTimer - dt
+            if turret.phaseTimer <= 0 then
+                turret.phase = "active"
+                turret.phaseTimer = def.activeDuration or 6
+                turret.coolTimer = 0  -- 恢复后立刻可射击
+            end
+
+            -- 冷却阶段：喷火停止
+            if turret.typeKey == "flame" then
+                turret.flaming = false
+                turret.flameTime = 0
+            end
+
+            -- 冷却阶段：炮管回正，不索敌不攻击
+            local target = math.pi / 2
+            local diff = target - turret.angle
+            while diff > math.pi do diff = diff - 2 * math.pi end
+            while diff < -math.pi do diff = diff + 2 * math.pi end
+            if math.abs(diff) > 0.02 then
+                turret.angle = turret.angle + diff * dt * 3.0
+            else
+                turret.angle = target
+            end
+            turret.targeting = false
+
+            if turret.fireFlash and turret.fireFlash > 0 then
+                turret.fireFlash = turret.fireFlash - dt
+            end
+            goto continue
+        end
+
         local tx, ty = T.GetSlotWorldPos(G, turret.slotId)
 
         -- 索敌（只攻击屏幕可见范围内的敌人）
@@ -281,6 +325,19 @@ function T.Update(G, dt)
             local dy = nearEnemy.y - ty
             turret.angle = math.atan(dy, dx)
             turret.targeting = true
+
+            -- 攻击阶段倒计时（仅在有目标时消耗）
+            turret.phaseTimer = turret.phaseTimer - dt
+            if turret.phaseTimer <= 0 then
+                turret.phase = "resting"
+                turret.phaseTimer = def.restDuration or 3
+                -- 立即停止喷火
+                if turret.typeKey == "flame" then
+                    turret.flaming = false
+                    turret.flameTime = 0
+                end
+                goto continue
+            end
 
             -- 弓箭炮塔：场上已有箭矢飞行中则不发射
             if turret.typeKey == "arrow" and G.turretProjectiles then

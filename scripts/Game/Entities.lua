@@ -224,6 +224,7 @@ function E.AutoAttack(G, dt)
 
         if bestTarget.hp <= 0 then
             bestTarget.dead = true
+            G.killCount = (G.killCount or 0) + 1
             E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 10, "击杀!", "gold")
             E.SpawnParticles(G, bestTarget.x, bestTarget.y, {220, 70, 60}, 6)
             -- 击杀奖励金币
@@ -444,6 +445,59 @@ end
 ------------------------------------------------------------------------
 -- 丧尸生成
 ------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- 波次开始时批量涌现一大群僵尸
+------------------------------------------------------------------------
+function E.SpawnWaveHorde(G, count)
+    local W = G.screenW
+    local H = G.screenH
+    for i = 1, count do
+        -- 散布在屏幕上方外侧，分成多排涌入
+        local row = math.ceil(i / 6)  -- 每排约6个
+        local zx = math.random(30, math.floor(W - 30))
+        local zy = H + 20 + (row - 1) * 25 + math.random(0, 15)
+
+        local zType
+        if G.level >= C.CRAWLER_SPAWN_LEVEL and math.random() < C.CRAWLER_CHANCE then
+            zType = 3
+        else
+            zType = math.random(1, 2)
+        end
+
+        local zSpeed
+        if zType == 3 then
+            zSpeed = C.CRAWLER_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
+        else
+            zSpeed = C.ZOMBIE_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
+        end
+
+        local baseHp
+        if zType == 1 then
+            baseHp = 80
+        elseif zType == 2 then
+            baseHp = 100
+        else
+            baseHp = C.CRAWLER_HP_BASE
+        end
+        local hp = baseHp + math.floor(G.level / 3) * 5
+
+        table.insert(G.zombies, {
+            x = zx, y = zy,
+            facing = 1,
+            phase = math.random() * math.pi * 2,
+            speed = zSpeed,
+            dead = false,
+            hitAnim = 0,
+            walkAnim = 0,
+            atkTimer = 0,
+            atTrain = false,
+            zombieType = zType,
+            hp = hp,
+            maxHp = hp,
+        })
+    end
+end
+
 function E.SpawnZombie(G)
     local zombies = G.zombies
     local maxZ = math.min(C.ZOMBIE_MAX_BASE + G.level * C.ZOMBIE_MAX_PER_LEVEL, C.ZOMBIE_MAX_CAP)

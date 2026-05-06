@@ -9,6 +9,7 @@ local Rend = require "Game.Renderer"
 local RL   = require "Game.Roguelike"
 local Turret = require "Game.Turret"
 local Meta = require "Meta.MetaMain"
+local UIEditor = require "Editor.UIEditor"
 
 ------------------------------------------------------------------------
 -- 全局游戏状态
@@ -46,6 +47,13 @@ local hudIconGoldHandle = 0
 local hudIconWoodHandle = 0
 local hudIconStoneHandle = 0
 local hudIconGemHandle = 0
+-- HUD 框架图片句柄
+local hudFrameCapHandle = 0   -- 图层_6: 端盖
+local hudFrameMidHandle = 0   -- 图层_7: 中间平铺
+local hudInnerFrameHandle = 0
+local hudSettingsFrameHandle = 0
+local waveUIHandle = 0
+local killUIHandle = 0
 
 
 
@@ -103,6 +111,15 @@ local function ResetGame()
         zombies = {},
         turrets = {},
         turretProjectiles = {},
+
+        -- 波次系统
+        currentWave = 1,
+        maxWaves = 20,
+        waveTimer = 0,           -- 当前波次已进行时间
+        waveDuration = 30,       -- 每波持续时间(秒)
+        waveCountdown = 0,       -- 下一波倒计时
+        waveActive = true,       -- 当前波次是否正在进行
+        killCount = 0,           -- 总击杀数
 
         -- 生成计时器
         resSpawnTimer = 0,
@@ -166,10 +183,21 @@ local function MountImageHandles()
     G.hudIconStone = hudIconStoneHandle
     G.hudIconGem = hudIconGemHandle
     G.hudSettings = hudSettingsHandle
+    G.hudFrameCap = hudFrameCapHandle
+    G.hudFrameMid = hudFrameMidHandle
+    G.hudInnerFrame = hudInnerFrameHandle
+    G.hudSettingsFrame = hudSettingsFrameHandle
     G.hpBarFrame = hpBarFrameHandle
+    G.waveUIImg = waveUIHandle
+    G.killUIImg = killUIHandle
     G.turretImgs = turretImgs
+    G.turretBaseTop = turretBaseTopHandle
+    G.turretBaseMid = turretBaseMidHandle
+    G.turretBaseBot = turretBaseBotHandle
+    G.turretLockedImg = turretLockedHandle
+    G.turretFrameImg  = turretFrameHandle
     G.titleBg = titleBgHandle
-    -- 升级卡图标
+    -- 升级卡图标 
     G.upgradeIcons = upgradeIconHandles
     -- 弓箭发射物图片
     G.arrowProjImg = arrowProjHandle
@@ -330,6 +358,19 @@ function Start()
     hudIconStoneHandle = nvgCreateImage(vg, "image/hud_icon_stone_20260416075733.png", 0)
     hudIconGemHandle = nvgCreateImage(vg, "image/hud_icon_gem_20260416075717.png", 0)
     hudSettingsHandle = nvgCreateImage(vg, "image/hud_settings.png", 0)
+    hudFrameCapHandle = nvgCreateImage(vg, "image/图层_6.png", 0)
+    hudFrameMidHandle = nvgCreateImage(vg, "image/图层_7.png", NVG_IMAGE_REPEATX)
+    hudInnerFrameHandle = nvgCreateImage(vg, "image/内框.png", 0)
+    hudSettingsFrameHandle = nvgCreateImage(vg, "image/设置框底.png", 0)
+    waveUIHandle = nvgCreateImage(vg, "image/怪物波次UI.png", 0)
+    killUIHandle = nvgCreateImage(vg, "image/击杀怪物数量.png", 0)
+
+    -- 炮塔底三段拼接图片（顶部 139x28 / 中部 138x29 可平铺 / 底部 141x32）
+    turretBaseTopHandle    = nvgCreateImage(vg, "image/炮塔底（顶部）.png", 0)
+    turretBaseMidHandle    = nvgCreateImage(vg, "image/炮塔底（中部）.png", 0)
+    turretBaseBotHandle    = nvgCreateImage(vg, "image/炮塔底（底部）.png", 0)
+    turretLockedHandle     = nvgCreateImage(vg, "image/炮塔上锁.png", 0)
+    turretFrameHandle      = nvgCreateImage(vg, "image/炮塔显示框.png", 0)
     hpBarFrameHandle = nvgCreateImage(vg, "image/hp_bar_frame_20260420020959.png", 0)
     heartIconHandle = nvgCreateImage(vg, "image/22fb797b.png", 0)
 
@@ -456,6 +497,13 @@ function HandleUpdate(eventType, eventData)
     local H = physH / dpr
     Rend.CalcLayout(G, W, H)
 
+    -- F2 切换 UI 编辑器（仅在 lobby 状态下生效）
+    if G.state == "lobby" and input:GetKeyPress(KEY_F2) then
+        UIEditor.Toggle()
+    end
+    -- 编辑器键盘处理（R 重置）
+    UIEditor.HandleKeyboard()
+
     if G.state == "menu" or G.state == "gameover" then
         return
     end
@@ -504,13 +552,40 @@ function HandleUpdate(eventType, eventData)
         Ent.SpawnDecorations(G)
     end
 
-    -- 丧尸生成（间隔随关卡递减，越打越多）
-    local spawnInterval = math.max(C.ZOMBIE_SPAWN_INTERVAL_MIN,
-        C.ZOMBIE_SPAWN_INTERVAL - G.level * C.ZOMBIE_SPAWN_INTERVAL_REDUCE)
-    G.zombieSpawnTimer = G.zombieSpawnTimer + dt
-    if G.zombieSpawnTimer >= spawnInterval then
-        G.zombieSpawnTimer = G.zombieSpawnTimer - spawnInterval
-        Ent.SpawnZombie(G)
+    -- 波次系统更新
+    if G.waveActive then
+        G.waveTimer = G.waveTimer + dt
+        G.waveCountdown = math.max(0, G.waveDuration - G.waveTimer)
+
+        -- 丧尸生成（间隔随波次递减，越打越多）
+        local spawnInterval = math.max(C.ZOMBIE_SPAWN_INTERVAL_MIN,
+            C.ZOMBIE_SPAWN_INTERVAL - G.currentWave * C.ZOMBIE_SPAWN_INTERVAL_REDUCE)
+        G.zombieSpawnTimer = G.zombieSpawnTimer + dt
+        if G.zombieSpawnTimer >= spawnInterval then
+            G.zombieSpawnTimer = G.zombieSpawnTimer - spawnInterval
+            Ent.SpawnZombie(G)
+        end
+
+        -- 波次结束 → 进入间歇期
+        if G.waveTimer >= G.waveDuration then
+            G.waveActive = false
+            G.waveTimer = 0
+            G.waveCountdown = 10  -- 间歇期10秒
+        end
+    else
+        -- 间歇期倒计时
+        G.waveCountdown = G.waveCountdown - dt
+        if G.waveCountdown <= 0 then
+            G.currentWave = math.min(G.currentWave + 1, G.maxWaves)
+            G.waveActive = true
+            G.waveTimer = 0
+            G.waveCountdown = G.waveDuration
+            G.level = G.currentWave  -- 同步level用于难度缩放
+
+            -- 波次开始时批量涌现一大群僵尸
+            local hordeCount = math.min(6 + G.currentWave * 2, 30)
+            Ent.SpawnWaveHorde(G, hordeCount)
+        end
     end
 
     -- 更新玩家
@@ -563,6 +638,12 @@ function HandleMouseDown(eventType, eventData)
     local dpr = graphics:GetDPR()
     local lx, ly = mx / dpr, my / dpr
 
+    -- 编辑器优先拦截
+    if G.state == "lobby" and UIEditor.HandlePointerDown(lx, ly) then
+        mouseDragging = true
+        return
+    end
+
     if G.state == "lobby" then
         Meta.HandleTouchStart(lx, ly)
         mouseDragging = true
@@ -577,12 +658,19 @@ function HandleMouseMove(eventType, eventData)
     local mx = eventData["X"]:GetInt()
     local my = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
-    Meta.HandleTouchMove(mx / dpr, my / dpr)
+    local lx, ly = mx / dpr, my / dpr
+
+    -- 编辑器优先拦截
+    if UIEditor.HandlePointerMove(lx, ly) then return end
+
+    Meta.HandleTouchMove(lx, ly)
 end
 
 function HandleMouseUp(eventType, eventData)
     if mouseDragging then
         mouseDragging = false
+        -- 编辑器优先拦截
+        if UIEditor.HandlePointerUp() then return end
         if G.state == "lobby" then
             Meta.HandleTouchEnd()
         end
@@ -594,6 +682,11 @@ function HandleTouchBegin(eventType, eventData)
     local ty = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
     local lx, ly = tx / dpr, ty / dpr
+
+    -- 编辑器优先拦截
+    if G.state == "lobby" and UIEditor.HandlePointerDown(lx, ly) then
+        return
+    end
 
     if G.state == "lobby" then
         Meta.HandleTouchStart(lx, ly)
@@ -607,11 +700,18 @@ function HandleTouchMove(eventType, eventData)
     local tx = eventData["X"]:GetInt()
     local ty = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
-    Meta.HandleTouchMove(tx / dpr, ty / dpr)
+    local lx, ly = tx / dpr, ty / dpr
+
+    -- 编辑器优先拦截
+    if UIEditor.HandlePointerMove(lx, ly) then return end
+
+    Meta.HandleTouchMove(lx, ly)
 end
 
 function HandleTouchEnd(eventType, eventData)
     if G.state == "lobby" then
+        -- 编辑器优先拦截
+        if UIEditor.HandlePointerUp() then return end
         Meta.HandleTouchEnd()
     end
 end
@@ -688,6 +788,8 @@ function HandleRender(eventType, eventData)
     -- 局外大厅：独立渲染
     if G.state == "lobby" then
         Meta.Draw(vg, W, H)
+        -- UI 编辑器覆盖层（在所有 UI 之上）
+        UIEditor.DrawOverlay(vg, W, H)
         nvgEndFrame(vg)
         return
     end
@@ -729,6 +831,9 @@ function HandleRender(eventType, eventData)
 
     -- HUD
     Rend.DrawHUD(vg, G)
+
+    -- 波次面板
+    Rend.DrawWavePanel(vg, G)
 
     -- 右侧面板（炮塔图标 + 距离条）
     Rend.DrawRightPanel(vg, G)
