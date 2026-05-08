@@ -812,42 +812,75 @@ function R.DrawPlayer(vg, G)
     local frames = G.heroAnimFrames
     local walkFrames = G.heroWalkFrames
     local frameImg = G.heroImg  -- 默认idle帧
-    if frames and #frames >= 5 then
+    local nFrames = frames and #frames or 0
+    if nFrames >= 2 then
         if p.atkSwingAnim and p.atkSwingAnim > 0 then
-            -- atkSwingAnim 从 1.0 递减到 0, 映射到帧: raise(1.0~0.7) → swing(0.7~0.4) → hit(0.4~0.1) → recover(0.1~0)
-            if p.atkSwingAnim > 0.7 then
-                frameImg = frames[2]  -- raise 举斧
-            elseif p.atkSwingAnim > 0.4 then
-                frameImg = frames[3]  -- swing 挥砍中
-            elseif p.atkSwingAnim > 0.1 then
-                frameImg = frames[4]  -- hit 命中
+            if nFrames >= 5 then
+                -- 经典5帧: idle/raise/swing/hit/recover
+                if p.atkSwingAnim > 0.7 then
+                    frameImg = frames[2]
+                elseif p.atkSwingAnim > 0.4 then
+                    frameImg = frames[3]
+                elseif p.atkSwingAnim > 0.1 then
+                    frameImg = frames[4]
+                else
+                    frameImg = frames[5]
+                end
             else
-                frameImg = frames[5]  -- recover 恢复
+                -- 动态帧数: 按 atkSwingAnim(1→0) 等分映射到所有帧
+                local progress = 1.0 - p.atkSwingAnim  -- 0→1
+                local idx = math.floor(progress * nFrames) + 1
+                if idx > nFrames then idx = nFrames end
+                frameImg = frames[idx]
             end
         elseif p.collectAnim and p.collectAnim > 0 then
-            -- 采集动画复用 swing 帧
-            local collectProgress = 1.0 - p.collectAnim / 0.3
-            if collectProgress < 0.5 then
-                frameImg = frames[2]  -- raise
+            if nFrames >= 3 then
+                local collectProgress = 1.0 - p.collectAnim / 0.3
+                if collectProgress < 0.5 then
+                    frameImg = frames[2]
+                else
+                    frameImg = frames[3]
+                end
             else
-                frameImg = frames[3]  -- swing
+                frameImg = frames[nFrames]
             end
-        elseif walkFrames and #walkFrames >= 4 and p.walkAnim > 0.5 then
-            -- 行走动画: 4关键帧循环 (程序化补间在绘制时处理)
-            local walkIdx = (math.floor(p.walkAnim) % 4) + 1
+        elseif walkFrames and #walkFrames >= 1 and p.isWalking then
+            -- 行走动画: 仅在实际移动时播放帧，停下立即回 idle
+            local wCount = #walkFrames
+            local walkIdx = (math.floor(p.walkAnim) % wCount) + 1
             frameImg = walkFrames[walkIdx]
         else
-            frameImg = frames[1]  -- idle
+            -- idle: 保持 G.heroImg（待机图），不用 frames[1]
         end
     end
 
     if frameImg and frameImg ~= 0 then
-        -- 图片原始比例约 512x636 (4:5)，显示尺寸按角色碰撞框放大
+        -- 统一画布：所有帧用相同大小绘制，每帧按原图比例居中 fit
+        local canvasW = G.heroCanvasW or 512
+        local canvasH = G.heroCanvasH or 636
+        local canvasRatio = canvasH / canvasW
         local drawW = C.PLAYER_W + 18  -- 比碰撞框稍大，让角色显眼
-        local drawH = drawW * 1.24     -- 保持原图比例 (636/512 ≈ 1.24)
+        local drawH = drawW * canvasRatio
+
+        -- 计算当前帧在统一画布内的居中 fit 位置
+        local imgW, imgH = nvgImageSize(vg, frameImg)
+        if imgW <= 0 or imgH <= 0 then imgW, imgH = canvasW, canvasH end
+        local frameRatio = imgH / imgW
+        local fitW, fitH, fitX, fitY
+        if frameRatio >= canvasRatio then
+            -- 帧更高，按高度 fit
+            fitH = drawH
+            fitW = fitH / frameRatio
+        else
+            -- 帧更宽，按宽度 fit
+            fitW = drawW
+            fitH = fitW * frameRatio
+        end
+        fitX = -fitW / 2
+        fitY = -fitH / 2 - 2 + (drawH - fitH) / 2  -- 底部对齐（脚部贴地）
 
         -- 程序化行走补间：弹跳 + 倾斜 + 轻微挤压拉伸
-        local isWalking = (p.walkAnim and p.walkAnim > 0.5 and not (p.atkSwingAnim and p.atkSwingAnim > 0) and not (p.collectAnim and p.collectAnim > 0))
+        local isWalking = (p.isWalking and not (p.atkSwingAnim and p.atkSwingAnim > 0) and not (p.collectAnim and p.collectAnim > 0))
         local walkBobY = 0        -- 垂直弹跳偏移
         local walkTilt = 0        -- 身体倾斜角度
         local walkScaleX = 1.0    -- 水平缩放 (挤压拉伸)
@@ -880,11 +913,9 @@ function R.DrawPlayer(vg, G)
             nvgScale(vg, walkScaleX, walkScaleY)
         end
 
-        local drawX = -drawW / 2
-        local drawY = -drawH / 2 - 2   -- 微调让脚部对齐阴影
-        local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, frameImg, stunAlpha / 255.0)
+        local imgPaint = nvgImagePattern(vg, fitX, fitY, fitW, fitH, 0, frameImg, stunAlpha / 255.0)
         nvgBeginPath(vg)
-        nvgRect(vg, drawX, drawY, drawW, drawH)
+        nvgRect(vg, fitX, fitY, fitW, fitH)
         nvgFillPaint(vg, imgPaint)
         nvgFill(vg)
         nvgRestore(vg)
@@ -992,7 +1023,7 @@ function R.DrawZombies(vg, G)
         local frameImg = idleImg  -- 默认idle
         local wa = z.walkAnim or 0
         local frameCount = walkFrames and #walkFrames or 0
-        if walkFrames and frameCount >= 1 and wa > 0.5 then
+        if walkFrames and frameCount >= 1 and z.isWalking then
             local walkIdx = (math.floor(wa) % frameCount) + 1
             frameImg = walkFrames[walkIdx]
         end
@@ -1010,7 +1041,7 @@ function R.DrawZombies(vg, G)
             end
 
             -- 程序化行走摇晃：弹跳 + 倾斜（僵尸比玩家更夸张）
-            local isMoving = (wa > 0.5)
+            local isMoving = z.isWalking
             local wobbleY = 0
             local wobbleTilt = 0
 

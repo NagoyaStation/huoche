@@ -70,6 +70,160 @@ MD.CURRENCY_ICONS = {
 }
 
 ------------------------------------------------------------------------
+-- 角色系统
+------------------------------------------------------------------------
+MD.CHARACTERS = {
+    { id = "warrior",   name = "求生者",   quality = 3, icon = "image/hero_idle_20260414072856.png",
+      portrait = "image/Layer_0 (1).png",
+      equipDisplay = "image/装备界面/装备界面主角 .png",
+      desc = "近战输出，攻守兼备", baseStats = {atk = 12, hp = 120},
+      passive = "经验加成+10%",
+      skill = { name = "战斗狂怒", desc = "在7秒内攻速与冷却速度+100%" },
+      stars = {
+          "初始获得武器[铁剑]",
+          "近战伤害+10%",
+          "近战体积+20% 穿透+3",
+          "所有武器穿透+2",
+          "伤害加成+15%",
+          "全属性提升+10%",
+      },
+    },
+    { id = "archer",    name = "弓箭手", quality = 2, icon = "image/hero_axe_raise_20260414072858.png",
+      desc = "远程攻击，精准射击", baseStats = {atk = 15, hp = 80},
+      passive = "远程伤害+8%",
+      skill = { name = "箭雨风暴", desc = "召唤箭雨覆盖区域持续3秒" },
+      stars = {
+          "初始获得武器[短弓]",
+          "远程伤害+10%",
+          "箭矢速度+15%",
+          "暴击率+5%",
+          "远程穿透+3",
+          "攻速加成+20%",
+      },
+    },
+    { id = "mage",      name = "法师",   quality = 4, icon = "image/hero_axe_swing_20260414072953.png",
+      desc = "魔法伤害，范围攻击", baseStats = {atk = 20, hp = 60},
+      passive = "魔法伤害+12%",
+      skill = { name = "元素风暴", desc = "释放元素风暴对范围内敌人造成大量伤害" },
+      stars = {
+          "初始获得武器[法杖]",
+          "魔法伤害+10%",
+          "范围扩大+25%",
+          "冷却缩减+15%",
+          "伤害加成+20%",
+          "元素精通+30%",
+      },
+    },
+    { id = "knight",    name = "骑士",   quality = 3, icon = "image/hero_axe_hit_20260414072957.png",
+      desc = "重甲防御，坚不可摧", baseStats = {atk = 8, hp = 180},
+      passive = "生命值+15%",
+      skill = { name = "坚盾守护", desc = "举盾格挡5秒内受到的所有伤害" },
+      stars = {
+          "初始获得武器[铁盾]",
+          "防御力+10%",
+          "格挡率+15%",
+          "生命恢复+5/秒",
+          "减伤加成+10%",
+          "全队防御光环+8%",
+      },
+    },
+    { id = "assassin",  name = "刺客",   quality = 5, icon = "image/hero_axe_recover_20260414072959.png",
+      desc = "暗影突袭，致命一击", baseStats = {atk = 25, hp = 50},
+      passive = "暴击伤害+20%",
+      skill = { name = "影刃突袭", desc = "瞬移至敌人身后造成300%暴击伤害" },
+      stars = {
+          "初始获得武器[匕首]",
+          "暴击率+8%",
+          "暴击伤害+25%",
+          "闪避率+10%",
+          "攻速加成+15%",
+          "致命一击概率+5%",
+      },
+    },
+    { id = "auntie",    name = "王阿姨", quality = 4, icon = "image/角色素材/艾达待机.png",
+      portrait = "image/装备界面/Layer_0 (3).png",
+      equipDisplay = "image/装备界面/Layer_0 (4).png",
+      desc = "治愈辅助，全队增益", baseStats = {atk = 10, hp = 140},
+      passive = "全队生命恢复+5/秒",
+      skill = { name = "鼓舞士气", desc = "为全体队员提升20%攻击力持续8秒" },
+      attackFrames = {
+          "image/角色素材/艾达攻击动画1.png",
+          "image/角色素材/艾达攻击动画2.png.png",
+          "image/角色素材/艾达攻击动画3.png",
+          "image/角色素材/艾达攻击动画4.png",
+          "image/角色素材/艾达攻击动画5.png",
+          "image/角色素材/艾达攻击动画6.png",
+          "image/角色素材/艾达攻击动画7.png",
+      },
+      attackFPS = 8,
+      walkFrames = {
+          "image/角色素材/艾达行走动画1.png",
+          "image/角色素材/艾达行走动画2.png",
+          "image/角色素材/艾达行走动画3.png",
+          "image/角色素材/艾达行走动画4.png",
+          "image/角色素材/艾达行走动画5.png",
+          "image/角色素材/艾达行走动画6.png",
+          "image/角色素材/艾达行走动画7.png",
+          "image/角色素材/艾达行走动画8.png",
+          "image/角色素材/艾达行走动画9.png",
+          "image/角色素材/艾达行走动画10.png",
+      },
+      walkFPS = 10,
+      stars = {
+          "初始获得武器[手杖]",
+          "治愈效果+10%",
+          "增益持续时间+20%",
+          "全队防御+8%",
+          "冷却缩减+15%",
+          "终极增益：全属性+12%",
+      },
+    },
+    { id = "lisanguang", name = "李三光", quality = 3, icon = "image/角色素材/李三光/李三光待机.png",
+      portrait = "image/角色素材/李三光/Layer_0 (5).png",
+      equipDisplay = "image/角色素材/李三光/Layer_0 (6).png",
+      desc = "远程输出，精准打击", baseStats = {atk = 14, hp = 100},
+      passive = "暴击率+8%",
+      skill = { name = "三连射", desc = "快速射出3发子弹，每发造成80%攻击力伤害" },
+      attackFrames = {
+          "image/角色素材/李三光/李三光攻击1.png",
+          "image/角色素材/李三光/李三光攻击2.png",
+          "image/角色素材/李三光/李三光攻击3.png",
+          "image/角色素材/李三光/李三光攻击4.png",
+          "image/角色素材/李三光/李三光攻击5.png",
+          "image/角色素材/李三光/李三光攻击6.png",
+          "image/角色素材/李三光/李三光攻击7.png",
+          "image/角色素材/李三光/李三光攻击8.png",
+      },
+      attackFPS = 8,
+      walkFrames = {
+          "image/角色素材/李三光/李三光行走1.png",
+          "image/角色素材/李三光/李三光行走2.png",
+          "image/角色素材/李三光/李三光行走3.png",
+          "image/角色素材/李三光/李三光行走4.png",
+          "image/角色素材/李三光/李三光行走5.png",
+          "image/角色素材/李三光/李三光行走6.png",
+          "image/角色素材/李三光/李三光行走7.png",
+          "image/角色素材/李三光/李三光行走8.png",
+          "image/角色素材/李三光/李三光行走9.png",
+          "image/角色素材/李三光/李三光行走10.png",
+      },
+      walkFPS = 10,
+      stars = {
+          "初始获得武器[步枪]",
+          "暴击伤害+15%",
+          "射速+10%",
+          "穿透+1层",
+          "攻击范围+20%",
+          "终极射击：弹道追踪",
+      },
+    },
+}
+
+-- 升星碎片需求
+MD.STAR_FRAG_COST = { 0, 2, 4, 6, 8, 10 }
+MD.MAX_STAR = 6
+
+------------------------------------------------------------------------
 -- 装备系统
 ------------------------------------------------------------------------
 MD.EQUIP_SLOTS = {
@@ -361,6 +515,12 @@ function MD.NewSaveData()
             { id = "coat_supreme",  level = 15, affixes = { {affixId = "def", grade = 5}, {affixId = "hp", grade = 5} } },
             { id = "boots_epic",    level = 7, affixes = { {affixId = "atkSpd", grade = 3} } },
         },
+
+        -- 角色
+        activeChar = "warrior",                     -- 当前使用的角色id
+        unlockedChars = { warrior = true, auntie = true, lisanguang = true },  -- 已解锁角色
+        charFrags = { warrior = 1, auntie = 1, lisanguang = 1 },          -- 角色碎片数 {charId = count}
+        charStars = { warrior = 1, auntie = 1, lisanguang = 1 },           -- 角色星级 {charId = star}
 
         -- 天赋等级
         talents = {},       -- {hp=0, atk=0, ...}

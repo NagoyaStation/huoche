@@ -103,8 +103,10 @@ function E.UpdatePlayer(G, dt, moveX, moveY)
     -- 行走动画
     if math.abs(moveX) > 0.1 or math.abs(moveY) > 0.1 then
         p.walkAnim = p.walkAnim + dt * 10
+        p.isWalking = true
     else
-        -- 停止移动时快速衰减，回到待机姿态
+        -- 停止移动时立即停止行走帧，walkAnim 仅用于补间弹跳衰减
+        p.isWalking = false
         p.walkAnim = p.walkAnim * (1 - dt * 15)
         if p.walkAnim < 0.5 then p.walkAnim = 0 end
     end
@@ -597,9 +599,11 @@ function E.UpdateZombies(G, dt)
             z.y = z.y + (dy / dist) * spd
             z.facing = dx > 0 and 1 or -1
             z.walkAnim = (z.walkAnim or 0) + dt * 8
+            z.isWalking = true
             z.atTrain = false
         else
             -- 到达列车，开始攻击
+            z.isWalking = false
             z.atTrain = true
             z.atkTimer = z.atkTimer + dt
             if z.atkTimer >= C.ZOMBIE_ATK_INTERVAL then

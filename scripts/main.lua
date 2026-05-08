@@ -10,6 +10,7 @@ local RL   = require "Game.Roguelike"
 local Turret = require "Game.Turret"
 local Meta = require "Meta.MetaMain"
 local UIEditor = require "Editor.UIEditor"
+local MD = require "Meta.MetaData"
 
 ------------------------------------------------------------------------
 -- 全局游戏状态
@@ -210,10 +211,72 @@ local function MountImageHandles()
     G.FLAME_FRAME_H = 235
 end
 
+--- 根据局外选择的角色动态加载图片到 G
+local function LoadActiveCharImages()
+    local sd = Meta.GetSaveData()
+    if not sd or not sd.activeChar then return end
+    local charDef = nil
+    for _, cd in ipairs(MD.CHARACTERS) do
+        if cd.id == sd.activeChar then charDef = cd; break end
+    end
+    if not charDef then return end
+
+    -- 加载角色 idle 图（待机图）
+    local iconImg = nvgCreateImage(vg, charDef.icon, NVG_IMAGE_NEAREST)
+    if iconImg and iconImg ~= 0 then
+        G.heroImg = iconImg
+    end
+
+    -- 如果角色有攻击帧动画，用攻击帧替换默认的战斗动画
+    -- 没有 attackFrames 时保留 MountImageHandles() 已挂载的默认帧
+    if charDef.attackFrames and #charDef.attackFrames > 0 then
+        local frames = {}
+        for i, path in ipairs(charDef.attackFrames) do
+            frames[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
+        end
+        G.heroAnimFrames = frames
+    end
+
+    -- 如果角色有行走帧动画，替换默认行走动画
+    if charDef.walkFrames and #charDef.walkFrames > 0 then
+        local wFrames = {}
+        for i, path in ipairs(charDef.walkFrames) do
+            wFrames[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
+        end
+        G.heroWalkFrames = wFrames
+    end
+
+    -- 扫描所有帧图片，取最大宽高作为统一画布尺寸（避免帧间大小跳变）
+    local maxW, maxH = 0, 0
+    local allImgs = {}
+    if G.heroImg and G.heroImg ~= 0 then allImgs[#allImgs + 1] = G.heroImg end
+    if G.heroAnimFrames then
+        for _, img in ipairs(G.heroAnimFrames) do allImgs[#allImgs + 1] = img end
+    end
+    if G.heroWalkFrames then
+        for _, img in ipairs(G.heroWalkFrames) do allImgs[#allImgs + 1] = img end
+    end
+    for _, img in ipairs(allImgs) do
+        if img and img ~= 0 then
+            local iw, ih = nvgImageSize(vg, img)
+            if iw > maxW then maxW = iw end
+            if ih > maxH then maxH = ih end
+        end
+    end
+    if maxW > 0 and maxH > 0 then
+        G.heroCanvasW = maxW
+        G.heroCanvasH = maxH
+    end
+
+    print("[Game] Loaded character: " .. charDef.name .. " (" .. charDef.id .. ")"
+        .. " canvas=" .. (G.heroCanvasW or 0) .. "x" .. (G.heroCanvasH or 0))
+end
+
 --- 从局外进入关卡
 local function StartLevel()
     ResetGame()
     MountImageHandles()
+    LoadActiveCharImages()  -- 根据局外选择的角色替换图片
     Turret.InitTurrets(G)
     G.state = "playing"
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"

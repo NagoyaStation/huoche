@@ -54,6 +54,10 @@ local turretDetailId = nil  -- 当前打开的炮塔详情弹窗ID（nil=关闭�
 -- 装备详情弹窗
 local equipDetailIdx = nil  -- 当前打开的背包装备索引（nil=关闭）
 
+-- 角色详情弹窗
+local charDetailId = nil    -- 当前打开的角色ID（nil=关闭）
+local charAnimTimer = 0     -- 角色攻击帧动画计时器
+
 -- 布局缓存
 local L = {}
 
@@ -163,8 +167,32 @@ function M.PreloadImages(vg)
     imgCache["equip_grid_slot"]    = nvgCreateImage(vg, "image/装备界面/装备底部栏装备.png", 0)
     imgCache["equip_sub_inner"]    = nvgCreateImage(vg, "image/装备界面/装备界面副框内.png", 0)
     imgCache["equip_sub_outer"]    = nvgCreateImage(vg, "image/装备界面/装备界面副框外.png", 0)
+    -- 角色系统图片预加载
+    for _, charDef in ipairs(MD.CHARACTERS) do
+        imgCache["char_" .. charDef.id] = nvgCreateImage(vg, charDef.icon, 0)
+        -- 头像和装备展示图预加载
+        if charDef.portrait then
+            imgCache["char_portrait_" .. charDef.id] = nvgCreateImage(vg, charDef.portrait, 0)
+        end
+        if charDef.equipDisplay then
+            imgCache["char_equip_" .. charDef.id] = nvgCreateImage(vg, charDef.equipDisplay, 0)
+        end
+        -- 攻击帧动画预加载
+        if charDef.attackFrames then
+            for fi, framePath in ipairs(charDef.attackFrames) do
+                imgCache["char_atk_" .. charDef.id .. "_" .. fi] = nvgCreateImage(vg, framePath, 0)
+            end
+        end
+        -- 行走帧动画预加载
+        if charDef.walkFrames then
+            for fi, framePath in ipairs(charDef.walkFrames) do
+                imgCache["char_walk_" .. charDef.id .. "_" .. fi] = nvgCreateImage(vg, framePath, 0)
+            end
+        end
+    end
     -- 炮塔装备界面素材
     imgCache["turret_train_bg"]    = nvgCreateImage(vg, "image/炮塔界面/3409728c-6db3-454f-a6a7-82f9105b8f9c.png", 0)
+    imgCache["train_title"]        = nvgCreateImage(vg, "image/火车标题.png", 0)
     imgCache["turret_slot_frame"]  = nvgCreateImage(vg, "image/炮塔界面/炮塔装备界面.png", 0)
     imgCache["turret_display"]     = nvgCreateImage(vg, "image/炮塔显示框.png", 0)
     imgCache["turret_lock"]        = nvgCreateImage(vg, "image/炮塔上锁.png", 0)
@@ -242,6 +270,8 @@ function M.Update(dt)
     panelAlpha = panelAlpha + (panelFadeTarget - panelAlpha) * math.min(1.0, dt * 12)
     -- 累计时间
     elapsedTime = elapsedTime + dt
+    -- 角色攻击帧动画计时器
+    charAnimTimer = charAnimTimer + dt
     -- 每日商品刷新检测
     checkDailyReset()
 end
@@ -301,8 +331,8 @@ function M.Draw(vg, W, H)
         M.DrawTalentPopup(vg, W, H)
     end
 
-    -- 装备面板：一键分解下拉菜单
-    if activeTab == "equip" and equipState.showDropdown then
+    -- 装备面板：一键分解下拉菜单（仅装备子标签页）
+    if activeTab == "equip" and equipState.catIndex == 2 and equipState.showDropdown then
         M.DrawDecomposeDropdown(vg, W, H)
     end
 
@@ -365,7 +395,9 @@ function M.DrawTopBar(vg, W)
     local avatarCX = frameX + frameSize / 2
     local avatarCY = frameY + frameSize / 2
 
-    local portraitImg = imgCache["avatar_portrait"]
+    -- 根据当前使用角色动态选择头像
+    local activeCharId = saveData and saveData.activeChar or "warrior"
+    local portraitImg = imgCache["char_portrait_" .. activeCharId] or imgCache["avatar_portrait"]
     if portraitImg and portraitImg ~= 0 then
         -- 圆形裁剪
         nvgSave(vg)
@@ -1246,14 +1278,38 @@ function M.DrawEquipPanel(vg, W)
     -- 装备槽底图（每个槽位单独使用）
     local slotFrameImg = imgCache["equip_slot_frame"]
 
-    -- 角色图片（居中显示）
-    local heroImg = imgCache["equip_hero"]
-    if heroImg and heroImg ~= 0 then
-        local heroH = math.floor(topAreaH * 0.88)
-        local heroW = heroH
-        local heroX = (W - heroW) / 2
-        local heroY = topY + (topAreaH - heroH) / 2
-        M.DrawImageFit(vg, heroImg, heroX, heroY, heroW, heroH)
+    -- 角色图片（居中显示，支持帧动画）
+    local heroH = math.floor(topAreaH * 0.88)
+    local heroW = heroH
+    local heroX = (W - heroW) / 2
+    local heroY = topY + (topAreaH - heroH) / 2
+
+    -- 查找当前角色数据
+    local activeCharDef = nil
+    for _, cd in ipairs(MD.CHARACTERS) do
+        if cd.id == saveData.activeChar then activeCharDef = cd; break end
+    end
+
+    -- 装备界面角色展示：优先使用 equipDisplay 静态图
+    local activeId = saveData.activeChar or "warrior"
+    local equipDisplayImg = imgCache["char_equip_" .. activeId]
+    if equipDisplayImg and equipDisplayImg ~= 0 then
+        M.DrawImageFit(vg, equipDisplayImg, heroX, heroY, heroW, heroH)
+    elseif activeCharDef and activeCharDef.walkFrames then
+        -- 无 equipDisplay 时回退到行走帧动画
+        local fps = activeCharDef.walkFPS or 10
+        local totalFrames = #activeCharDef.walkFrames
+        local frameIdx = math.floor(charAnimTimer * fps) % totalFrames + 1
+        local frameImg = imgCache["char_walk_" .. activeCharDef.id .. "_" .. frameIdx]
+        if frameImg and frameImg ~= 0 then
+            M.DrawImageFit(vg, frameImg, heroX, heroY, heroW, heroH)
+        end
+    else
+        -- 最终回退到默认角色图
+        local heroImg = imgCache["equip_hero"]
+        if heroImg and heroImg ~= 0 then
+            M.DrawImageFit(vg, heroImg, heroX, heroY, heroW, heroH)
+        end
     end
 
     -- 6 个装备槽：左侧3个（1,2,3），右侧3个（4,5,6）
@@ -1329,9 +1385,9 @@ function M.DrawEquipPanel(vg, W)
     local catInactiveImg = imgCache["equip_cat_inactive"]
 
     local catTabs = {
-        { label = "角色",  selected = false },
-        { label = "装备",  selected = true  },
-        { label = "藏品",  selected = false },
+        { label = "角色" },
+        { label = "装备" },
+        { label = "藏品" },
     }
     local catCount = #catTabs
     local catTotalW = W - padX * 2
@@ -1339,10 +1395,12 @@ function M.DrawEquipPanel(vg, W)
     local catBtnH = math.floor(catBtnW * 92 / 234)
     local catBarH = catBtnH
 
+    L.equipCatBtns = {}
     for ci, tab in ipairs(catTabs) do
         local cx = padX + (ci - 1) * catBtnW
         local cy = catY
-        local img = tab.selected and catActiveImg or catInactiveImg
+        local isSelected = (equipState.catIndex == ci)
+        local img = isSelected and catActiveImg or catInactiveImg
         if img and img ~= 0 then
             M.DrawImage(vg, img, cx, cy, catBtnW, catBtnH)
         end
@@ -1350,17 +1408,22 @@ function M.DrawEquipPanel(vg, W)
         nvgFontSize(vg, math.floor(catBtnH * 0.44))
         nvgFontFace(vg, "sans")
         nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        if tab.selected then
+        if isSelected then
             nvgFillColor(vg, nvgRGBA(255, 220, 120, 255))
         else
             nvgFillColor(vg, nvgRGBA(180, 180, 180, 255))
         end
         nvgText(vg, cx + catBtnW / 2, cy + catBtnH / 2, tab.label)
+        L.equipCatBtns[ci] = { x = cx, y = cy, w = catBtnW, h = catBtnH, idx = ci }
         Def.Register("equip.cat_" .. ci, cx, cy, catBtnW, catBtnH, "分类:" .. tab.label)
     end
 
-    -- ========== 3.5 副框（副框外=两侧边框，副框内=中间平铺） ==========
-    local subFrameY = catY + catBarH + 8
+    -- ========== 底部区域（根据标签页切换内容） ==========
+    local bottomY = catY + catBarH + 8
+
+    if equipState.catIndex == 2 then
+    -- ========== 3.5 副框（副框外=两侧边框，副框内=中间平铺）[装备] ==========
+    local subFrameY = bottomY
     local subInnerImg = imgCache["equip_sub_inner"]   -- 59×93 中间平铺
     local subOuterImg = imgCache["equip_sub_outer"]   -- 55×93 左右边框
     local subH = math.floor(catBtnH * 0.6)
@@ -1556,6 +1619,144 @@ function M.DrawEquipPanel(vg, W)
     if equipDetailIdx then
         M.DrawEquipDetailPopup(vg, W, equipDetailIdx)
     end
+
+    elseif equipState.catIndex == 1 then
+    -- ========== 角色标签页 ==========
+    local charAreaH = contentY + contentH - bottomY - 4
+    local charBgImg = imgCache["equip_grid_bg"]
+    if charBgImg and charBgImg ~= 0 then
+        M.DrawImage(vg, charBgImg, padX, bottomY, W - padX * 2, charAreaH)
+    end
+
+    -- 角色卡片网格（4列）
+    local charCols = 4
+    local charGap = 6
+    local charPadX = math.floor(W * 0.04)
+    local charPadTop = math.floor(W * 0.04)
+    local charInnerW = W - padX * 2 - charPadX * 2
+    local charCardW = math.floor((charInnerW - charGap * (charCols - 1)) / charCols)
+    -- 商品底框比例 703x1182 ≈ 1.68
+    local charCardH = math.floor(charCardW * 1.68)
+    local charFrameImg = imgCache["shop_item_frame"]
+
+    -- 品质边框颜色
+    local qualityBorderColors = {
+        {160, 165, 175},  -- 1 白
+        { 65, 170,  80},  -- 2 绿
+        { 55, 120, 210},  -- 3 蓝
+        {150,  60, 200},  -- 4 紫
+        {220, 165,  30},  -- 5 橙
+        {210,  45,  45},  -- 6 红
+    }
+
+    L.charGridCells = {}
+    for ci, charDef in ipairs(MD.CHARACTERS) do
+        local col = (ci - 1) % charCols
+        local row = math.floor((ci - 1) / charCols)
+        local cx = padX + charPadX + col * (charCardW + charGap)
+        local cy = bottomY + charPadTop + row * (charCardH + charGap)
+
+        local isUnlocked = saveData.unlockedChars and saveData.unlockedChars[charDef.id]
+        local isActive = (saveData.activeChar == charDef.id)
+
+        -- 底框
+        if charFrameImg and charFrameImg ~= 0 then
+            M.DrawImage(vg, charFrameImg, cx, cy, charCardW, charCardH)
+        end
+
+        -- 品质边框
+        local qc = qualityBorderColors[charDef.quality] or qualityBorderColors[1]
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx + 2, cy + 2, charCardW - 4, charCardH - 4, 4)
+        nvgStrokeColor(vg, nvgRGBA(qc[1], qc[2], qc[3], isUnlocked and 220 or 80))
+        nvgStrokeWidth(vg, 2)
+        nvgStroke(vg)
+
+        -- 角色图标
+        local charIcon = imgCache["char_" .. charDef.id]
+        if charIcon and charIcon ~= 0 then
+            local icoS = math.floor(charCardW * 0.70)
+            local icoX = cx + (charCardW - icoS) / 2
+            local icoY = cy + charCardH * 0.12
+            if not isUnlocked then
+                nvgGlobalAlpha(vg, 0.35)
+            end
+            M.DrawImageFit(vg, charIcon, icoX, icoY, icoS, icoS)
+            if not isUnlocked then
+                nvgGlobalAlpha(vg, 1.0)
+            end
+        end
+
+        -- 已解锁 + 品质光效
+        if isUnlocked then
+            local gt = (equipState.showConfirm or equipState.showDropdown) and 0 or elapsedTime
+            M.DrawQualityGlow(vg, cx, cy, charCardW, charCardH, charDef.quality, gt)
+        end
+
+        -- "使用中"标签（左上角）
+        if isActive then
+            local tagW = math.floor(charCardW * 0.65)
+            local tagH = math.floor(charCardW * 0.22)
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, cx, cy, tagW, tagH, 3)
+            nvgFillColor(vg, nvgRGBA(220, 165, 30, 230))
+            nvgFill(vg)
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, math.floor(tagH * 0.70))
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(40, 20, 0, 255))
+            nvgText(vg, cx + tagW / 2, cy + tagH / 2, "使用中")
+        end
+
+        -- 角色名称（底部）
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(charCardW * 0.18))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+        nvgFillColor(vg, nvgRGBA(240, 230, 200, 255))
+        nvgText(vg, cx + charCardW / 2, cy + charCardH - charCardH * 0.22, charDef.name)
+
+        -- 底部信息
+        if isUnlocked then
+            -- 碎片进度
+            local frags = (saveData.charFrags and saveData.charFrags[charDef.id]) or 0
+            local maxFrags = 10
+            nvgFontSize(vg, math.floor(charCardW * 0.16))
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+            nvgFillColor(vg, nvgRGBA(100, 180, 255, 230))
+            nvgText(vg, cx + charCardW / 2, cy + charCardH - 4, frags .. "/" .. maxFrags)
+        else
+            -- 未解锁
+            nvgFontSize(vg, math.floor(charCardW * 0.16))
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+            nvgFillColor(vg, nvgRGBA(140, 140, 140, 200))
+            nvgText(vg, cx + charCardW / 2, cy + charCardH - 4, "未解锁")
+        end
+
+        -- 缓存点击区域
+        L.charGridCells[ci] = { x = cx, y = cy, w = charCardW, h = charCardH, charId = charDef.id, unlocked = isUnlocked }
+        Def.Register("equip.char_" .. ci, cx, cy, charCardW, charCardH, "角色:" .. charDef.name)
+    end
+
+    -- 角色详情弹窗（覆盖在网格之上）
+    if charDetailId then
+        M.DrawCharDetailPopup(vg, W, charDetailId)
+    end
+
+    elseif equipState.catIndex == 3 then
+    -- ========== 藏品标签页 ==========
+    local placeholderH = contentY + contentH - bottomY - 4
+    local phBgImg = imgCache["equip_grid_bg"]
+    if phBgImg and phBgImg ~= 0 then
+        M.DrawImage(vg, phBgImg, padX, bottomY, W - padX * 2, placeholderH)
+    end
+    -- 提示文字
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(W * 0.045))
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(160, 150, 130, 200))
+    nvgText(vg, W / 2, bottomY + placeholderH / 2, "藏品系统 · 敬请期待")
+
+    end -- catIndex 条件结束
 
     return 0 -- 不需要滚动，整体自适应
 end
@@ -1868,6 +2069,387 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
 end
 
 ------------------------------------------------------------------------
+-- 角色详情弹窗（角色卡片点击后弹出）
+------------------------------------------------------------------------
+function M.DrawCharDetailPopup(vg, W, cId)
+    -- 查找角色数据
+    local charDef = nil
+    for _, c in ipairs(MD.CHARACTERS) do
+        if c.id == cId then charDef = c; break end
+    end
+    if not charDef then charDetailId = nil; return end
+
+    local isUnlocked = saveData.unlockedChars and saveData.unlockedChars[cId]
+    local isActive = (saveData.activeChar == cId)
+    local curStar = (saveData.charStars and saveData.charStars[cId]) or 0
+    local qInfo = MD.QUALITY[charDef.quality] or MD.QUALITY[1]
+    local qc = qInfo.color
+
+    local contentY = L.contentY
+    local contentH = L.contentH
+
+    -- 半透明遮罩
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, contentY, W, contentH)
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 160))
+    nvgFill(vg)
+
+    -- 弹窗尺寸
+    local popW = math.floor(W * 0.82)
+    local popH = math.floor(contentH * 0.82)
+    local popX = (W - popW) / 2
+    local popY = contentY + (contentH - popH) / 2
+    local pad = math.floor(popW * 0.04)
+
+    local px = popX
+    local py = popY
+
+    -- ====== 顶部头像卡片区 ======
+    local headerH = math.floor(popH * 0.16)
+    -- 头部背景（带品质色渐变）
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px, py, popW, headerH, 8)
+    nvgFillColor(vg, nvgRGBA(40, 44, 58, 250))
+    nvgFill(vg)
+    -- 品质色底边
+    nvgBeginPath(vg)
+    nvgRect(vg, px, py + headerH - 2, popW, 2)
+    nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 140))
+    nvgFill(vg)
+
+    -- 角色头像（左侧）
+    local avatarS = math.floor(headerH * 0.72)
+    local avatarPad = math.floor((headerH - avatarS) / 2)
+    local charIcon = imgCache["char_" .. cId]
+    if charIcon and charIcon ~= 0 then
+        -- 头像背景框
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, py + avatarPad, avatarS, avatarS, 6)
+        nvgFillColor(vg, nvgRGBA(25, 28, 38, 200))
+        nvgFill(vg)
+        if not isUnlocked then nvgGlobalAlpha(vg, 0.4) end
+        M.DrawImageFit(vg, charIcon, px + pad + 2, py + avatarPad + 2, avatarS - 4, avatarS - 4)
+        if not isUnlocked then nvgGlobalAlpha(vg, 1.0) end
+        -- 品质边框
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, py + avatarPad, avatarS, avatarS, 6)
+        nvgStrokeColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 200))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+    end
+
+    -- 右侧信息：角色名
+    local infoX = px + pad + avatarS + math.floor(pad * 0.8)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(headerH * 0.30))
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(240, 235, 220, 255))
+    nvgText(vg, infoX, py + headerH * 0.30, charDef.name)
+
+    -- 星级 + 品质徽标（框包住标题和数值）
+    local bdgFont = math.floor(headerH * 0.13)
+    local bdgW = math.floor(bdgFont * 3.2)
+    local bdgTotalH = math.floor(bdgFont * 3.2)
+    local bdgY = py + headerH * 0.52
+
+    -- 星级徽标
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, infoX, bdgY, bdgW, bdgTotalH, 4)
+    nvgFillColor(vg, nvgRGBA(50, 55, 70, 255))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, infoX, bdgY, bdgW, bdgTotalH, 4)
+    nvgStrokeColor(vg, nvgRGBA(80, 85, 100, 200))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, bdgFont)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 220, 100, 255))
+    nvgText(vg, infoX + bdgW / 2, bdgY + bdgTotalH * 0.30, "星级")
+    nvgFontSize(vg, math.floor(bdgFont * 1.1))
+    nvgFillColor(vg, nvgRGBA(255, 220, 100, 255))
+    nvgText(vg, infoX + bdgW / 2, bdgY + bdgTotalH * 0.72, tostring(curStar))
+
+    -- 品质徽标
+    local qBdgX = infoX + bdgW + math.floor(headerH * 0.08)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, qBdgX, bdgY, bdgW, bdgTotalH, 4)
+    nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 50))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, qBdgX, bdgY, bdgW, bdgTotalH, 4)
+    nvgStrokeColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 160))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, bdgFont)
+    nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 255))
+    nvgText(vg, qBdgX + bdgW / 2, bdgY + bdgTotalH * 0.30, "品质")
+    local qInfo2 = MD.QUALITY[charDef.quality] or MD.QUALITY[1]
+    nvgFontSize(vg, math.floor(bdgFont * 1.0))
+    nvgText(vg, qBdgX + bdgW / 2, bdgY + bdgTotalH * 0.72, qInfo2.name)
+
+    -- 关闭按钮（右上角圆形）
+    local closeR = math.floor(headerH * 0.18)
+    local closeCX = px + popW - pad - closeR
+    local closeCY = py + pad + closeR
+    nvgBeginPath(vg)
+    nvgCircle(vg, closeCX, closeCY, closeR)
+    nvgFillColor(vg, nvgRGBA(60, 65, 80, 200))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgCircle(vg, closeCX, closeCY, closeR)
+    nvgStrokeColor(vg, nvgRGBA(100, 105, 120, 180))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(closeR * 1.2))
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(180, 175, 165, 220))
+    nvgText(vg, closeCX, closeCY, "X")
+    L.charDetailClose = { x = closeCX - closeR, y = closeCY - closeR, w = closeR * 2, h = closeR * 2 }
+
+    -- ====== 主体区域背景 ======
+    local bodyY = py + headerH
+    local bodyH = popH - headerH
+    nvgBeginPath(vg)
+    local cr = 8
+    -- 只圆底部两角
+    nvgRoundedRect(vg, px, bodyY, popW, bodyH, cr)
+    nvgFillColor(vg, nvgRGBA(30, 33, 45, 245))
+    nvgFill(vg)
+    -- 整体弹窗边框
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px, py, popW, popH, cr)
+    nvgStrokeColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 100))
+    nvgStrokeWidth(vg, 1.5)
+    nvgStroke(vg)
+
+    local curY = bodyY + math.floor(pad * 0.8)
+    local innerW = popW - pad * 2
+    local secFont = math.floor(popW * 0.044)
+    local rowH = math.floor(secFont * 2.6)
+
+    -- ====== 被动效果 ======
+    if charDef.passive then
+        local passiveH = math.floor(rowH * 1.2)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, curY, innerW, passiveH, 5)
+        nvgFillColor(vg, nvgRGBA(38, 42, 58, 200))
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, curY, innerW, passiveH, 5)
+        nvgStrokeColor(vg, nvgRGBA(80, 85, 100, 120))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(secFont * 1.1))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(100, 220, 140, 240))
+        nvgText(vg, px + popW / 2, curY + passiveH / 2, charDef.passive)
+        curY = curY + passiveH + math.floor(pad * 0.6)
+    end
+
+    -- ====== 技能区 ======
+    if charDef.skill then
+        local skillH = math.floor(rowH * 1.8)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, curY, innerW, skillH, 5)
+        nvgFillColor(vg, nvgRGBA(38, 42, 58, 200))
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad, curY, innerW, skillH, 5)
+        nvgStrokeColor(vg, nvgRGBA(80, 85, 100, 120))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- 技能图标占位（左侧方块）
+        local skIcoS = math.floor(skillH * 0.65)
+        local skIcoPad = math.floor((skillH - skIcoS) / 2)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad + skIcoPad, curY + skIcoPad, skIcoS, skIcoS, 4)
+        nvgFillColor(vg, nvgRGBA(60, 55, 45, 200))
+        nvgFill(vg)
+        -- 用角色头像作技能图标
+        if charIcon and charIcon ~= 0 then
+            M.DrawImageFit(vg, charIcon, px + pad + skIcoPad + 2, curY + skIcoPad + 2, skIcoS - 4, skIcoS - 4)
+        end
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, px + pad + skIcoPad, curY + skIcoPad, skIcoS, skIcoS, 4)
+        nvgStrokeColor(vg, nvgRGBA(220, 165, 30, 180))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+
+        -- 技能名称
+        local skTextX = px + pad + skIcoPad + skIcoS + 10
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(secFont * 1.1))
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(240, 235, 220, 255))
+        nvgText(vg, skTextX, curY + skillH * 0.34, charDef.skill.name)
+        -- 技能描述
+        nvgFontSize(vg, math.floor(secFont * 0.92))
+        nvgFillColor(vg, nvgRGBA(170, 165, 150, 210))
+        nvgText(vg, skTextX, curY + skillH * 0.66, charDef.skill.desc)
+
+        curY = curY + skillH + math.floor(pad * 0.6)
+    end
+
+    -- ====== 星级列表 ======
+    if charDef.stars then
+        local starRowH = math.floor(rowH * 1.1)
+        for si, starDesc in ipairs(charDef.stars) do
+            local isReached = (curStar >= si)
+            -- 行背景（交替色）
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, px + pad, curY, innerW, starRowH, 4)
+            if si % 2 == 1 then
+                nvgFillColor(vg, nvgRGBA(38, 42, 55, 160))
+            else
+                nvgFillColor(vg, nvgRGBA(44, 48, 62, 160))
+            end
+            nvgFill(vg)
+            -- 底部分隔线
+            nvgBeginPath(vg)
+            nvgRect(vg, px + pad, curY + starRowH - 1, innerW, 1)
+            nvgFillColor(vg, nvgRGBA(60, 65, 80, 80))
+            nvgFill(vg)
+
+            -- 星级标签
+            local starBdgW = math.floor(innerW * 0.16)
+            local starBdgH = math.floor(starRowH * 0.60)
+            local starBdgX = px + pad + 6
+            local starBdgY = curY + (starRowH - starBdgH) / 2
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, starBdgX, starBdgY, starBdgW, starBdgH, 3)
+            if isReached then
+                nvgFillColor(vg, nvgRGBA(55, 130, 85, 200))
+            else
+                nvgFillColor(vg, nvgRGBA(55, 60, 75, 200))
+            end
+            nvgFill(vg)
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, starBdgX, starBdgY, starBdgW, starBdgH, 3)
+            nvgStrokeColor(vg, isReached and nvgRGBA(80, 180, 120, 160) or nvgRGBA(80, 85, 100, 120))
+            nvgStrokeWidth(vg, 1)
+            nvgStroke(vg)
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, math.floor(starBdgH * 0.65))
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, isReached and 240 or 140))
+            nvgText(vg, starBdgX + starBdgW / 2, starBdgY + starBdgH / 2, si .. "星")
+
+            -- 描述文字
+            nvgFontSize(vg, math.floor(secFont * 1.0))
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+            if isReached then
+                nvgFillColor(vg, nvgRGBA(240, 235, 220, 240))
+            else
+                nvgFillColor(vg, nvgRGBA(140, 135, 125, 180))
+            end
+            nvgText(vg, starBdgX + starBdgW + 10, curY + starRowH / 2, starDesc)
+
+            curY = curY + starRowH
+        end
+    end
+
+    -- ====== 底部升星条 ======
+    local footerH = math.floor(popH * 0.10)
+    local footerY = py + popH - footerH * 2 - 6
+    -- 升星条背景
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px + pad, footerY, innerW, footerH, 5)
+    nvgFillColor(vg, nvgRGBA(38, 42, 58, 220))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px + pad, footerY, innerW, footerH, 5)
+    nvgStrokeColor(vg, nvgRGBA(80, 85, 100, 120))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    -- 碎片图标（用角色头像缩小）
+    local fragS = math.floor(footerH * 0.65)
+    local fragPad = math.floor((footerH - fragS) / 2)
+    if charIcon and charIcon ~= 0 then
+        M.DrawImageFit(vg, charIcon, px + pad + fragPad, footerY + fragPad, fragS, fragS)
+        -- 小星星角标
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(fragS * 0.45))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+        nvgText(vg, px + pad + fragPad + fragS - 2, footerY + fragPad + 4, "★")
+    end
+
+    -- 碎片进度
+    local frags = (saveData.charFrags and saveData.charFrags[cId]) or 0
+    local nextStar = math.min(curStar + 1, MD.MAX_STAR)
+    local needFrags = MD.STAR_FRAG_COST[nextStar] or 10
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(footerH * 0.42))
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(240, 235, 220, 240))
+    nvgText(vg, px + pad + fragPad + fragS + 10, footerY + footerH / 2, frags .. "/" .. needFrags)
+
+    -- 升星按钮（右侧金色）
+    local starBtnW = math.floor(innerW * 0.30)
+    local starBtnH = math.floor(footerH * 0.72)
+    local starBtnX = px + pad + innerW - starBtnW - 4
+    local starBtnY = footerY + (footerH - starBtnH) / 2
+    local canUpgrade = isUnlocked and curStar < MD.MAX_STAR and frags >= needFrags
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, starBtnX, starBtnY, starBtnW, starBtnH, 5)
+    if canUpgrade then
+        nvgFillColor(vg, nvgRGBA(220, 170, 30, 240))
+    else
+        nvgFillColor(vg, nvgRGBA(90, 85, 70, 180))
+    end
+    nvgFill(vg)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(starBtnH * 0.55))
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(40, 25, 0, canUpgrade and 255 or 140))
+    nvgText(vg, starBtnX + starBtnW / 2, starBtnY + starBtnH / 2, "升星")
+    L.charDetailStarBtn = { x = starBtnX, y = starBtnY, w = starBtnW, h = starBtnH, canUpgrade = canUpgrade }
+
+    -- ====== 底部使用按钮 ======
+    local useBtnH = math.floor(footerH * 0.80)
+    local useBtnW = math.floor(popW * 0.40)
+    local useBtnX = px + (popW - useBtnW) / 2
+    local useBtnY = footerY + footerH + math.floor(pad * 0.4)
+
+    if isUnlocked then
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, useBtnX, useBtnY, useBtnW, useBtnH, 6)
+        if isActive then
+            nvgFillColor(vg, nvgRGBA(55, 130, 85, 160))
+        else
+            nvgFillColor(vg, nvgRGBA(55, 130, 85, 230))
+        end
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, useBtnX, useBtnY, useBtnW, useBtnH, 6)
+        nvgStrokeColor(vg, nvgRGBA(80, 180, 120, isActive and 100 or 200))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(useBtnH * 0.55))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, isActive and 160 or 250))
+        nvgText(vg, useBtnX + useBtnW / 2, useBtnY + useBtnH / 2, isActive and "使用中" or "使用")
+        L.charDetailUseBtn = { x = useBtnX, y = useBtnY, w = useBtnW, h = useBtnH, disabled = isActive }
+    else
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(useBtnH * 0.38))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(140, 135, 120, 160))
+        nvgText(vg, px + popW / 2, useBtnY + useBtnH / 2, "收集碎片解锁该角色")
+        L.charDetailUseBtn = nil
+    end
+
+    -- 缓存弹窗区域
+    L.charDetailPopup = { x = popX, y = popY, w = popW, h = popH }
+end
+
+------------------------------------------------------------------------
 -- 列车/炮塔装备面板（类似装备界面风格）
 ------------------------------------------------------------------------
 -- 根据炮塔id查找 TURRET_UPGRADES 数据
@@ -1904,6 +2486,16 @@ function M.DrawTrainPanel(vg, W)
         M.DrawImage(vg, trainBgImg, bgX, bgY, bgW, bgH)
     end
     Def.Register("train.bg", 0, topY, W, topAreaH, "火车展示区")
+
+    -- 火车标题图片（左上角）
+    local trainTitleImg = imgCache["train_title"]
+    if trainTitleImg and trainTitleImg ~= 0 then
+        local titleH = math.floor(topAreaH * 0.09)
+        local titleW = math.floor(titleH * 3.2)  -- 根据标题图比例
+        local titleX = -8
+        local titleY = topY + 4
+        M.DrawImageFit(vg, trainTitleImg, titleX, titleY, titleW, titleH)
+    end
 
     -- ========== 2. 左右两侧炮塔装备槽（各2个） ==========
     -- 槽位框架（183×205）
@@ -3772,6 +4364,80 @@ function M.HandleEquipClick(x, y, W)
         end
     end
 
+    -- 检测分类标签页点击
+    if L.equipCatBtns then
+        for _, btn in pairs(L.equipCatBtns) do
+            if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+                if equipState.catIndex ~= btn.idx then
+                    equipState.catIndex = btn.idx
+                    equipState.showDropdown = false
+                    equipState.showConfirm = false
+                    equipDetailIdx = nil
+                    charDetailId = nil
+                    print("[Equip] 切换标签页: " .. btn.idx)
+                end
+                return true
+            end
+        end
+    end
+
+    -- 检测角色详情弹窗点击（弹窗打开时优先处理）
+    if charDetailId and L.charDetailPopup then
+        local pp = L.charDetailPopup
+        -- 关闭按钮
+        if L.charDetailClose then
+            local cb = L.charDetailClose
+            if x >= cb.x and x <= cb.x + cb.w and y >= cb.y and y <= cb.y + cb.h then
+                charDetailId = nil
+                print("[Char] 关闭角色弹窗")
+                return true
+            end
+        end
+        -- "使用"按钮
+        if L.charDetailUseBtn and not L.charDetailUseBtn.disabled then
+            local ub = L.charDetailUseBtn
+            if x >= ub.x and x <= ub.x + ub.w and y >= ub.y and y <= ub.y + ub.h then
+                saveData.activeChar = charDetailId
+                print("[Char] 使用角色: " .. charDetailId)
+                return true
+            end
+        end
+        -- "升星"按钮
+        if L.charDetailStarBtn and L.charDetailStarBtn.canUpgrade then
+            local sb = L.charDetailStarBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                local curStar = (saveData.charStars and saveData.charStars[charDetailId]) or 1
+                local cost = MD.STAR_FRAG_COST[curStar + 1] or 999
+                local frags = (saveData.charFragments and saveData.charFragments[charDetailId]) or 0
+                if curStar < MD.MAX_STAR and frags >= cost then
+                    saveData.charStars[charDetailId] = curStar + 1
+                    saveData.charFragments[charDetailId] = frags - cost
+                    print("[Char] 升星: " .. charDetailId .. " → " .. (curStar + 1) .. "星")
+                end
+                return true
+            end
+        end
+        -- 点击弹窗内部：吞掉事件
+        if x >= pp.x and x <= pp.x + pp.w and y >= pp.y and y <= pp.y + pp.h then
+            return true
+        end
+        -- 点击弹窗外部：关闭弹窗
+        charDetailId = nil
+        print("[Char] 点击外部关闭角色弹窗")
+        return true
+    end
+
+    -- 检测角色卡片点击（打开弹窗）
+    if equipState.catIndex == 1 and L.charGridCells then
+        for _, cell in pairs(L.charGridCells) do
+            if x >= cell.x and x <= cell.x + cell.w and y >= cell.y and y <= cell.y + cell.h then
+                charDetailId = cell.charId
+                print("[Char] 打开角色详情: " .. cell.charId)
+                return true
+            end
+        end
+    end
+
     -- 检测背包格子点击
     if L.equipGridCells then
         for _, cell in pairs(L.equipGridCells) do
@@ -3794,7 +4460,11 @@ function M.HandleEquipClick(x, y, W)
         end
     end
 
-    -- 检测副框内3个功能按钮
+    -- 检测副框内3个功能按钮（仅装备子标签页）
+    if equipState.catIndex ~= 2 then
+        -- 非装备子标签页，关闭残留下拉并跳过
+        equipState.showDropdown = false
+    end
     for _, btn in ipairs(equipSubBtns) do
         if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
             if btn.id == "sort" then
