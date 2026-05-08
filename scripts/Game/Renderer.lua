@@ -987,9 +987,9 @@ function R.DrawZombies(vg, G)
             local shY, shRx, shRy
             if zType == 3 then
                 -- 爬行僵尸：阴影在身体正下方，更扁更宽（贴地）
-                shY = 4
-                shRx = 16
-                shRy = 6
+                shY = 6
+                shRx = 20
+                shRy = 7
             else
                 shY = C.ZOMBIE_SIZE * 0.9
                 shRx = 14
@@ -1032,8 +1032,8 @@ function R.DrawZombies(vg, G)
             -- 僵尸精灵尺寸：比碰撞框稍大
             local drawW, drawH
             if zType == 3 then
-                -- 爬行僵尸：更扁平，贴地
-                drawW = C.ZOMBIE_SIZE + 20
+                -- 爬行僵尸：更扁平，贴地（放大）
+                drawW = C.ZOMBIE_SIZE + 28
                 drawH = drawW * 1.0  -- 正方形比例(爬行姿态)
             else
                 drawW = C.ZOMBIE_SIZE + 16
@@ -1098,7 +1098,7 @@ function R.DrawZombies(vg, G)
             local by
             if zType == 3 then
                 -- 爬行僵尸血条：在身体上方（爬行姿态更矮）
-                by = zy - (C.ZOMBIE_SIZE + 20) * 0.5 / 2 - 6
+                by = zy - (C.ZOMBIE_SIZE + 28) * 0.5 / 2 - 6
             else
                 by = zy - (C.ZOMBIE_SIZE + 16) * 1.24 / 2 - 6
             end
