@@ -1980,4 +1980,186 @@ function R.DrawGameOver(vg, G)
     G.restartBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
 end
 
+------------------------------------------------------------------------
+-- 技能按钮 (摇杆左右两侧)
+-- 结构：外框(skillFrameImg) → 内部图标(铺满) → 冷却遮罩
+------------------------------------------------------------------------
+function R.DrawSkillButtons(vg, G)
+    local W = G.screenW or 390
+    local H = G.screenH or 844
+
+    local frameImg = G.skillFrameImg       -- 金属环形外框（两按钮共用）
+    local boardImg = G.skillBoardTrainImg   -- 上车图标（绿色圆）
+    local bombImg  = G.skillBombImg         -- 炸弹图标（红色圆）
+
+    -- ===== 统一尺寸与对称布局 =====
+    local btnSize   = 72                   -- 按钮整体尺寸（外框 = 图标 = 同尺寸）
+    local margin    = 28                   -- 距屏幕边缘
+    local btnY      = H - 128             -- 垂直位置（底部摇杆区域）
+    local leftX     = margin + btnSize / 2           -- 左按钮中心 X
+    local rightX    = W - margin - btnSize / 2       -- 右按钮中心 X（对称）
+
+    -- ===== 通用按钮绘制 =====
+    local function drawSkillBtn(cx, cy, icon, cd, cdMax, glowColor, isActive, label)
+        local alpha = (cd > 0 and not isActive) and 0.45 or 1.0
+
+        -- 阴影
+        nvgBeginPath(vg)
+        nvgCircle(vg, cx, cy + 2, btnSize / 2 + 1)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 50))
+        nvgFill(vg)
+
+        -- 激活发光
+        if isActive then
+            local pulse = 0.6 + math.sin((G.gameTime or 0) * 5) * 0.4
+            nvgBeginPath(vg)
+            nvgCircle(vg, cx, cy, btnSize / 2 + 8)
+            nvgFillColor(vg, nvgRGBA(glowColor[1], glowColor[2], glowColor[3], math.floor(pulse * 90)))
+            nvgFill(vg)
+        end
+
+        -- 1) 图标铺满（底层）
+        if icon and icon ~= 0 then
+            drawSprite(vg, icon, cx, cy, btnSize, btnSize, alpha)
+        end
+
+        -- 2) 金属外框叠加（顶层）
+        if frameImg and frameImg ~= 0 then
+            drawSprite(vg, frameImg, cx, cy, btnSize, btnSize, alpha)
+        end
+
+        -- 3) 冷却扇形遮罩
+        if cd > 0 then
+            local ratio = cd / cdMax
+            local startA = -math.pi / 2
+            local sweepA = ratio * math.pi * 2
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, cx, cy)
+            nvgArc(vg, cx, cy, btnSize / 2 - 4, startA, startA + sweepA, NVG_CW)
+            nvgClosePath(vg)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
+            nvgFill(vg)
+            -- CD 数字
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, 20)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+            nvgText(vg, cx, cy, string.format("%.0f", math.ceil(cd)), nil)
+        end
+
+        -- 4) 底部标签
+        if label then
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, 11)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 200))
+            nvgText(vg, cx, cy + btnSize / 2 + 3, label, nil)
+        end
+    end
+
+    -- ===== 左侧：上车按钮 =====
+    local boardCD    = G.skillBoardCD or 0
+    local boardCDMax = G.skillBoardCDMax or 5
+
+    -- 靠近列车呼吸提示
+    if G.nearTrain and not G.mounted and boardCD <= 0 then
+        local pulse = 0.7 + math.sin((G.gameTime or 0) * 4) * 0.3
+        nvgBeginPath(vg)
+        nvgCircle(vg, leftX, btnY, btnSize / 2 + 8)
+        nvgFillColor(vg, nvgRGBA(80, 220, 120, math.floor(pulse * 80)))
+        nvgFill(vg)
+    end
+
+    local leftCD    = G.mounted and 0 or boardCD
+    local leftLabel = G.mounted and "下车" or nil
+    -- 已上车：下车图标；靠近火车：绿色上车图标；否则：不可用灰色图标
+    local leftIcon
+    if G.mounted then
+        leftIcon = G.skillDismountImg or boardImg
+    elseif G.nearTrain then
+        leftIcon = boardImg
+    else
+        leftIcon = G.skillBoardDisabledImg
+    end
+    drawSkillBtn(leftX, btnY, leftIcon, leftCD, boardCDMax, {80, 220, 120}, false, leftLabel)
+
+    G.skillBoardBtn = { x = leftX - btnSize / 2, y = btnY - btnSize / 2, w = btnSize, h = btnSize }
+
+    -- ===== 右侧：角色技能按钮 =====
+    local charCD    = G.skillCharCD or 0
+    local charCDMax = G.skillCharCDMax or 15
+
+    drawSkillBtn(rightX, btnY, bombImg, charCD, charCDMax, {255, 180, 50}, G.skillCharActive, nil)
+
+    -- 技能持续时间条
+    if G.skillCharActive and G.skillCharDuration > 0 and G.skillCharDurationMax > 0 then
+        local barW = btnSize
+        local barH = 5
+        local barX = rightX - barW / 2
+        local barY = btnY + btnSize / 2 + 4
+        local ratio = G.skillCharDuration / G.skillCharDurationMax
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, barX, barY, barW, barH, 2)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, barX, barY, barW * ratio, barH, 2)
+        nvgFillColor(vg, nvgRGBA(255, 200, 50, 220))
+        nvgFill(vg)
+    end
+
+    G.skillCharBtn = { x = rightX - btnSize / 2, y = btnY - btnSize / 2, w = btnSize, h = btnSize }
+end
+
+------------------------------------------------------------------------
+-- 瞄准锥形（上车状态，从玩家位置向瞄准方向展开夹角扇形）
+------------------------------------------------------------------------
+function R.DrawAimLine(vg, G)
+    if not G.mounted or not G.mountedAimActive then return end
+
+    local p = G.player
+    local angle = G.mountedAimDir or 0
+    local cx = p.x
+    local cy = p.y
+
+    local coneLen    = 140    -- 锥形长度
+    local halfAngle  = 0.22   -- 半角（弧度，约12.5°）
+    local startDist  = 14     -- 起始偏移
+
+    local fillAlpha  = 40
+    local lineAlpha  = 160
+
+    -- 两条边线角度
+    local a1 = angle - halfAngle
+    local a2 = angle + halfAngle
+
+    -- 扇形填充（半透明）
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, cx + math.cos(a1) * startDist, cy + math.sin(a1) * startDist)
+    nvgLineTo(vg, cx + math.cos(a1) * coneLen, cy + math.sin(a1) * coneLen)
+    -- 弧线连接
+    local arcSteps = 8
+    for i = 1, arcSteps do
+        local t = i / arcSteps
+        local a = a1 + (a2 - a1) * t
+        nvgLineTo(vg, cx + math.cos(a) * coneLen, cy + math.sin(a) * coneLen)
+    end
+    nvgLineTo(vg, cx + math.cos(a2) * startDist, cy + math.sin(a2) * startDist)
+    nvgClosePath(vg)
+    nvgFillColor(vg, nvgRGBA(255, 255, 200, fillAlpha))
+    nvgFill(vg)
+
+    -- 两条边线
+    nvgStrokeWidth(vg, 1.5)
+    nvgStrokeColor(vg, nvgRGBA(255, 255, 220, lineAlpha))
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, cx + math.cos(a1) * startDist, cy + math.sin(a1) * startDist)
+    nvgLineTo(vg, cx + math.cos(a1) * coneLen,   cy + math.sin(a1) * coneLen)
+    nvgStroke(vg)
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, cx + math.cos(a2) * startDist, cy + math.sin(a2) * startDist)
+    nvgLineTo(vg, cx + math.cos(a2) * coneLen,   cy + math.sin(a2) * coneLen)
+    nvgStroke(vg)
+end
+
 return R

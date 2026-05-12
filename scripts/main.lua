@@ -53,6 +53,12 @@ local hudFrameCapHandle = 0   -- 图层_6: 端盖
 local hudFrameMidHandle = 0   -- 图层_7: 中间平铺
 local hudInnerFrameHandle = 0
 local hudSettingsFrameHandle = 0
+-- 技能按钮图片句柄
+local skillBoardTrainHandle = 0       -- 上车按钮图片（可用/绿色）
+local skillBoardDisabledHandle = 0    -- 上车按钮图片（不可用/灰色）
+local skillDismountHandle = 0         -- 下车按钮图片
+local skillFrameHandle = 0            -- 技能按钮边框
+local skillBombHandle = 0             -- 角色技能图标（炸弹）
 -- 游戏内设置弹窗
 local gameSettingPopup = {
     show = false,
@@ -190,6 +196,24 @@ local function ResetGame()
         -- 菜单/重开按钮
         menuBtn = nil,
         restartBtn = nil,
+
+        -- 技能系统
+        mounted = false,            -- 是否上车（固定在列车顶部射击）
+        mountedAimDir = 0,          -- 上车后瞄准方向（弧度）
+        nearTrain = false,          -- 是否靠近列车（可上车）
+
+        skillBoardCD = 0,           -- 上车技能冷却计时
+        skillBoardCDMax = 5,        -- 上车技能冷却时长（秒）
+        skillCharCD = 0,            -- 角色技能冷却计时
+        skillCharCDMax = 15,        -- 角色技能冷却时长（秒）
+        skillCharActive = false,    -- 角色技能是否激活中
+        skillCharDuration = 0,      -- 角色技能持续剩余时间
+        skillCharDurationMax = 0,   -- 角色技能持续总时长
+        activeCharId = nil,         -- 当前角色ID（从存档读取）
+
+        -- 技能按钮点击区域（由 Renderer 填充）
+        skillBoardBtn = nil,
+        skillCharBtn = nil,
     }
 
     Ent.CreatePlayer(G)
@@ -252,6 +276,12 @@ local function MountImageHandles()
     G.FLAME_FRAME_COUNT = 21
     G.FLAME_FRAME_W = 101
     G.FLAME_FRAME_H = 235
+    -- 技能按钮图片
+    G.skillBoardTrainImg = skillBoardTrainHandle
+    G.skillBoardDisabledImg = skillBoardDisabledHandle
+    G.skillDismountImg = skillDismountHandle
+    G.skillFrameImg = skillFrameHandle
+    G.skillBombImg = skillBombHandle
 end
 
 --- 根据局外选择的角色动态加载图片到 G
@@ -320,6 +350,9 @@ local function StartLevel()
     ResetGame()
     MountImageHandles()
     LoadActiveCharImages()  -- 根据局外选择的角色替换图片
+    -- 记录当前角色ID（用于技能系统）
+    local sd = Meta.GetSaveData()
+    G.activeCharId = sd and sd.activeChar or "warrior"
     Turret.InitTurrets(G)
     G.state = "playing"
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"
@@ -513,6 +546,14 @@ function Start()
         turret_rocket   = nvgCreateImage(vg, "image/icon_rocket.png", 0),
     }
 
+    -- 技能按钮图片
+    skillBoardTrainHandle = nvgCreateImage(vg, "image/局内上车按钮.png", 0)
+    skillBoardDisabledHandle = nvgCreateImage(vg, "image/局内上车按钮不可用.png", 0)
+    skillDismountHandle = nvgCreateImage(vg, "image/下车按钮.png", 0)
+    skillFrameHandle = nvgCreateImage(vg, "image/局内技能按钮.png", 0)
+    skillBombHandle = nvgCreateImage(vg, "image/局内技能炸弹.png", 0)
+    print("Loaded skill button images: board=" .. skillBoardTrainHandle .. " disabled=" .. skillBoardDisabledHandle .. " dismount=" .. skillDismountHandle .. " frame=" .. skillFrameHandle .. " bomb=" .. skillBombHandle)
+
     -- 弓箭发射物图片
     arrowProjHandle = nvgCreateImage(vg, "image/arrow_projectile.png", 0)
 
@@ -702,8 +743,70 @@ function HandleUpdate(eventType, eventData)
         end
     end
 
-    -- 更新玩家
-    Ent.UpdatePlayer(G, dt, moveX, moveY)
+    -- ===== 技能系统更新 =====
+    -- 近距检测
+    G.nearTrain = Ent.IsNearTrain(G)
+
+    -- 上车/下车冷却
+    if not G.mounted and G.skillBoardCD > 0 then
+        G.skillBoardCD = math.max(0, G.skillBoardCD - dt)
+    end
+
+    -- 角色技能冷却
+    if G.skillCharCD > 0 then
+        G.skillCharCD = math.max(0, G.skillCharCD - dt)
+    end
+
+    -- 角色技能持续时间倒计时
+    if G.skillCharActive and G.skillCharDuration > 0 then
+        G.skillCharDuration = G.skillCharDuration - dt
+        if G.skillCharDuration <= 0 then
+            Ent.EndCharSkill(G)
+        end
+    end
+
+    -- 灼烧DOT（龙息技能）
+    for _, z in ipairs(G.zombies or {}) do
+        if not z.dead and z.burnTimer and z.burnTimer > 0 then
+            z.burnTimer = z.burnTimer - dt
+            z.hp = z.hp - (z.burnDps or 0) * dt
+            if z.hp <= 0 then
+                z.dead = true
+                G.killCount = (G.killCount or 0) + 1
+                Ent.SpawnParticles(G, z.x, z.y, { 255, 100, 20 }, 3)
+            end
+        end
+    end
+
+    -- 上车状态：触摸/鼠标瞄准（替代摇杆）
+    if G.mounted then
+        local mouseDown = input:GetMouseButtonDown(MOUSEB_LEFT)
+        if mouseDown then
+            local mousePos = input:GetMousePosition()
+            local lx = mousePos.x / dpr
+            local ly = mousePos.y / dpr
+            local tdx, tdy = LogicalToDesign(lx, ly)
+            local p = G.player
+            local aimDx = tdx - p.x
+            local aimDy = tdy - p.y
+            if math.abs(aimDx) > 5 or math.abs(aimDy) > 5 then
+                G.mountedAimDir = math.atan(aimDy, aimDx)
+                G.mountedAimActive = true
+                if math.abs(aimDx) > 5 then
+                    p.facing = aimDx > 0 and 1 or -1
+                end
+            end
+        else
+            G.mountedAimActive = false
+        end
+    end
+
+    -- 更新玩家（上车状态 vs 自由移动）
+    if G.mounted then
+        Ent.UpdateMounted(G, dt, moveX, moveY)
+    else
+        Ent.UpdatePlayer(G, dt, moveX, moveY)
+    end
 
     -- 更新丧尸 (朝列车移动 + 攻击列车)
     Ent.UpdateZombies(G, dt)
@@ -1263,6 +1366,35 @@ function HandleClick(x, y)
                 return
             end
         end
+
+        -- 左侧技能按钮：上车/下车
+        if G.skillBoardBtn then
+            local sb = G.skillBoardBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                if G.mounted then
+                    -- 已在车上 → 下车，恢复摇杆
+                    Ent.DismountTrain(G)
+                    if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
+                elseif G.nearTrain and (G.skillBoardCD or 0) <= 0 then
+                    -- 靠近列车且不在冷却 → 上车，隐藏摇杆
+                    Ent.MountTrain(G)
+                    if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
+                end
+                return
+            end
+        end
+
+        -- 右侧技能按钮：角色技能
+        if G.skillCharBtn then
+            local sb = G.skillCharBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                if (G.skillCharCD or 0) <= 0 and not G.skillCharActive then
+                    Ent.ActivateCharSkill(G)
+                end
+                return
+            end
+        end
+
         return
     end
 
@@ -1382,6 +1514,9 @@ function HandleRender(eventType, eventData)
     -- 玩家 (人类幸存者)
     Rend.DrawPlayer(vg, G)
 
+    -- 瞄准虚线（上车状态，玩家之后绘制）
+    Rend.DrawAimLine(vg, G)
+
     -- 列车血条 (在玩家之后绘制，确保最高显示层级)
     Rend.DrawTrainHP(vg, G)
 
@@ -1397,6 +1532,9 @@ function HandleRender(eventType, eventData)
 
     -- 右侧面板（炮塔图标 + 距离条）
     Rend.DrawRightPanel(vg, G)
+
+    -- 技能按钮（摇杆左右两侧）
+    Rend.DrawSkillButtons(vg, G)
 
     -- 提示
     Rend.DrawHint(vg, G)

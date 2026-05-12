@@ -647,4 +647,246 @@ function E.UpdateZombies(G, dt)
     end
 end
 
+------------------------------------------------------------------------
+-- 技能系统：上车/下车/近距检测/角色技能
+------------------------------------------------------------------------
+
+--- 检测玩家是否靠近列车（可上车范围）
+function E.IsNearTrain(G)
+    local p = G.player
+    local cx = G.cartCenterX or 0
+    local bottom = G.cartBottomY or 0
+    local halfW = (G.cartW or 72) / 2 + 30  -- 上车判定范围比碰撞体宽
+    local dist = bottom + 60                  -- 列车下方60px以内
+    return math.abs(p.x - cx) < halfW and p.y < dist and p.y > (G.hudH or 48)
+end
+
+--- 上车：锁定在列车顶部
+function E.MountTrain(G)
+    if G.mounted then return end
+    G.mounted = true
+    G.mountedAimDir = 0
+    local p = G.player
+    p.x = G.cartCenterX or (G.screenW / 2)
+    p.y = (G.cartTopY or G.hudH) + 20
+    G.skillBoardCD = G.skillBoardCDMax  -- 上车后触发冷却（下车后才开始倒计时）
+    print("[Skill] Mounted train")
+end
+
+--- 下车：恢复自由移动
+function E.DismountTrain(G)
+    if not G.mounted then return end
+    G.mounted = false
+    local p = G.player
+    p.y = (G.cartBottomY or 200) + 20  -- 放到车厢下方
+    G.skillBoardCD = G.skillBoardCDMax  -- 开始冷却
+    print("[Skill] Dismounted train")
+end
+
+--- 上车状态更新：触摸控制瞄准方向，松开后锁定自动射击
+function E.UpdateMounted(G, dt, moveX, moveY)
+    local p = G.player
+    -- 锁定位置在列车顶部
+    p.x = G.cartCenterX or (G.screenW / 2)
+    p.y = (G.cartTopY or G.hudH) + 20
+    p.vx = 0
+    p.vy = 0
+
+    -- 键盘控制瞄准方向（备用）
+    if math.abs(moveX) > 0.15 or math.abs(moveY) > 0.15 then
+        G.mountedAimDir = math.atan(moveY, moveX)
+        if math.abs(moveX) > 0.1 then
+            p.facing = moveX > 0 and 1 or -1
+        end
+    end
+
+    -- 动画
+    p.bobAnim = p.bobAnim + dt * 3
+    p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4)
+
+    -- 攻击冷却
+    local atkInterval = C.AUTO_ATTACK_INTERVAL / (G.atkSpdMul or 1.0)
+    p.atkTimer = math.max(0, p.atkTimer - dt)
+
+    if p.atkTimer <= 0 then
+        if G.mountedAimActive then
+            -- 按住时：朝触摸方向射击（手动瞄准）
+            p.atkTimer = atkInterval
+            p.atkSwingAnim = 1.0
+            E.FireMountedBullet(G, G.mountedAimDir, nil)
+        else
+            -- 松开后：自动锁定最近敌人，追踪攻击
+            local nearest = E.FindNearestZombie(G)
+            if nearest then
+                local dx = nearest.x - p.x
+                local dy = nearest.y - p.y
+                local angle = math.atan(dy, dx)
+                G.mountedAimDir = angle
+                if math.abs(dx) > 5 then
+                    p.facing = dx > 0 and 1 or -1
+                end
+                p.atkTimer = atkInterval
+                p.atkSwingAnim = 1.0
+                E.FireMountedBullet(G, angle, nearest)
+            end
+        end
+    end
+end
+
+--- 查找射程内最近的丧尸
+function E.FindNearestZombie(G)
+    local p = G.player
+    local range = 420  -- 射程 = 子弹速度(350) × 生命(1.2s)
+    local rangeSq = range * range
+    local bestDist = rangeSq
+    local best = nil
+    for _, z in ipairs(G.zombies or {}) do
+        if not z.dead then
+            local dx = z.x - p.x
+            local dy = z.y - p.y
+            local dist = dx * dx + dy * dy
+            if dist < bestDist then
+                bestDist = dist
+                best = z
+            end
+        end
+    end
+    return best
+end
+
+--- 上车状态发射子弹
+---@param angle number 发射角度
+---@param target table|nil 追踪目标（松开时自动锁定）
+function E.FireMountedBullet(G, angle, target)
+    local p = G.player
+    local spd = 350
+    local dmg = C.PLAYER_ATK_ZOMBIE + (G.atkBonus or 0)
+
+    if not G.turretProjectiles then G.turretProjectiles = {} end
+
+    local proj = {
+        type = "mounted_bullet",
+        x = p.x, y = p.y,
+        vx = math.cos(angle) * spd,
+        vy = math.sin(angle) * spd,
+        speed = spd,
+        angle = angle,
+        life = 1.2, maxLife = 1.2,
+        damage = dmg,
+    }
+
+    -- 有目标时加入追踪信息
+    if target then
+        proj.target = target
+        proj.tx = target.x
+        proj.ty = target.y
+    end
+
+    table.insert(G.turretProjectiles, proj)
+end
+
+--- 激活角色技能
+function E.ActivateCharSkill(G)
+    local charId = G.activeCharId or "warrior"
+
+    if charId == "warrior" then
+        -- 战斗狂怒：7秒内攻速+100%
+        G.skillCharActive = true
+        G.skillCharDurationMax = 7
+        G.skillCharDuration = 7
+        G.atkSpdMul = (G.atkSpdMul or 1.0) * 2.0
+        print("[Skill] Warrior fury activated! AtkSpd x2 for 7s")
+
+    elseif charId == "auntie" then
+        -- 鼓舞士气：8秒攻击力+20%
+        G.skillCharActive = true
+        G.skillCharDurationMax = 8
+        G.skillCharDuration = 8
+        G.atkBonus = (G.atkBonus or 0) + math.floor(C.PLAYER_ATK * 0.2)
+        print("[Skill] Auntie morale boost! Atk +20% for 8s")
+
+    elseif charId == "lisanguang" then
+        -- 三连射：立即对最近3个丧尸各造成80%攻击力伤害
+        local atkPower = math.floor((C.PLAYER_ATK + (G.atkBonus or 0)) * 0.8)
+        local p = G.player
+        local hits = 0
+        -- 按距离排序找最近的3个丧尸
+        local sorted = {}
+        for _, z in ipairs(G.zombies or {}) do
+            if not z.dead then
+                local dx = z.x - p.x
+                local dy = z.y - p.y
+                table.insert(sorted, { z = z, dist = dx * dx + dy * dy })
+            end
+        end
+        table.sort(sorted, function(a, b) return a.dist < b.dist end)
+        for i = 1, math.min(3, #sorted) do
+            local z = sorted[i].z
+            z.hp = z.hp - atkPower
+            z.hitAnim = 0.3
+            E.SpawnParticles(G, z.x, z.y, { 255, 180, 50 }, 4)
+            E.SpawnFloatText(G, z.x, z.y - 10, "-" .. atkPower, "damage")
+            hits = hits + 1
+            if z.hp <= 0 then
+                z.dead = true
+                G.killCount = (G.killCount or 0) + 1
+            end
+        end
+        -- 瞬发技能，无持续时间
+        G.skillCharActive = false
+        G.skillCharDuration = 0
+        print("[Skill] Triple shot! Hit " .. hits .. " zombies")
+
+    elseif charId == "weifenglong" then
+        -- 龙息吐焰：对前方扇形内所有丧尸造成150%攻击力伤害 + 3秒灼烧
+        G.skillCharActive = true
+        G.skillCharDurationMax = 3
+        G.skillCharDuration = 3
+        local atkPower = math.floor((C.PLAYER_ATK + (G.atkBonus or 0)) * 1.5)
+        local p = G.player
+        for _, z in ipairs(G.zombies or {}) do
+            if not z.dead then
+                local dx = z.x - p.x
+                local dy = z.y - p.y
+                local dist = math.sqrt(dx * dx + dy * dy)
+                -- 前方120度扇形，范围120px
+                if dist < 120 then
+                    local inFront = (p.facing > 0 and dx > -20) or (p.facing < 0 and dx < 20)
+                    if inFront then
+                        z.hp = z.hp - atkPower
+                        z.hitAnim = 0.3
+                        z.burnTimer = 3.0    -- 灼烧3秒
+                        z.burnDps = math.floor(atkPower * 0.15)  -- 每秒15%伤害
+                        E.SpawnParticles(G, z.x, z.y, { 255, 100, 20 }, 5)
+                        E.SpawnFloatText(G, z.x, z.y - 10, "-" .. atkPower, "damage")
+                        if z.hp <= 0 then
+                            z.dead = true
+                            G.killCount = (G.killCount or 0) + 1
+                        end
+                    end
+                end
+            end
+        end
+        print("[Skill] Dragon breath!")
+    end
+
+    G.skillCharCD = G.skillCharCDMax
+end
+
+--- 角色技能持续效果结束时的清理
+function E.EndCharSkill(G)
+    local charId = G.activeCharId or "warrior"
+    if charId == "warrior" then
+        G.atkSpdMul = math.max(1.0, (G.atkSpdMul or 2.0) / 2.0)
+        print("[Skill] Warrior fury ended")
+    elseif charId == "auntie" then
+        G.atkBonus = math.max(0, (G.atkBonus or 0) - math.floor(C.PLAYER_ATK * 0.2))
+        print("[Skill] Auntie morale ended")
+    elseif charId == "weifenglong" then
+        print("[Skill] Dragon breath ended")
+    end
+    G.skillCharActive = false
+    G.skillCharDuration = 0
+end
+
 return E

@@ -452,23 +452,28 @@ function T.UpdateProjectiles(G, dt)
             ----------------------------------------------------------------
             -- 弹道类(arrow/minigun/rocket)：追踪目标 + 命中判定
             ----------------------------------------------------------------
-            local isTracking = (p.type == "arrow" or p.type == "minigun" or p.type == "rocket")
+            local isTracking = (p.type == "arrow" or p.type == "minigun" or p.type == "rocket" or p.type == "mounted_bullet")
 
             if isTracking and p.target then
-                -- 目标还活着则实时更新目标坐标
-                if not p.target.dead then
+                -- 目标已死 → 子弹失去追踪，继续直线飞行直到 life 耗尽
+                if p.target.dead then
+                    p.target = nil
+                    p.tx = nil
+                    p.ty = nil
+                else
+                    -- 目标还活着则实时更新目标坐标
                     p.tx = p.target.x
                     p.ty = p.target.y
-                end
-                -- 重新计算朝目标方向的速度
-                if p.tx and p.ty and p.speed then
-                    local dx = p.tx - p.x
-                    local dy = p.ty - p.y
-                    local dist = math.sqrt(dx * dx + dy * dy)
-                    if dist > 1 then
-                        p.vx = dx / dist * p.speed
-                        p.vy = dy / dist * p.speed
-                        p.angle = math.atan(dy, dx)
+                    -- 重新计算朝目标方向的速度
+                    if p.tx and p.ty and p.speed then
+                        local dx = p.tx - p.x
+                        local dy = p.ty - p.y
+                        local dist = math.sqrt(dx * dx + dy * dy)
+                        if dist > 1 then
+                            p.vx = dx / dist * p.speed
+                            p.vy = dy / dist * p.speed
+                            p.angle = math.atan(dy, dx)
+                        end
                     end
                 end
             end
@@ -571,6 +576,34 @@ function T.UpdateProjectiles(G, dt)
                         p.life = 0
                         T.RocketAOE(G, p.x, p.y)
                         T.SpawnExplosion(G, p.x, p.y)
+                    end
+                end
+            end
+
+            ----------------------------------------------------------------
+            -- 上车子弹：直线飞行 → 碰到丧尸造成伤害
+            ----------------------------------------------------------------
+            if p.type == "mounted_bullet" then
+                local hitRadius = 12
+                for _, z in ipairs(G.zombies or {}) do
+                    if not z.dead then
+                        local dx2 = p.x - z.x
+                        local dy2 = p.y - z.y
+                        if dx2 * dx2 + dy2 * dy2 < hitRadius * hitRadius then
+                            p.life = 0
+                            z.hp = z.hp - (p.damage or 5)
+                            z.hitAnim = 0.2
+                            E.SpawnParticles(G, z.x, z.y, BLOOD_COLOR, 3)
+                            if z.hp <= 0 then
+                                z.dead = true
+                                G.killCount = (G.killCount or 0) + 1
+                                G.gold = (G.gold or 0) + (z.reward or 5)
+                                E.SpawnFloatText(G, z.x, z.y - 10, "击杀!", "gold")
+                            else
+                                E.SpawnFloatText(G, z.x, z.y - 15, "-" .. (p.damage or 5), "damage")
+                            end
+                            break
+                        end
                     end
                 end
             end
@@ -687,6 +720,8 @@ function T.DrawProjectiles(vg, G)
             T.DrawSmoke(vg, p)
         elseif p.type == "explosion" then
             T.DrawExplosion(vg, p)
+        elseif p.type == "mounted_bullet" then
+            T.DrawMountedBullet(vg, p)
         end
     end
 end
@@ -1053,6 +1088,37 @@ function T.DrawExplosion(vg, p)
         nvgFillColor(vg, nvgRGBA(r, g, b, a))
         nvgFill(vg)
     end
+end
+
+------------------------------------------------------------------------
+-- 上车子弹绘制（小黄色圆点 + 拖尾）
+------------------------------------------------------------------------
+function T.DrawMountedBullet(vg, p)
+    local alpha = math.min(1.0, p.life / 0.3)
+    local a = math.floor(alpha * 255)
+
+    -- 拖尾
+    local tailLen = 8
+    local tx = p.x - math.cos(p.angle) * tailLen
+    local ty = p.y - math.sin(p.angle) * tailLen
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, tx, ty)
+    nvgLineTo(vg, p.x, p.y)
+    nvgStrokeWidth(vg, 2.5)
+    nvgStrokeColor(vg, nvgRGBA(255, 220, 80, math.floor(a * 0.6)))
+    nvgStroke(vg)
+
+    -- 弹头亮点
+    nvgBeginPath(vg)
+    nvgCircle(vg, p.x, p.y, 3)
+    nvgFillColor(vg, nvgRGBA(255, 240, 150, a))
+    nvgFill(vg)
+
+    -- 发光
+    nvgBeginPath(vg)
+    nvgCircle(vg, p.x, p.y, 5)
+    nvgFillColor(vg, nvgRGBA(255, 200, 50, math.floor(a * 0.3)))
+    nvgFill(vg)
 end
 
 return T
