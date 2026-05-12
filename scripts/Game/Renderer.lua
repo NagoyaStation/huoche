@@ -125,77 +125,104 @@ function R.DrawPath(vg, G)
     local pR, pG, pB = C.CLR.path[1], C.CLR.path[2], C.CLR.path[3]
     local pdR, pdG, pdB = C.CLR.path_dark[1], C.CLR.path_dark[2], C.CLR.path_dark[3]
 
-    for sy = G.renderTopY, H, step do
+    -- 预计算采样点
+    local pts = {}
+    for sy = G.renderTopY, H + step, step do
         local worldY = sy + scrollY
-        local pathL, pathR = Ent.GetPathBounds(W, worldY)
-        local pw = pathR - pathL
+        local pathL, pathR, cx = Ent.GetPathBounds(W, worldY)
+        pts[#pts + 1] = { y = sy, l = pathL, r = pathR, cx = cx }
+    end
+    local n = #pts
+    if n < 2 then return end
 
-        -- 主路面 → 横向渐变（左侧明 → 中间暗 → 右侧微明，凹陷路面感）
-        do
-            local roadPaint = nvgLinearGradient(vg, pathL, sy, pathR, sy,
-                nvgRGBA(pR + 8, pG + 6, pB + 4, 255),
-                nvgRGBA(pR - 6, pG - 8, pB - 5, 255))
-            nvgBeginPath(vg)
-            nvgRect(vg, pathL, sy, pw, step)
-            nvgFillPaint(vg, roadPaint)
-            nvgFill(vg)
-        end
-
-        -- 边缘过渡
-        local edgeW = 4
-        do
-            local leftGrad = nvgLinearGradient(vg, pathL - edgeW, sy, pathL, sy,
-                nvgRGBA(230, 233, 238, 0), nvgRGBA(pdR, pdG, pdB, 200))
-            nvgBeginPath(vg)
-            nvgRect(vg, pathL - edgeW, sy, edgeW, step)
-            nvgFillPaint(vg, leftGrad)
-            nvgFill(vg)
-        end
-        do
-            local rightGrad = nvgLinearGradient(vg, pathR, sy, pathR + edgeW, sy,
-                nvgRGBA(pdR, pdG, pdB, 200), nvgRGBA(230, 233, 238, 0))
-            nvgBeginPath(vg)
-            nvgRect(vg, pathR, sy, edgeW, step)
-            nvgFillPaint(vg, rightGrad)
-            nvgFill(vg)
-        end
+    -- 辅助：用采样点画闭合多边形（左偏移、右偏移）
+    local function polyFill(lOff, rOff, paint)
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].l + lOff, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].l + lOff, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].r + rOff, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillPaint(vg, paint)
+        nvgFill(vg)
+    end
+    local function polyFillColor(lOff, rOff, color)
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].l + lOff, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].l + lOff, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].r + rOff, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillColor(vg, color)
+        nvgFill(vg)
     end
 
-    -- 道路内侧深沟阴影 (凹陷高光 + 阴影)
-    local shadowStep = 8
-    for sy = G.renderTopY, H, shadowStep do
-        local worldY = sy + scrollY
-        local pathL, pathR = Ent.GetPathBounds(W, worldY)
-        -- 左侧凹陷阴影
-        do
-            local lShadow = nvgLinearGradient(vg, pathL, sy, pathL + 6, sy,
-                nvgRGBA(15, 12, 8, 50), nvgRGBA(15, 12, 8, 0))
-            nvgBeginPath(vg)
-            nvgRect(vg, pathL, sy, 6, shadowStep)
-            nvgFillPaint(vg, lShadow)
-            nvgFill(vg)
-        end
-        -- 右侧凹陷阴影
-        do
-            local rShadow = nvgLinearGradient(vg, pathR - 6, sy, pathR, sy,
-                nvgRGBA(15, 12, 8, 0), nvgRGBA(15, 12, 8, 50))
-            nvgBeginPath(vg)
-            nvgRect(vg, pathR - 6, sy, 6, shadowStep)
-            nvgFillPaint(vg, rShadow)
-            nvgFill(vg)
-        end
-        -- 中心微亮高光条（路面凸起感）
-        do
-            local cx = (pathL + pathR) / 2
-            local hw = (pathR - pathL) * 0.12
-            local cHighlight = nvgLinearGradient(vg, cx - hw, sy, cx + hw, sy,
-                nvgRGBA(pR + 18, pG + 15, pB + 10, 0),
-                nvgRGBA(pR + 18, pG + 15, pB + 10, 18))
-            nvgBeginPath(vg)
-            nvgRect(vg, cx - hw, sy, hw * 2, shadowStep)
-            nvgFillPaint(vg, cHighlight)
-            nvgFill(vg)
-        end
+    -- 渐变锚点固定在屏幕中心，不随滚动变化（路径宽度恒定）
+    local halfW = W * C.PATH_WIDTH_RATIO / 2
+    local cx0 = W / 2          -- 固定中心
+    local fl = cx0 - halfW     -- 固定左边界
+    local fr = cx0 + halfW     -- 固定右边界
+
+    -- 主路面 → 连续多边形
+    do
+        local roadPaint = nvgLinearGradient(vg, fl, 0, fr, 0,
+            nvgRGBA(pR + 8, pG + 6, pB + 4, 255),
+            nvgRGBA(pR - 6, pG - 8, pB - 5, 255))
+        polyFill(0, 0, roadPaint)
+    end
+
+    -- 边缘过渡
+    local edgeW = 4
+    do -- 左边缘
+        local leftGrad = nvgLinearGradient(vg, fl - edgeW, 0, fl, 0,
+            nvgRGBA(230, 233, 238, 0), nvgRGBA(pdR, pdG, pdB, 200))
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].l - edgeW, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].l - edgeW, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].l, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillPaint(vg, leftGrad)
+        nvgFill(vg)
+    end
+    do -- 右边缘
+        local rightGrad = nvgLinearGradient(vg, fr, 0, fr + edgeW, 0,
+            nvgRGBA(pdR, pdG, pdB, 200), nvgRGBA(230, 233, 238, 0))
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].r, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].r, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].r + edgeW, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillPaint(vg, rightGrad)
+        nvgFill(vg)
+    end
+
+    -- 道路内侧深沟阴影 → 连续多边形
+    do -- 左侧凹陷阴影
+        local lShadow = nvgLinearGradient(vg, fl, 0, fl + 6, 0,
+            nvgRGBA(15, 12, 8, 50), nvgRGBA(15, 12, 8, 0))
+        polyFill(0, -halfW * 2 + 6, lShadow)
+    end
+    do -- 右侧凹陷阴影
+        local rShadow = nvgLinearGradient(vg, fr - 6, 0, fr, 0,
+            nvgRGBA(15, 12, 8, 0), nvgRGBA(15, 12, 8, 50))
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].r - 6, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].r - 6, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].r, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillPaint(vg, rShadow)
+        nvgFill(vg)
+    end
+    do -- 中心微亮高光条
+        local hw = halfW * 0.12
+        local cHighlight = nvgLinearGradient(vg, cx0 - hw, 0, cx0 + hw, 0,
+            nvgRGBA(pR + 18, pG + 15, pB + 10, 0),
+            nvgRGBA(pR + 18, pG + 15, pB + 10, 18))
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, pts[1].cx - hw, pts[1].y)
+        for i = 2, n do nvgLineTo(vg, pts[i].cx - hw, pts[i].y) end
+        for i = n, 1, -1 do nvgLineTo(vg, pts[i].cx + hw, pts[i].y) end
+        nvgClosePath(vg)
+        nvgFillPaint(vg, cHighlight)
+        nvgFill(vg)
     end
 
     -- 龟裂纹路 (世界坐标固定，随滚动移动)
