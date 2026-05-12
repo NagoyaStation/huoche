@@ -88,59 +88,7 @@ MD.CHARACTERS = {
           "全属性提升+10%",
       },
     },
-    { id = "archer",    name = "弓箭手", quality = 2, icon = "image/hero_axe_raise_20260414072858.png",
-      desc = "远程攻击，精准射击", baseStats = {atk = 15, hp = 80},
-      passive = "远程伤害+8%",
-      skill = { name = "箭雨风暴", desc = "召唤箭雨覆盖区域持续3秒" },
-      stars = {
-          "初始获得武器[短弓]",
-          "远程伤害+10%",
-          "箭矢速度+15%",
-          "暴击率+5%",
-          "远程穿透+3",
-          "攻速加成+20%",
-      },
-    },
-    { id = "mage",      name = "法师",   quality = 4, icon = "image/hero_axe_swing_20260414072953.png",
-      desc = "魔法伤害，范围攻击", baseStats = {atk = 20, hp = 60},
-      passive = "魔法伤害+12%",
-      skill = { name = "元素风暴", desc = "释放元素风暴对范围内敌人造成大量伤害" },
-      stars = {
-          "初始获得武器[法杖]",
-          "魔法伤害+10%",
-          "范围扩大+25%",
-          "冷却缩减+15%",
-          "伤害加成+20%",
-          "元素精通+30%",
-      },
-    },
-    { id = "knight",    name = "骑士",   quality = 3, icon = "image/hero_axe_hit_20260414072957.png",
-      desc = "重甲防御，坚不可摧", baseStats = {atk = 8, hp = 180},
-      passive = "生命值+15%",
-      skill = { name = "坚盾守护", desc = "举盾格挡5秒内受到的所有伤害" },
-      stars = {
-          "初始获得武器[铁盾]",
-          "防御力+10%",
-          "格挡率+15%",
-          "生命恢复+5/秒",
-          "减伤加成+10%",
-          "全队防御光环+8%",
-      },
-    },
-    { id = "assassin",  name = "刺客",   quality = 5, icon = "image/hero_axe_recover_20260414072959.png",
-      desc = "暗影突袭，致命一击", baseStats = {atk = 25, hp = 50},
-      passive = "暴击伤害+20%",
-      skill = { name = "影刃突袭", desc = "瞬移至敌人身后造成300%暴击伤害" },
-      stars = {
-          "初始获得武器[匕首]",
-          "暴击率+8%",
-          "暴击伤害+25%",
-          "闪避率+10%",
-          "攻速加成+15%",
-          "致命一击概率+5%",
-      },
-    },
-    { id = "auntie",    name = "王阿姨", quality = 4, icon = "image/角色素材/艾达待机.png",
+    { id = "auntie",    name = "王阿姨", quality = 5, icon = "image/角色素材/艾达待机.png",
       portrait = "image/装备界面/Layer_0 (3).png",
       equipDisplay = "image/装备界面/Layer_0 (4).png",
       desc = "治愈辅助，全队增益", baseStats = {atk = 10, hp = 140},
@@ -178,7 +126,7 @@ MD.CHARACTERS = {
           "终极增益：全属性+12%",
       },
     },
-    { id = "lisanguang", name = "李三光", quality = 3, icon = "image/角色素材/李三光/李三光待机.png",
+    { id = "lisanguang", name = "李三光", quality = 4, icon = "image/角色素材/李三光/李三光待机.png",
       portrait = "image/角色素材/李三光/Layer_0 (5).png",
       equipDisplay = "image/角色素材/李三光/Layer_0 (6).png",
       desc = "远程输出，精准打击", baseStats = {atk = 14, hp = 100},
@@ -215,6 +163,43 @@ MD.CHARACTERS = {
           "穿透+1层",
           "攻击范围+20%",
           "终极射击：弹道追踪",
+      },
+    },
+    { id = "weifenglong", name = "威风的龙", quality = 6, icon = "image/角色素材/威风的龙/威风的龙待机.png",
+      portrait = "image/角色素材/威风的龙/威风的龙头像.png",
+      equipDisplay = "image/角色素材/威风的龙/威风的龙人物形象.png",
+      desc = "龙族后裔，近战霸主", baseStats = {atk = 18, hp = 130},
+      passive = "受伤减免+10%",
+      skill = { name = "龙息吐焰", desc = "喷射龙焰灼烧前方敌人，造成150%攻击力伤害并附带3秒灼烧" },
+      attackFrames = {
+          "image/角色素材/威风的龙/威风的龙攻击1.png",
+          "image/角色素材/威风的龙/威风的龙攻击2.png",
+          "image/角色素材/威风的龙/威风的龙攻击3.png",
+          "image/角色素材/威风的龙/威风的龙攻击4.png",
+          "image/角色素材/威风的龙/威风的龙攻击5.png",
+          "image/角色素材/威风的龙/威风的龙攻击6.png",
+      },
+      attackFPS = 8,
+      walkFrames = {
+          "image/角色素材/威风的龙/威风的龙行走1.png",
+          "image/角色素材/威风的龙/威风的龙行走2.png",
+          "image/角色素材/威风的龙/威风的龙行走3.png",
+          "image/角色素材/威风的龙/威风的龙行走4.png",
+          "image/角色素材/威风的龙/威风的龙行走5.png",
+          "image/角色素材/威风的龙/威风的龙行走6.png",
+          "image/角色素材/威风的龙/威风的龙行走7.png",
+          "image/角色素材/威风的龙/威风的龙行走8.png",
+          "image/角色素材/威风的龙/威风的龙行走9.png",
+          "image/角色素材/威风的龙/威风的龙行走10.png",
+      },
+      walkFPS = 10,
+      stars = {
+          "初始获得武器[龙爪]",
+          "受伤减免+15%",
+          "攻击力+12%",
+          "灼烧伤害+30%",
+          "生命值+20%",
+          "终极形态：龙化变身",
       },
     },
 }
@@ -376,6 +361,32 @@ MD.CHEST_ICONS = {
     gold   = "image/金宝箱.png",
 }
 
+MD.CHEST_ICONS_OPENED = {
+    bronze = "image/铜宝箱开.png",
+    silver = "image/银宝箱开.png",
+    gold   = "image/金宝箱开.png",
+}
+
+-- 宝箱奖励：每个关卡3个宝箱(25%/50%/100%)的奖励内容
+-- 格式: { {label, amount}, ... }
+MD.CHEST_REWARDS = {
+    bronze = {
+        { { "金币", 50 },  { "木材", 200 } },    -- 25%
+        { { "金币", 100 }, { "石材", 300 } },     -- 50%
+        { { "金币", 200 }, { "钻石", 10 } },      -- 100%
+    },
+    silver = {
+        { { "金币", 100 }, { "木材", 500 } },
+        { { "金币", 200 }, { "石材", 500 } },
+        { { "金币", 300 }, { "钻石", 20 } },
+    },
+    gold = {
+        { { "金币", 200 }, { "木材", 1000 } },
+        { { "金币", 400 }, { "石材", 1000 } },
+        { { "金币", 500 }, { "钻石", 50 } },
+    },
+}
+
 ------------------------------------------------------------------------
 -- 天赋系统（阶梯式，每个天赋可升多级）
 ------------------------------------------------------------------------
@@ -393,16 +404,26 @@ MD.TALENTS = {
 ------------------------------------------------------------------------
 -- 商城系统
 ------------------------------------------------------------------------
-MD.SHOP_DAILY = {
-    { id = "daily_gold",    name = "免费金币",     desc = "x100",    price = 0,   currency = "free",    icon = "image/hud_gold_coin.png" },
+-- 第一格固定：免费金币
+MD.SHOP_DAILY_FREE = { id = "daily_gold", name = "免费金币", desc = "x100", price = 0, currency = "free", icon = "image/hud_gold_coin.png" }
+
+-- 随机池：每天从中抽5个填入后5格
+MD.SHOP_DAILY_POOL = {
+    -- 炮塔碎片
     { id = "daily_gatling", name = "加特林碎片",   desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png" },
     { id = "daily_commando",name = "突击队员碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png" },
-    { id = "daily_wood",    name = "木材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/meta_icon_wood_20260421063709.png" },
-    { id = "daily_stone",   name = "石材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/图层_3 (1).png" },
     { id = "daily_flame",   name = "喷火碎片",     desc = "x5",      price = 120, currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png" },
     { id = "daily_sniper",  name = "狙击碎片",     desc = "x5",      price = 150, currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png" },
     { id = "daily_rocket",  name = "火箭碎片",     desc = "x3",      price = 200, currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png" },
+    -- 资源
+    { id = "daily_wood",    name = "木材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/meta_icon_wood_20260421063709.png" },
+    { id = "daily_stone",   name = "石材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/图层_3 (1).png" },
+    -- 角色碎片
+    { id = "daily_char_auntie",      name = "王阿姨碎片",   desc = "x3", price = 150, currency = "diamond", icon = "image/角色素材/艾达待机.png",                    charId = "auntie" },
+    { id = "daily_char_lisanguang",  name = "李三光碎片",   desc = "x3", price = 120, currency = "diamond", icon = "image/角色素材/李三光/李三光待机.png",             charId = "lisanguang" },
+    { id = "daily_char_weifenglong", name = "威风的龙碎片", desc = "x3", price = 200, currency = "diamond", icon = "image/角色素材/威风的龙/威风的龙待机.png",          charId = "weifenglong" },
 }
+MD.SHOP_DAILY_PICK = 5  -- 每天从池子里抽几个
 
 MD.SHOP_FIXED = {
     { id = "fixed_gold_s", name = "金币礼包", desc = "x200",  price = 50,  currency = "diamond", icon = "image/hud_gold_coin.png" },
@@ -415,6 +436,119 @@ MD.SHOP_GACHA = {
     cost_single = 200,
     cost_ten = 2000,
 }
+
+-- ===== 7日签到奖励 =====
+MD.SIGN_IN_REWARDS = {
+    { day = 1, type = "gold",   amount = 1000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 1 },
+    { day = 2, type = "diamond", amount = 200,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 3 },
+    { day = 3, type = "turret_frag", turretId = "flame", amount = 5, name = "喷火塔碎片", icon = "image/edited_turret_flame_nofire_20260423065123.png", quality = 3 },
+    { day = 4, type = "gold",   amount = 3000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 2 },
+    { day = 5, type = "diamond", amount = 500,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 4 },
+    { day = 6, type = "wood",   amount = 800,  name = "木材",     icon = "image/图层_2 (1).png",   quality = 2 },
+    { day = 7, type = "equip",  id = "sword_epic", name = "暗影之刃", icon = "image/equip_weapon_axe_20260421064553.png", quality = 5 },
+}
+
+------------------------------------------------------------------------
+-- 邮件/公告列表（静态配置，可按需增删）
+------------------------------------------------------------------------
+MD.MAIL_LIST = {
+    {
+        id = "mail_welcome",
+        title = "新手礼包",
+        date = "2026/5/5",
+        expireDays = 30,
+        content = "亲爱的列车长，欢迎登上雪国列车！这是一份新手礼包，助你快速启程，祝游戏愉快！",
+        attachments = {
+            { type = "gold",    amount = 1500, name = "金币", icon = "image/图层_1 (2).png" },
+            { type = "wood",    amount = 500,  name = "木材", icon = "image/图层_2 (1).png" },
+            { type = "stone",   amount = 500,  name = "石材", icon = "image/图层_3 (1).png" },
+        },
+    },
+}
+
+-- 抽奖奖池（权重越高出现概率越大）
+MD.GACHA_POOL = {
+    -- 装备类（直接获得装备，加入背包）
+    { type = "equip", id = "sword_iron",    weight = 25 },
+    { type = "equip", id = "hat_winter",    weight = 25 },
+    { type = "equip", id = "coat_warm",     weight = 25 },
+    { type = "equip", id = "boots_army",    weight = 25 },
+    { type = "equip", id = "necklace_1",    weight = 25 },
+    { type = "equip", id = "axe_war",       weight = 18 },
+    { type = "equip", id = "ring_silver",   weight = 18 },
+    { type = "equip", id = "sword_rare",    weight = 12 },
+    { type = "equip", id = "hat_rare",      weight = 12 },
+    { type = "equip", id = "necklace_epic", weight = 6 },
+    { type = "equip", id = "sword_epic",    weight = 6 },
+    { type = "equip", id = "boots_epic",    weight = 6 },
+    { type = "equip", id = "ring_legend",   weight = 2 },
+    { type = "equip", id = "sword_legend",  weight = 2 },
+    { type = "equip", id = "coat_supreme",  weight = 0.5 },
+    { type = "equip", id = "sword_supreme", weight = 0.5 },
+    -- 资源类
+    { type = "gold",   amount = 200,  weight = 30, name = "金币",     icon = "image/图层_1 (2).png" },
+    { type = "gold",   amount = 500,  weight = 15, name = "金币",     icon = "image/图层_1 (2).png" },
+    { type = "gold",   amount = 1000, weight = 5,  name = "金币",     icon = "image/图层_1 (2).png" },
+    { type = "diamond", amount = 50,  weight = 8,  name = "钻石",     icon = "image/图层_4 (1).png" },
+    { type = "diamond", amount = 100, weight = 3,  name = "钻石",     icon = "image/图层_4 (1).png" },
+    { type = "wood",   amount = 300,  weight = 20, name = "木材",     icon = "image/图层_2 (1).png" },
+    { type = "stone",  amount = 300,  weight = 20, name = "石材",     icon = "image/图层_3 (1).png" },
+    -- 炮塔碎片
+    { type = "turret_frag", turretId = "arrow",   amount = 3, weight = 12, name = "弓箭塔碎片", icon = "image/turret_arrow_v3_20260420035036.png" },
+    { type = "turret_frag", turretId = "minigun", amount = 3, weight = 12, name = "机枪塔碎片", icon = "image/turret_minigun_v3_20260420035022.png" },
+    { type = "turret_frag", turretId = "flame",   amount = 2, weight = 10, name = "喷火塔碎片", icon = "image/edited_turret_flame_nofire_20260423065123.png" },
+    { type = "turret_frag", turretId = "sniper",  amount = 2, weight = 8,  name = "狙击塔碎片", icon = "image/turret_sniper_v3_20260420035021.png" },
+    { type = "turret_frag", turretId = "electric",amount = 2, weight = 8,  name = "电能塔碎片", icon = "image/turret_electric_v10_20260423040517.png" },
+    { type = "turret_frag", turretId = "rocket",  amount = 1, weight = 6,  name = "火箭塔碎片", icon = "image/turret_rocket_v3_20260420035019.png" },
+}
+
+-- 抽奖：按权重随机抽取 count 个物品
+function MD.RollGacha(count)
+    -- 计算总权重
+    local totalWeight = 0
+    for _, item in ipairs(MD.GACHA_POOL) do
+        totalWeight = totalWeight + item.weight
+    end
+    -- 抽取
+    local results = {}
+    for _ = 1, count do
+        local roll = math.random() * totalWeight
+        local acc = 0
+        for _, item in ipairs(MD.GACHA_POOL) do
+            acc = acc + item.weight
+            if roll <= acc then
+                -- 构建奖励信息
+                local reward = { type = item.type }
+                if item.type == "equip" then
+                    -- 查找装备数据
+                    for _, eq in ipairs(MD.EQUIP_DB) do
+                        if eq.id == item.id then
+                            reward.id = eq.id
+                            reward.name = eq.name
+                            reward.quality = eq.quality
+                            reward.icon = eq.icon
+                            reward.slot = eq.slot
+                            break
+                        end
+                    end
+                else
+                    reward.name = item.name
+                    reward.icon = item.icon
+                    reward.amount = item.amount
+                    reward.quality = 1  -- 资源默认白色品质
+                    if item.type == "diamond" then reward.quality = 3 end
+                    if item.type == "turret_frag" then
+                        reward.quality = 2
+                        reward.turretId = item.turretId
+                    end
+                end
+                table.insert(results, reward)
+                break
+            end
+        end
+    end
+    return results
+end
 
 ------------------------------------------------------------------------
 -- 炮塔升级数据（局外用碎片升级）
@@ -489,13 +623,14 @@ function MD.NewSaveData()
     return {
         -- 货币
         gold = 500,
-        diamond = 100,
+        diamond = 2000,
         wood = 30,
         stone = 20,
 
         -- 关卡进度
         maxLevel = 1,       -- 已解锁最高关卡
         levelStars = {},    -- 每关星数 {[1]=3, [2]=2, ...}
+        chestClaimed = {},  -- 已领取宝箱 {["1_1"]=true, ["1_2"]=true} 键="关卡_宝箱序号"
 
         -- 装备（inventory 存实例对象，含随机词条）
         equipped = {},      -- {weapon=1, hat=2, ...} 槽位 -> inventory索引
@@ -518,9 +653,9 @@ function MD.NewSaveData()
 
         -- 角色
         activeChar = "warrior",                     -- 当前使用的角色id
-        unlockedChars = { warrior = true, auntie = true, lisanguang = true },  -- 已解锁角色
-        charFrags = { warrior = 1, auntie = 1, lisanguang = 1 },          -- 角色碎片数 {charId = count}
-        charStars = { warrior = 1, auntie = 1, lisanguang = 1 },           -- 角色星级 {charId = star}
+        unlockedChars = { warrior = true, auntie = true, lisanguang = true, weifenglong = true },  -- 已解锁角色
+        charFrags = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },          -- 角色碎片数 {charId = count}
+        charStars = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },           -- 角色星级 {charId = star}
 
         -- 天赋等级
         talents = {},       -- {hp=0, atk=0, ...}
@@ -536,11 +671,20 @@ function MD.NewSaveData()
 
         -- 商城
         dailyBought = {},   -- 今日已买的daily商品id
+        dailyPicks = {},    -- 今日随机商品id列表（5个）
         lastDailyReset = 0, -- 上次daily重置时间戳
 
         -- 玩家信息
         playerName = "幸存者",
         playerLevel = 1,
+
+        -- 7日签到
+        signInDay = 0,          -- 已签到天数(0~7)
+        signInLastDate = "",    -- 上次签到日期字符串 "YYYY-MM-DD"
+
+        -- 邮件状态
+        mailRead    = {},       -- {["mail_id"]=true} 已读邮件
+        mailClaimed = {},       -- {["mail_id"]=true} 已领取附件的邮件
     }
 end
 

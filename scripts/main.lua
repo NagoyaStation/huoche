@@ -53,10 +53,52 @@ local hudFrameCapHandle = 0   -- 图层_6: 端盖
 local hudFrameMidHandle = 0   -- 图层_7: 中间平铺
 local hudInnerFrameHandle = 0
 local hudSettingsFrameHandle = 0
+-- 游戏内设置弹窗
+local gameSettingPopup = {
+    show = false,
+    animTimer = 0,
+    sfxVolume = 0.8,
+    bgmVolume = 0.6,
+    sfxOn = true,
+    bgmOn = true,
+    dragging = nil,  -- "sfx" / "bgm" / nil
+    -- 布局缓存
+    closeBtn = nil,
+    togSfx = nil, togBgm = nil,
+    sliderSfx = nil, sliderBgm = nil,
+    exitBtn = nil,
+    popupRect = nil,
+}
 local waveUIHandle = 0
 local killUIHandle = 0
 
+------------------------------------------------------------------------
+-- 设计分辨率适配（lobby UI 在所有设备上保持一致布局）
+------------------------------------------------------------------------
+-- 设计分辨率：UI 按此尺寸设计（竖屏），在所有设备上等比缩放
+local DESIGN_W = 390
+local DESIGN_H = 844
 
+-- 运行时缩放参数（每帧更新）—— 全局 SHOW_ALL，所有状态共用
+local showAllScale = 1.0    -- 缩放因子
+local showAllOffX  = 0      -- 水平偏移（居中补偿）
+local showAllOffY  = 0      -- 垂直偏移（居中补偿）
+
+--- 根据实际逻辑分辨率计算 SHOW_ALL 缩放参数
+local function CalcShowAllScale(logW, logH)
+    local sx = logW / DESIGN_W
+    local sy = logH / DESIGN_H
+    showAllScale = math.min(sx, sy)  -- SHOW_ALL：保证全部可见
+    -- 居中偏移（letterbox/pillarbox）
+    showAllOffX = (logW - DESIGN_W * showAllScale) / 2
+    showAllOffY = (logH - DESIGN_H * showAllScale) / 2
+end
+
+--- 将逻辑屏幕坐标转换为设计坐标（用于输入事件）
+local function LogicalToDesign(lx, ly)
+    return (lx - showAllOffX) / showAllScale,
+           (ly - showAllOffY) / showAllScale
+end
 
 
 ------------------------------------------------------------------------
@@ -113,9 +155,10 @@ local function ResetGame()
         turrets = {},
         turretProjectiles = {},
 
-        -- 波次系统
+        -- 关卡 & 波次系统
+        stage = 1,               -- 当前关卡（通关10波后+1）
         currentWave = 1,
-        maxWaves = 20,
+        maxWaves = 10,
         waveTimer = 0,           -- 当前波次已进行时间
         waveDuration = 30,       -- 每波持续时间(秒)
         waveCountdown = 0,       -- 下一波倒计时
@@ -552,13 +595,14 @@ function HandleUpdate(eventType, eventData)
 
     -- VirtualControls.Update() 由 Initialize() 内部自动订阅 BeginFrame 事件调用，无需手动调用
 
-    -- 计算屏幕尺寸 & 布局
+    -- 计算屏幕尺寸 & 布局（始终使用设计分辨率）
     local physW = graphics:GetWidth()
     local physH = graphics:GetHeight()
     local dpr = graphics:GetDPR()
     local W = physW / dpr
     local H = physH / dpr
-    Rend.CalcLayout(G, W, H)
+    CalcShowAllScale(W, H)
+    Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
 
     -- F2 切换 UI 编辑器（仅在 lobby 状态下生效）
     if G.state == "lobby" and input:GetKeyPress(KEY_F2) then
@@ -639,14 +683,21 @@ function HandleUpdate(eventType, eventData)
         -- 间歇期倒计时
         G.waveCountdown = G.waveCountdown - dt
         if G.waveCountdown <= 0 then
-            G.currentWave = math.min(G.currentWave + 1, G.maxWaves)
+            if G.currentWave >= G.maxWaves then
+                -- 本关所有波次完成 → 进入下一关
+                G.stage = (G.stage or 1) + 1
+                G.currentWave = 1
+                print("[Game] Stage " .. G.stage .. " started!")
+            else
+                G.currentWave = G.currentWave + 1
+            end
             G.waveActive = true
             G.waveTimer = 0
             G.waveCountdown = G.waveDuration
-            G.level = G.currentWave  -- 同步level用于难度缩放
+            G.level = (G.stage - 1) * G.maxWaves + G.currentWave  -- 全局难度等级
 
             -- 波次开始时批量涌现一大群僵尸
-            local hordeCount = math.min(6 + G.currentWave * 2, 30)
+            local hordeCount = math.min(6 + G.level * 2, 30)
             Ent.SpawnWaveHorde(G, hordeCount)
         end
     end
@@ -701,37 +752,59 @@ function HandleMouseDown(eventType, eventData)
     local dpr = graphics:GetDPR()
     local lx, ly = mx / dpr, my / dpr
 
-    -- 编辑器优先拦截
-    if G.state == "lobby" and UIEditor.HandlePointerDown(lx, ly) then
+    -- 所有状态统一转换为设计坐标
+    local dx, dy = LogicalToDesign(lx, ly)
+
+    if G.state == "lobby" then
+        -- 编辑器优先拦截
+        if UIEditor.HandlePointerDown(dx, dy) then
+            mouseDragging = true
+            return
+        end
+        Meta.HandleTouchStart(dx, dy)
         mouseDragging = true
+        HandleClick(dx, dy)
         return
     end
 
-    if G.state == "lobby" then
-        Meta.HandleTouchStart(lx, ly)
-        mouseDragging = true
-    end
-
-    HandleClick(lx, ly)
+    HandleClick(dx, dy)
 end
 
 function HandleMouseMove(eventType, eventData)
     if not mouseDragging then return end
-    if G.state ~= "lobby" then return end
     local mx = eventData["X"]:GetInt()
     local my = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
     local lx, ly = mx / dpr, my / dpr
+    local dx, dy = LogicalToDesign(lx, ly)
+
+    -- 游戏内设置弹窗滑块拖拽（设计坐标）
+    if gameSettingPopup.show and gameSettingPopup.dragging then
+        local sp = gameSettingPopup
+        if sp.dragging == "sfx" and sp.sliderSfx then
+            sp.sfxVolume = math.max(0, math.min(1, (dx - sp.sliderSfx.sx) / sp.sliderSfx.sw))
+        elseif sp.dragging == "bgm" and sp.sliderBgm then
+            sp.bgmVolume = math.max(0, math.min(1, (dx - sp.sliderBgm.sx) / sp.sliderBgm.sw))
+        end
+        return
+    end
+
+    if G.state ~= "lobby" then return end
 
     -- 编辑器优先拦截
-    if UIEditor.HandlePointerMove(lx, ly) then return end
+    if UIEditor.HandlePointerMove(dx, dy) then return end
 
-    Meta.HandleTouchMove(lx, ly)
+    Meta.HandleTouchMove(dx, dy)
 end
 
 function HandleMouseUp(eventType, eventData)
     if mouseDragging then
         mouseDragging = false
+        -- 游戏内设置弹窗释放拖拽
+        if gameSettingPopup.dragging then
+            gameSettingPopup.dragging = nil
+            return
+        end
         -- 编辑器优先拦截
         if UIEditor.HandlePointerUp() then return end
         if G.state == "lobby" then
@@ -745,33 +818,51 @@ function HandleTouchBegin(eventType, eventData)
     local ty = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
     local lx, ly = tx / dpr, ty / dpr
+    local dx, dy = LogicalToDesign(lx, ly)
 
-    -- 编辑器优先拦截
-    if G.state == "lobby" and UIEditor.HandlePointerDown(lx, ly) then
+    if G.state == "lobby" then
+        -- 编辑器优先拦截
+        if UIEditor.HandlePointerDown(dx, dy) then return end
+        Meta.HandleTouchStart(dx, dy)
+        HandleClick(dx, dy)
         return
     end
 
-    if G.state == "lobby" then
-        Meta.HandleTouchStart(lx, ly)
-    end
-
-    HandleClick(lx, ly)
+    HandleClick(dx, dy)
 end
 
 function HandleTouchMove(eventType, eventData)
-    if G.state ~= "lobby" then return end
     local tx = eventData["X"]:GetInt()
     local ty = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
     local lx, ly = tx / dpr, ty / dpr
+    local dx, dy = LogicalToDesign(lx, ly)
+
+    -- 游戏内设置弹窗滑块拖拽（设计坐标）
+    if gameSettingPopup.show and gameSettingPopup.dragging then
+        local sp = gameSettingPopup
+        if sp.dragging == "sfx" and sp.sliderSfx then
+            sp.sfxVolume = math.max(0, math.min(1, (dx - sp.sliderSfx.sx) / sp.sliderSfx.sw))
+        elseif sp.dragging == "bgm" and sp.sliderBgm then
+            sp.bgmVolume = math.max(0, math.min(1, (dx - sp.sliderBgm.sx) / sp.sliderBgm.sw))
+        end
+        return
+    end
+
+    if G.state ~= "lobby" then return end
 
     -- 编辑器优先拦截
-    if UIEditor.HandlePointerMove(lx, ly) then return end
+    if UIEditor.HandlePointerMove(dx, dy) then return end
 
-    Meta.HandleTouchMove(lx, ly)
+    Meta.HandleTouchMove(dx, dy)
 end
 
 function HandleTouchEnd(eventType, eventData)
+    -- 游戏内设置弹窗释放拖拽
+    if gameSettingPopup.dragging then
+        gameSettingPopup.dragging = nil
+        return
+    end
     if G.state == "lobby" then
         -- 编辑器优先拦截
         if UIEditor.HandlePointerUp() then return end
@@ -779,7 +870,367 @@ function HandleTouchEnd(eventType, eventData)
     end
 end
 
+------------------------------------------------------------------------
+-- 游戏内设置弹窗绘制（逻辑坐标系）
+------------------------------------------------------------------------
+local function DrawGameSettingPopup(W, H)
+    local sp = gameSettingPopup
+    local s = G.uiScale or 1
+    sp.animTimer = sp.animTimer + 1/60
+    local t = math.min(sp.animTimer / 0.2, 1.0)
+    local easeT = 1 - (1 - t) * (1 - t)
+    local sc = 0.85 + 0.15 * easeT
+    local alpha = math.floor(255 * easeT)
+
+    -- 遮罩
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, W, H)
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, math.floor(140 * easeT)))
+    nvgFill(vg)
+
+    -- 弹窗尺寸
+    local pw = math.min(W * 0.78, 300 * s)
+    local ph = 280 * s
+    local px = (W - pw) / 2
+    local py = (H - ph) / 2
+
+    nvgSave(vg)
+    local cx, cy = px + pw / 2, py + ph / 2
+    nvgTranslate(vg, cx, cy)
+    nvgScale(vg, sc, sc)
+    nvgTranslate(vg, -cx, -cy)
+    nvgGlobalAlpha(vg, alpha / 255)
+
+    -- 外发光
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px - 14, py - 14, pw + 28, ph + 28, 26)
+    nvgFillPaint(vg, nvgBoxGradient(vg, px - 4, py - 4, pw + 8, ph + 8, 18, 24,
+        nvgRGBA(60, 130, 220, math.floor(50 * easeT)), nvgRGBA(0, 0, 0, 0)))
+    nvgFill(vg)
+
+    -- 主背景
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px, py, pw, ph, 14)
+    nvgFillPaint(vg, nvgLinearGradient(vg, px, py, px, py + ph,
+        nvgRGBA(28, 36, 62, 252), nvgRGBA(18, 22, 42, 252)))
+    nvgFill(vg)
+
+    -- 边框
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px, py, pw, ph, 14)
+    nvgStrokeWidth(vg, 1.5)
+    nvgStrokePaint(vg, nvgLinearGradient(vg, px, py, px + pw, py + ph,
+        nvgRGBA(60, 110, 200, 140), nvgRGBA(80, 60, 180, 140)))
+    nvgStroke(vg)
+
+    -- 标题栏
+    local titleH = 46 * s
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, px + 2, py + 2, pw - 4, titleH, 12 * s)
+    nvgFillPaint(vg, nvgLinearGradient(vg, px, py, px, py + titleH,
+        nvgRGBA(35, 55, 110, 200), nvgRGBA(22, 28, 48, 160)))
+    nvgFill(vg)
+
+    -- 高光线
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, px + 24 * s, py + 3)
+    nvgLineTo(vg, px + pw - 24 * s, py + 3)
+    nvgStrokeWidth(vg, 1)
+    nvgStrokeColor(vg, nvgRGBA(120, 170, 255, 60))
+    nvgStroke(vg)
+
+    -- 标题
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 20 * s)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(220, 235, 255, 255))
+    nvgText(vg, cx, py + titleH / 2, "设 置")
+
+    -- 装饰线
+    local decoY = py + titleH / 2
+    for side = -1, 1, 2 do
+        local lx1 = cx + side * 30 * s
+        local lx2 = cx + side * (pw / 2 - 24 * s)
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, lx1, decoY)
+        nvgLineTo(vg, lx2, decoY)
+        nvgStrokeWidth(vg, 1)
+        nvgStrokePaint(vg, nvgLinearGradient(vg, lx1, decoY, lx2, decoY,
+            nvgRGBA(100, 160, 255, 80), nvgRGBA(100, 160, 255, 0)))
+        nvgStroke(vg)
+    end
+
+    -- 关闭按钮
+    local closeX = px + pw - 20 * s
+    local closeY = py + titleH / 2
+    nvgBeginPath(vg)
+    nvgCircle(vg, closeX, closeY, 12 * s)
+    nvgFillColor(vg, nvgRGBA(200, 60, 60, 180))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgCircle(vg, closeX, closeY, 12 * s)
+    nvgStrokeColor(vg, nvgRGBA(255, 100, 100, 120))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 16 * s)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+    nvgText(vg, closeX, closeY, "✕")
+    sp.closeBtn = { x = closeX, y = closeY }
+
+    -- 内容区域
+    local contentY = py + titleH + 12 * s
+    local padX = 20 * s
+    local leftX = px + padX
+    local rightEnd = px + pw - padX
+
+    -- 音频行绘制
+    local function drawAudioRow(label, isOn, volume, rowY, key)
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 16 * s)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(190, 210, 240, 255))
+        nvgText(vg, leftX, rowY + 12 * s, label)
+
+        -- 开关
+        local togW, togH = 42 * s, 22 * s
+        local togX = leftX + 52 * s
+        local togY = rowY + 12 * s - togH / 2
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, togX, togY, togW, togH, togH / 2)
+        if isOn then
+            nvgFillPaint(vg, nvgLinearGradient(vg, togX, togY, togX + togW, togY,
+                nvgRGBA(50, 160, 80, 255), nvgRGBA(80, 200, 120, 255)))
+        else
+            nvgFillColor(vg, nvgRGBA(60, 65, 80, 255))
+        end
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, togX, togY, togW, togH, togH / 2)
+        nvgStrokeColor(vg, nvgRGBA(255, 255, 255, isOn and 40 or 20))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        local dotR = togH / 2 - 3
+        local dotCX = isOn and (togX + togW - togH / 2) or (togX + togH / 2)
+        nvgBeginPath(vg)
+        nvgCircle(vg, dotCX, togY + togH / 2, dotR)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+        nvgFill(vg)
+
+        sp["tog" .. key] = { x = togX, y = togY, w = togW, h = togH }
+
+        -- 滑块
+        local sliderX = togX + togW + 14 * s
+        local sliderW = rightEnd - sliderX
+        local sliderY = rowY + 12 * s
+        local trackH = 6 * s
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, sliderX, sliderY - trackH / 2, sliderW, trackH, trackH / 2)
+        nvgFillColor(vg, nvgRGBA(40, 45, 60, isOn and 255 or 120))
+        nvgFill(vg)
+
+        local fillW = sliderW * volume
+        if fillW > 0 then
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, sliderX, sliderY - trackH / 2, fillW, trackH, trackH / 2)
+            if isOn then
+                nvgFillPaint(vg, nvgLinearGradient(vg, sliderX, sliderY, sliderX + fillW, sliderY,
+                    nvgRGBA(60, 140, 255, 255), nvgRGBA(100, 180, 255, 255)))
+            else
+                nvgFillColor(vg, nvgRGBA(80, 90, 110, 150))
+            end
+            nvgFill(vg)
+        end
+
+        local thumbX = sliderX + fillW
+        local thumbR = 9 * s
+        if isOn then
+            nvgBeginPath(vg)
+            nvgCircle(vg, thumbX, sliderY, thumbR + 3 * s)
+            nvgFillColor(vg, nvgRGBA(60, 140, 255, 40))
+            nvgFill(vg)
+        end
+        nvgBeginPath(vg)
+        nvgCircle(vg, thumbX, sliderY, thumbR)
+        if isOn then
+            nvgFillPaint(vg, nvgRadialGradient(vg, thumbX, sliderY, 0, thumbR,
+                nvgRGBA(200, 230, 255, 255), nvgRGBA(100, 170, 255, 255)))
+        else
+            nvgFillColor(vg, nvgRGBA(100, 105, 120, 200))
+        end
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgCircle(vg, thumbX, sliderY, thumbR)
+        nvgStrokeColor(vg, nvgRGBA(255, 255, 255, isOn and 60 or 20))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        nvgFontSize(vg, 11 * s)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+        nvgFillColor(vg, nvgRGBA(160, 180, 210, isOn and 200 or 100))
+        nvgText(vg, thumbX, sliderY + thumbR + 4 * s, math.floor(volume * 100) .. "%")
+
+        sp["slider" .. key] = { x = sliderX, y = sliderY - 16, w = sliderW, h = 32, sx = sliderX, sw = sliderW }
+    end
+
+    -- 音效行
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, leftX, contentY - 4)
+    nvgLineTo(vg, rightEnd, contentY - 4)
+    nvgStrokeColor(vg, nvgRGBA(80, 110, 180, 40))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    drawAudioRow("音效", sp.sfxOn, sp.sfxVolume, contentY, "Sfx")
+
+    -- 音乐行
+    local bgmRowY = contentY + 52 * s
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, leftX, bgmRowY - 4 * s)
+    nvgLineTo(vg, rightEnd, bgmRowY - 4 * s)
+    nvgStrokeColor(vg, nvgRGBA(80, 110, 180, 40))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    drawAudioRow("音乐", sp.bgmOn, sp.bgmVolume, bgmRowY, "Bgm")
+
+    -- 分隔线
+    local sepY = bgmRowY + 56 * s
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, leftX + 10 * s, sepY)
+    nvgLineTo(vg, rightEnd - 10 * s, sepY)
+    nvgStrokeColor(vg, nvgRGBA(80, 110, 180, 50))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    -- 退出按钮（替代兑换码）
+    local btnW = 180 * s
+    local btnH = 40 * s
+    local btnX = cx - btnW / 2
+    local btnY = sepY + 14 * s
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 10 * s)
+    nvgFillPaint(vg, nvgLinearGradient(vg, btnX, btnY, btnX, btnY + btnH,
+        nvgRGBA(160, 50, 50, 240), nvgRGBA(120, 35, 35, 240)))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnX + 1, btnY + 1, btnW - 2, btnH / 2 - 1, 9 * s)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 18))
+    nvgFill(vg)
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 10 * s)
+    nvgStrokeColor(vg, nvgRGBA(255, 100, 100, 100))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 16 * s)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 220, 220, 255))
+    nvgText(vg, cx, btnY + btnH / 2, "退出游戏")
+    sp.exitBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
+
+    -- 版本号（右下角）
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 12 * s)
+    nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_BOTTOM)
+    nvgFillColor(vg, nvgRGBA(100, 120, 150, 160))
+    nvgText(vg, px + pw - 14 * s, py + ph - 10 * s, "版本：1.0.0")
+
+    nvgRestore(vg)
+    sp.popupRect = { x = px, y = py, w = pw, h = ph }
+end
+
+------------------------------------------------------------------------
+-- 游戏内设置弹窗点击处理
+------------------------------------------------------------------------
+local function HandleGameSettingClick(x, y)
+    local sp = gameSettingPopup
+
+    -- 关闭按钮
+    if sp.closeBtn then
+        local b = sp.closeBtn
+        if (x - b.x) * (x - b.x) + (y - b.y) * (y - b.y) <= 14 * 14 then
+            sp.show = false
+            sp.dragging = nil
+            return true
+        end
+    end
+
+    -- 音效开关
+    if sp.togSfx then
+        local t = sp.togSfx
+        if x >= t.x and x <= t.x + t.w and y >= t.y and y <= t.y + t.h then
+            sp.sfxOn = not sp.sfxOn
+            print("[GameSetting] SFX: " .. tostring(sp.sfxOn))
+            return true
+        end
+    end
+
+    -- 音乐开关
+    if sp.togBgm then
+        local t = sp.togBgm
+        if x >= t.x and x <= t.x + t.w and y >= t.y and y <= t.y + t.h then
+            sp.bgmOn = not sp.bgmOn
+            print("[GameSetting] BGM: " .. tostring(sp.bgmOn))
+            return true
+        end
+    end
+
+    -- 音效滑块
+    if sp.sliderSfx and sp.sfxOn then
+        local s = sp.sliderSfx
+        if x >= s.x - 10 and x <= s.x + s.w + 10 and y >= s.y and y <= s.y + s.h then
+            sp.sfxVolume = math.max(0, math.min(1, (x - s.sx) / s.sw))
+            sp.dragging = "sfx"
+            return true
+        end
+    end
+
+    -- 音乐滑块
+    if sp.sliderBgm and sp.bgmOn then
+        local s = sp.sliderBgm
+        if x >= s.x - 10 and x <= s.x + s.w + 10 and y >= s.y and y <= s.y + s.h then
+            sp.bgmVolume = math.max(0, math.min(1, (x - s.sx) / s.sw))
+            sp.dragging = "bgm"
+            return true
+        end
+    end
+
+    -- 退出按钮
+    if sp.exitBtn then
+        local b = sp.exitBtn
+        if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+            sp.show = false
+            sp.dragging = nil
+            -- 上传分数并返回大厅
+            local stage = G.stage or 1
+            local wave = G.currentWave or 1
+            Meta.UploadGameScore(stage, wave)
+            G.state = "lobby"
+            if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
+            print("[GameSetting] Exit to lobby, stage:" .. stage .. " wave:" .. wave)
+            return true
+        end
+    end
+
+    -- 弹窗外关闭
+    if sp.popupRect then
+        local p = sp.popupRect
+        if x < p.x or x > p.x + p.w or y < p.y or y > p.y + p.h then
+            sp.show = false
+            sp.dragging = nil
+            return true
+        end
+    end
+
+    return true  -- 吞掉弹窗内点击
+end
+
 function HandleClick(x, y)
+    -- 游戏内设置弹窗优先拦截（所有状态）
+    if gameSettingPopup.show then
+        HandleGameSettingClick(x, y)
+        return
+    end
+
     if G.state == "menu" then
         local btn = G.menuBtn
         if btn and x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
@@ -791,16 +1242,26 @@ function HandleClick(x, y)
     end
 
     if G.state == "lobby" then
-        local physW = graphics:GetWidth()
-        local physH = graphics:GetHeight()
-        local dpr = graphics:GetDPR()
-        local W = physW / dpr
-        local H = physH / dpr
-        local result, param = Meta.HandleClick(x, y, W, H)
+        -- x, y 已在上游转换为设计坐标，使用设计分辨率
+        local result, param = Meta.HandleClick(x, y, DESIGN_W, DESIGN_H)
         if result == "start_level" then
             StartLevel()
             if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
             print("[Game] Starting level " .. tostring(param))
+        end
+        return
+    end
+
+    if G.state == "playing" then
+        -- 齿轮按钮打开设置弹窗
+        if G.hudSettingBtn then
+            local sb = G.hudSettingBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                gameSettingPopup.show = true
+                gameSettingPopup.animTimer = 0
+                print("[Game] Open in-game settings")
+                return
+            end
         end
         return
     end
@@ -819,9 +1280,13 @@ function HandleClick(x, y)
     if G.state == "gameover" then
         local btn = G.restartBtn
         if btn and x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+            -- 上传本局最高记录到云排行榜
+            local stage = G.stage or 1
+            local wave = G.currentWave or 1
+            Meta.UploadGameScore(stage, wave)
             G.state = "lobby"
             if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
-            print("[Game] Returned to lobby")
+            print("[Game] Returned to lobby, stage:" .. stage .. " wave:" .. wave)
         end
         return
     end
@@ -841,21 +1306,53 @@ function HandleRender(eventType, eventData)
 
     nvgBeginFrame(vg, W, H, dpr)
 
-    -- 菜单：全屏插画启动页
+    -- 菜单：全屏插画启动页（SHOW_ALL 包装）
     if G.state == "menu" then
+        if showAllOffX > 0 or showAllOffY > 0 then
+            nvgBeginPath(vg)
+            nvgRect(vg, 0, 0, W, H)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 255))
+            nvgFill(vg)
+        end
+        nvgSave(vg)
+        nvgTranslate(vg, showAllOffX, showAllOffY)
+        nvgScale(vg, showAllScale, showAllScale)
         Rend.DrawMenu(vg, G)
+        nvgRestore(vg)
         nvgEndFrame(vg)
         return
     end
 
-    -- 局外大厅：独立渲染
+    -- 局外大厅：独立渲染（设计分辨率缩放）
     if G.state == "lobby" then
-        Meta.Draw(vg, W, H)
+        -- 黑色背景填充（letterbox/pillarbox 区域）
+        if showAllOffX > 0 or showAllOffY > 0 then
+            nvgBeginPath(vg)
+            nvgRect(vg, 0, 0, W, H)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 255))
+            nvgFill(vg)
+        end
+        nvgSave(vg)
+        nvgTranslate(vg, showAllOffX, showAllOffY)
+        nvgScale(vg, showAllScale, showAllScale)
+        Meta.Draw(vg, DESIGN_W, DESIGN_H)
         -- UI 编辑器覆盖层（在所有 UI 之上）
-        UIEditor.DrawOverlay(vg, W, H)
+        UIEditor.DrawOverlay(vg, DESIGN_W, DESIGN_H)
+        nvgRestore(vg)
         nvgEndFrame(vg)
         return
     end
+
+    -- ===== 战斗场景 SHOW_ALL 包装 =====
+    if showAllOffX > 0 or showAllOffY > 0 then
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 255))
+        nvgFill(vg)
+    end
+    nvgSave(vg)
+    nvgTranslate(vg, showAllOffX, showAllOffY)
+    nvgScale(vg, showAllScale, showAllScale)
 
     -- 雪地背景
     Rend.DrawSnow(vg, G)
@@ -918,6 +1415,13 @@ function HandleRender(eventType, eventData)
     if G.state == "gameover" then
         Rend.DrawGameOver(vg, G)
     end
+
+    -- 游戏内设置弹窗（最高层级，覆盖所有游戏内容）
+    if gameSettingPopup.show then
+        DrawGameSettingPopup(DESIGN_W, DESIGN_H)
+    end
+
+    nvgRestore(vg)  -- ===== 结束 SHOW_ALL 包装 =====
 
     -- 虚拟摇杆由 VirtualControls 自身的 NanoVG 上下文独立渲染（renderOrder=999999）
     -- Initialize() 已自动订阅 NanoVGRender 事件，无需手动调用 Render()

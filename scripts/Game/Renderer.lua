@@ -30,7 +30,13 @@ end
 function R.CalcLayout(G, W, H)
     G.screenW = W
     G.screenH = H
-    G.hudH = 48
+
+    -- UI 缩放因子：以短边 390 为基准（竖屏设计宽度），横屏时短边是高度
+    local shortDim = math.min(W, H)
+    local uiScale = shortDim / 390
+    G.uiScale = math.max(1.0, math.min(uiScale, 1.5))
+
+    G.hudH = math.floor(48 * G.uiScale)
     G.renderTopY = 0   -- 游戏场景渲染起点（从屏幕顶部开始，HUD覆盖在上面）
 
     -- 列车位置 (屏幕上方，蒸汽机车)
@@ -1172,13 +1178,14 @@ function R.DrawRightPanel(vg, G)
     local W = G.screenW
     local H = G.screenH
     local t = G.gameTime or 0
+    local s = G.uiScale or 1
 
     -- ========== 参数 ==========
-    local panelRight = W - 6           -- 面板右边距
-    local iconSize = 42                -- 图标方块边长
-    local iconGap = 6                  -- 图标间距
-    local iconCorner = 8               -- 圆角半径
-    local startY = G.hudH + 12         -- 第一个图标顶部Y
+    local panelRight = W - 6 * s       -- 面板右边距
+    local iconSize = 42 * s            -- 图标方块边长
+    local iconGap = 6 * s              -- 图标间距
+    local iconCorner = 8 * s            -- 圆角半径
+    local startY = G.hudH + 12 * s     -- 第一个图标顶部Y
 
     -- ========== 1) 炮塔图标槽位（始终显示4个，锁定/解锁） ==========
     local turrets = G.turrets or {}
@@ -1192,7 +1199,7 @@ function R.DrawRightPanel(vg, G)
 
     -- ========== 炮塔底三段拼接背景 ==========
     do
-        local basePad = 5
+        local basePad = 5 * s
         local baseW = iconSize + basePad * 2         -- 52
         local baseX = panelRight - iconSize - basePad -- 图标居中
         local baseScale = baseW / 139
@@ -1263,10 +1270,10 @@ function R.DrawRightPanel(vg, G)
             if def then
                 local img = G.turretImgs and G.turretImgs[def.imgKey]
                 if img and img ~= 0 then
-                    local sprW = iconSize - 10
+                    local sprW = iconSize - 10 * s
                     local sprH = sprW * 1.33
-                    if sprH > iconSize - 8 then
-                        sprH = iconSize - 8
+                    if sprH > iconSize - 8 * s then
+                        sprH = iconSize - 8 * s
                         sprW = sprH / 1.33
                     end
                     local ccx = ix + iconSize / 2
@@ -1283,9 +1290,9 @@ function R.DrawRightPanel(vg, G)
 
             -- 右下角圆形CD指示器
             if def then
-                local cdR = 7
-                local cx = ix + iconSize - cdR - 2
-                local cy = iy + iconSize - cdR - 2
+                local cdR = 7 * s
+                local cx = ix + iconSize - cdR - 2 * s
+                local cy = iy + iconSize - cdR - 2 * s
 
                 if turret.phase == "resting" and turret.phaseTimer then
                     -- ===== 冷却阶段：橙红色大冷却 + 暗色遮罩 =====
@@ -1343,24 +1350,41 @@ function R.DrawRightPanel(vg, G)
 
     -- ========== 2) 行驶距离竖条（当前关卡进度，从上往下） ==========
     -- 基于炮塔底底部位置计算，避免重叠
-    local basePadBar = 5
+    local basePadBar = 5 * s
     local baseScaleBar = (iconSize + basePadBar * 2) / 139
     local topCapHBar  = math.floor(28 * baseScaleBar)
     local botCapHBar  = math.floor(32 * baseScaleBar)
     local slotsAreaHBar = totalSlots * (iconSize + iconGap) - iconGap
     local midTotalHBar  = slotsAreaHBar + basePadBar * 2
     local turretBaseBottom = (startY - basePadBar) + topCapHBar + midTotalHBar + botCapHBar
-    local barTopY = turretBaseBottom + 10
-    local barH = 150               -- 固定高度，参照参考图比例
-    local barW = 10
+    local barTopY = turretBaseBottom + 10 * s
+    local barH = 150 * s           -- 固定高度，参照参考图比例
+    local barW = 10 * s
     local barCenterX = panelRight - iconSize / 2  -- 与图标列居中对齐
     local barX = barCenterX - barW / 2
 
-    -- 关卡距离进度（从上往下填充，火车从上往下开）
-    local distM = math.floor(G.distance / 10)
-    local levelDist = distM - (G.levelStartDist or 0)
-    local levelTarget = C.LEVEL_DIST_TARGET or 1000
-    local progress = math.min(1, math.max(0, levelDist / levelTarget))
+    -- 波次进度（平滑插值：战斗阶段+间歇阶段连续推进，最后一波结束时到达终点）
+    local curWave = G.currentWave or 1
+    local maxWave = G.maxWaves or 10
+    local waveDur = G.waveDuration or 30   -- 每波战斗时长
+    local restDur = 10                      -- 间歇时长
+    local cycleDur = waveDur + restDur      -- 每波完整周期
+
+    -- 已完成的完整波数（当前波之前的波）
+    local completedWaves = curWave - 1
+    -- 当前波内进度（0~1）
+    local inWaveProgress = 0
+    if G.waveActive then
+        -- 战斗阶段：占周期的前 waveDur/cycleDur 部分
+        local wt = G.waveTimer or 0
+        inWaveProgress = math.min(1, wt / waveDur) * (waveDur / cycleDur)
+    else
+        -- 间歇阶段：战斗部分已完成 + 间歇倒计时剩余
+        local cd = G.waveCountdown or 0
+        local restElapsed = restDur - cd
+        inWaveProgress = (waveDur / cycleDur) + math.min(1, restElapsed / restDur) * (restDur / cycleDur)
+    end
+    local progress = math.min(1, math.max(0, (completedWaves + inWaveProgress) / maxWave))
 
     -- 条背景（暗色圆角）
     nvgBeginPath(vg)
@@ -1392,7 +1416,7 @@ function R.DrawRightPanel(vg, G)
 
     -- 白色圆点标记（当前进度位置，在填充末端）
     local dotY = barTopY + fillH
-    local dotR = 6
+    local dotR = 6 * s
     dotY = math.max(barTopY + dotR, math.min(barTopY + barH - dotR, dotY))
     nvgBeginPath(vg)
     nvgCircle(vg, barCenterX, dotY, dotR)
@@ -1404,12 +1428,13 @@ function R.DrawRightPanel(vg, G)
     nvgStrokeWidth(vg, 1.0)
     nvgStroke(vg)
 
-    -- 距离文字（条下方，显示 当前/目标）
+    -- 波次文字（条下方）
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, 10)
+    nvgFontSize(vg, 10 * s)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
     nvgFillColor(vg, nvgRGBA(200, 195, 170, 200))
-    nvgText(vg, barCenterX, barTopY + barH + 6, math.min(levelDist, levelTarget) .. "m", nil)
+    local stageNum = G.stage or 1
+    nvgText(vg, barCenterX, barTopY + barH + 6 * s, "第" .. stageNum .. "关 " .. curWave .. "/" .. maxWave)
 end
 
 ------------------------------------------------------------------------
@@ -1419,6 +1444,7 @@ function R.DrawHUD(vg, G)
     local W = G.screenW
     local hudH = G.hudH
     local cy = hudH / 2
+    local s = G.uiScale or 1
 
     nvgFontFace(vg, "sans")
 
@@ -1432,11 +1458,11 @@ function R.DrawHUD(vg, G)
 
     -- 内框尺寸：统一固定宽度，紧凑排列
     local innerImg = G.hudInnerFrame
-    local innerH = hudH - 6          -- 内框高度略小于外框
-    local innerW = 68                -- 每个内框统一宽度
-    local iconSz = 15
-    local gap = 2
-    local startX = 6
+    local innerH = hudH - 6 * s       -- 内框高度略小于外框
+    local innerW = 68 * s             -- 每个内框统一宽度
+    local iconSz = 15 * s
+    local gap = 2 * s
+    local startX = 6 * s
 
     -- 资源区域总宽度 = 4个内框 + 3个间距
     local totalResW = innerW * #items + gap * (#items - 1)
@@ -1444,7 +1470,7 @@ function R.DrawHUD(vg, G)
     -- 1) 外框底：端盖(70×78) + 中间平铺(136×78) 组装，只罩资源区域
     local capImg = G.hudFrameCap
     local midImg = G.hudFrameMid
-    local outerPad = 4
+    local outerPad = 4 * s
     local outerX = startX - outerPad
     local outerW = totalResW + outerPad * 2
     local outerY = 0
@@ -1505,14 +1531,14 @@ function R.DrawHUD(vg, G)
         end
 
         -- 图标（居左）
-        local iconX = bx + 6 + iSz / 2
+        local iconX = bx + 6 * s + iSz / 2
         if item.img and item.img ~= 0 then
             drawSprite(vg, item.img, iconX, cy, iSz, iSz, 1.0)
         end
 
         -- 数量文字（图标右侧）
-        local textX = bx + 6 + iSz + 3
-        nvgFontSize(vg, 13)
+        local textX = bx + 6 * s + iSz + 3 * s
+        nvgFontSize(vg, 13 * s)
         nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
         nvgFillColor(vg, nvgRGBA(0, 0, 0, 90))
         nvgText(vg, textX + 0.8, cy + 0.8, numStr, nil)
@@ -1524,9 +1550,9 @@ function R.DrawHUD(vg, G)
 
     -- 3) 设置框底 + 齿轮图标
     local settingsFrameImg = G.hudSettingsFrame
-    local sfScale = (hudH - 6) / 60  -- 设置框略小于外框
+    local sfScale = (hudH - 6 * s) / 60  -- 设置框略小于外框
     local sfSz = 60 * sfScale
-    local sfX = W - sfSz - 4
+    local sfX = W - sfSz - 4 * s
     local sfY = cy - sfSz / 2
 
     if settingsFrameImg and settingsFrameImg ~= 0 then
@@ -1542,18 +1568,22 @@ function R.DrawHUD(vg, G)
         local gearDrawSz = sfSz * 1.0
         drawSprite(vg, G.hudSettings, sfX + sfSz / 2, cy, gearDrawSz * (658/494), gearDrawSz, 1.0)
     end
+
+    -- 缓存齿轮按钮区域供点击检测
+    G.hudSettingBtn = { x = sfX, y = sfY, w = sfSz, h = sfSz }
 end
 
 ------------------------------------------------------------------------
 -- 11b. 绘制波次面板 (左上角，HUD下方)
 ------------------------------------------------------------------------
 function R.DrawWavePanel(vg, G)
+    local s = G.uiScale or 1
     -- 面板尺寸按原图 208×119 等比缩放
-    local scale = 0.55
-    local panelW = 208 * scale       -- ≈114
-    local panelH = 119 * scale       -- ≈65
-    local px = 4
-    local py = G.hudH + 4
+    local scale = 0.55 * s
+    local panelW = 208 * scale       -- ≈114*s
+    local panelH = 119 * scale       -- ≈65*s
+    local px = 4 * s
+    local py = G.hudH + 4 * s
 
     -- 背景面板图片
     local waveImg = G.waveUIImg
@@ -1570,15 +1600,15 @@ function R.DrawWavePanel(vg, G)
 
     -- 第一行: "波次  3/20"
     local lineY1 = py + panelH * 0.35
-    local textX = px + 12
+    local textX = px + 12 * s
 
-    nvgFontSize(vg, 13)
+    nvgFontSize(vg, 13 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
     nvgText(vg, textX, lineY1, "波次", nil)
 
-    nvgFontSize(vg, 16)
+    nvgFontSize(vg, 16 * s)
     nvgFillColor(vg, nvgRGBA(255, 210, 80, 255))
-    nvgText(vg, textX + 32, lineY1, tostring(G.currentWave or 1) .. "/" .. tostring(G.maxWaves or 20), nil)
+    nvgText(vg, textX + 32 * s, lineY1, tostring(G.currentWave or 1) .. "/" .. tostring(G.maxWaves or 20), nil)
 
     -- 第二行: "下一波  00:23"
     local lineY2 = py + panelH * 0.7
@@ -1588,7 +1618,7 @@ function R.DrawWavePanel(vg, G)
     local secs = math.floor(cd % 60)
     local timeStr = string.format("%02d:%02d", mins, secs)
 
-    nvgFontSize(vg, 12)
+    nvgFontSize(vg, 12 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
     nvgText(vg, textX, lineY2, cdLabel .. "  " .. timeStr, nil)
 
@@ -1597,7 +1627,7 @@ function R.DrawWavePanel(vg, G)
     local killW = panelW
     local killH = 70 * killScale
     local killX = px
-    local killY = py + panelH + 3
+    local killY = py + panelH + 3 * s
 
     local killImg = G.killUIImg
     if killImg and killImg ~= 0 then
@@ -1613,13 +1643,13 @@ function R.DrawWavePanel(vg, G)
     nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
     local kcY = killY + killH / 2
 
-    nvgFontSize(vg, 12)
+    nvgFontSize(vg, 12 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
-    nvgText(vg, killX + 28, kcY, "击杀数", nil)
+    nvgText(vg, killX + 28 * s, kcY, "击杀数", nil)
 
-    nvgFontSize(vg, 14)
+    nvgFontSize(vg, 14 * s)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
-    nvgText(vg, killX + 70, kcY, tostring(G.killCount or 0), nil)
+    nvgText(vg, killX + 70 * s, kcY, tostring(G.killCount or 0), nil)
 end
 
 ------------------------------------------------------------------------
@@ -1628,14 +1658,15 @@ end
 function R.DrawHint(vg, G)
     if not G.hintText or G.hintTimer <= 0 then return end
     local W = G.screenW
+    local s = G.uiScale or 1
     local alpha = math.min(1, G.hintTimer / 0.5)
 
     nvgFontFace(vg, "sans")
 
-    local tw = 240
-    local th = 28
+    local tw = 240 * s
+    local th = 28 * s
     local tx = (W - tw) / 2
-    local ty = G.hudH + 6
+    local ty = G.hudH + 6 * s
 
     -- 背景渐变
     local a = math.floor(alpha * 200)
@@ -1652,7 +1683,7 @@ function R.DrawHint(vg, G)
     nvgStrokeWidth(vg, 0.8)
     nvgStroke(vg)
 
-    nvgFontSize(vg, 13)
+    nvgFontSize(vg, 13 * s)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(vg, nvgRGBA(200, 212, 235, math.floor(alpha * 245)))
     nvgText(vg, W / 2, ty + th / 2, G.hintText, nil)
@@ -1718,6 +1749,7 @@ function R.DrawMenu(vg, G)
     end
     math.randomseed(math.floor(os.clock() * 1000))  -- 恢复随机种子
 
+    local s = G.uiScale or 1
     nvgFontFace(vg, "sans")
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
 
@@ -1725,7 +1757,7 @@ function R.DrawMenu(vg, G)
     local titleY = H * 0.12
 
     -- 大标题阴影
-    nvgFontSize(vg, 38)
+    nvgFontSize(vg, 38 * s)
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
     nvgText(vg, W / 2 + 2, titleY + 2, "雪国列车")
 
@@ -1734,38 +1766,38 @@ function R.DrawMenu(vg, G)
     nvgText(vg, W / 2, titleY, "雪国列车")
 
     -- 装饰分割线
-    local lineW = 90
+    local lineW = 90 * s
     nvgBeginPath(vg)
-    nvgMoveTo(vg, W / 2 - lineW / 2, titleY + 24)
-    nvgLineTo(vg, W / 2 + lineW / 2, titleY + 24)
+    nvgMoveTo(vg, W / 2 - lineW / 2, titleY + 24 * s)
+    nvgLineTo(vg, W / 2 + lineW / 2, titleY + 24 * s)
     nvgStrokeColor(vg, nvgRGBA(200, 70, 50, 150))
     nvgStrokeWidth(vg, 1.5)
     nvgStroke(vg)
 
     -- 菱形装饰
-    local diaY = titleY + 24
+    local diaY = titleY + 24 * s
     nvgBeginPath(vg)
-    nvgMoveTo(vg, W / 2, diaY - 3.5)
-    nvgLineTo(vg, W / 2 + 3.5, diaY)
-    nvgLineTo(vg, W / 2, diaY + 3.5)
-    nvgLineTo(vg, W / 2 - 3.5, diaY)
+    nvgMoveTo(vg, W / 2, diaY - 3.5 * s)
+    nvgLineTo(vg, W / 2 + 3.5 * s, diaY)
+    nvgLineTo(vg, W / 2, diaY + 3.5 * s)
+    nvgLineTo(vg, W / 2 - 3.5 * s, diaY)
     nvgClosePath(vg)
     nvgFillColor(vg, nvgRGBA(200, 70, 50, 200))
     nvgFill(vg)
 
     -- 副标题
-    nvgFontSize(vg, 18)
+    nvgFontSize(vg, 18 * s)
     nvgFillColor(vg, nvgRGBA(220, 80, 60, 255))
-    nvgText(vg, W / 2, titleY + 46, "末日求生")
+    nvgText(vg, W / 2, titleY + 46 * s, "末日求生")
 
     -- 描述
-    nvgFontSize(vg, 11)
+    nvgFontSize(vg, 11 * s)
     nvgFillColor(vg, nvgRGBA(160, 175, 200, 200))
-    nvgText(vg, W / 2, titleY + 68, "搜集物资 · 驱赶丧尸 · 升级强化")
+    nvgText(vg, W / 2, titleY + 68 * s, "搜集物资 · 驱赶丧尸 · 升级强化")
 
     -- ======== 5. 开始按钮 ========
-    local btnW = 170
-    local btnH = 48
+    local btnW = 170 * s
+    local btnH = 48 * s
     local btnX = (W - btnW) / 2
     local btnY = H * 0.78
     local pulse = 0.88 + math.sin(t * 2.5) * 0.12
@@ -1801,14 +1833,14 @@ function R.DrawMenu(vg, G)
     nvgStroke(vg)
 
     -- 按钮文字
-    nvgFontSize(vg, 20)
+    nvgFontSize(vg, 20 * s)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
     nvgText(vg, W / 2, btnY + btnH / 2, "开始生存")
 
     G.menuBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
 
     -- ======== 6. 底部版本号 ========
-    nvgFontSize(vg, 10)
+    nvgFontSize(vg, 10 * s)
     nvgFillColor(vg, nvgRGBA(100, 110, 130, 120))
     nvgText(vg, W / 2, H - 16, "v1.0.0")
 end
@@ -1819,6 +1851,7 @@ end
 function R.DrawGameOver(vg, G)
     local W, H = G.screenW, G.screenH
     local t = G.gameTime or 0
+    local s = G.uiScale or 1
 
     -- 暗红色径向覆盖
     local overlayP = nvgRadialGradient(vg, W / 2, H * 0.3, 40, H * 0.6,
@@ -1834,7 +1867,7 @@ function R.DrawGameOver(vg, G)
     local titleY = H * 0.18
 
     -- 标题阴影
-    nvgFontSize(vg, 30)
+    nvgFontSize(vg, 30 * s)
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 120))
     nvgText(vg, W / 2 + 1.5, titleY + 1.5, "列车沦陷", nil)
     -- 标题
@@ -1842,21 +1875,21 @@ function R.DrawGameOver(vg, G)
     nvgText(vg, W / 2, titleY, "列车沦陷", nil)
 
     -- 装饰线
-    local lineW = 70
+    local lineW = 70 * s
     nvgBeginPath(vg)
-    nvgMoveTo(vg, W / 2 - lineW / 2, titleY + 18)
-    nvgLineTo(vg, W / 2 + lineW / 2, titleY + 18)
+    nvgMoveTo(vg, W / 2 - lineW / 2, titleY + 18 * s)
+    nvgLineTo(vg, W / 2 + lineW / 2, titleY + 18 * s)
     nvgStrokeColor(vg, nvgRGBA(200, 80, 60, 80))
     nvgStrokeWidth(vg, 1.2)
     nvgStroke(vg)
 
-    nvgFontSize(vg, 13)
+    nvgFontSize(vg, 13 * s)
     nvgFillColor(vg, nvgRGBA(190, 170, 150, 200))
-    nvgText(vg, W / 2, titleY + 34, "装甲列车被丧尸摧毁了...", nil)
+    nvgText(vg, W / 2, titleY + 34 * s, "装甲列车被丧尸摧毁了...", nil)
 
     -- 统计卡片背景
     local stats = {
-        { "存活等级", "Lv." .. (G.level or 1) },
+        { "存活记录", "第" .. (G.stage or 1) .. "关 第" .. (G.currentWave or 1) .. "波" },
         { "行驶距离", math.floor((G.distance or 0) / 10) .. "m" },
         { "金币获得", tostring(G.gold or 0) },
         { "木材采集", tostring((G.totalRes and G.totalRes.wood) or 0) },
@@ -1866,11 +1899,11 @@ function R.DrawGameOver(vg, G)
         { "碎石采集", tostring((G.totalRes and G.totalRes.pebble) or 0) },
     }
 
-    local lineH = 22
-    local cardW = W * 0.65
-    local cardH = #stats * lineH + 16
+    local lineH = 22 * s
+    local cardW = math.min(W * 0.65, 300 * s)
+    local cardH = #stats * lineH + 16 * s
     local cardX = (W - cardW) / 2
-    local cardY = titleY + 52
+    local cardY = titleY + 52 * s
     -- 卡片背景
     nvgBeginPath(vg)
     nvgRoundedRect(vg, cardX, cardY, cardW, cardH, 8)
@@ -1883,8 +1916,8 @@ function R.DrawGameOver(vg, G)
     nvgStroke(vg)
 
     -- 统计行
-    for i, s in ipairs(stats) do
-        local sy = cardY + 8 + (i - 1) * lineH + lineH / 2
+    for i, st in ipairs(stats) do
+        local sy = cardY + 8 * s + (i - 1) * lineH + lineH / 2
         -- 奇偶行微差异
         if i % 2 == 0 then
             nvgBeginPath(vg)
@@ -1892,21 +1925,21 @@ function R.DrawGameOver(vg, G)
             nvgFillColor(vg, nvgRGBA(255, 255, 255, 6))
             nvgFill(vg)
         end
-        nvgFontSize(vg, 12)
+        nvgFontSize(vg, 12 * s)
         nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
         nvgFillColor(vg, nvgRGBA(170, 160, 145, 200))
-        nvgText(vg, W / 2 - 6, sy, s[1], nil)
+        nvgText(vg, W / 2 - 6 * s, sy, st[1], nil)
 
         nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
         nvgFillColor(vg, nvgRGBA(255, 225, 170, 240))
-        nvgText(vg, W / 2 + 6, sy, s[2], nil)
+        nvgText(vg, W / 2 + 6 * s, sy, st[2], nil)
     end
 
     -- 重新开始按钮（与菜单按钮风格统一）
-    local btnW = 155
-    local btnH = 44
+    local btnW = 155 * s
+    local btnH = 44 * s
     local btnX = (W - btnW) / 2
-    local btnY = cardY + cardH + 20
+    local btnY = cardY + cardH + 20 * s
     local pulse = 0.88 + math.sin(t * 2.5) * 0.12
 
     -- 外发光
@@ -1939,7 +1972,7 @@ function R.DrawGameOver(vg, G)
     nvgStrokeWidth(vg, 1)
     nvgStroke(vg)
 
-    nvgFontSize(vg, 19)
+    nvgFontSize(vg, 19 * s)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
     nvgText(vg, W / 2, btnY + btnH / 2, "再次挑战", nil)
