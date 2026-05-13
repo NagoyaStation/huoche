@@ -353,6 +353,8 @@ local function StartLevel()
     -- 记录当前角色ID（用于技能系统）
     local sd = Meta.GetSaveData()
     G.activeCharId = sd and sd.activeChar or "warrior"
+    -- 将局外装备的炮台列表传入局内（只有装备了的炮台才能在升级中刷到）
+    G.equippedTurrets = sd and sd.turretEquipped or {"arrow", "minigun", "sniper", "rocket"}
     Turret.InitTurrets(G)
     G.state = "playing"
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"

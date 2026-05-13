@@ -15,12 +15,18 @@ end
 -- 升级准备
 ------------------------------------------------------------------------
 function RL.PrepareUpgrade(G)
-    -- 收集已解锁的炮塔类型
+    -- 收集已解锁的炮塔类型（局内已拥有的）
     local unlockedTypes = {}
     for _, t in ipairs(G.turrets or {}) do
         unlockedTypes[t.typeKey] = true
     end
     local slotsLeft = #Turret.SLOTS - Turret.GetUnlockedCount(G)
+
+    -- 局外装备的炮台集合（只有装备了的才能在升级中刷到）
+    local equippedSet = {}
+    for _, tid in ipairs(G.equippedTurrets or {}) do
+        if tid then equippedSet[tid] = true end
+    end
 
     -- 第一次强化（level==1）：必定全是武器（炮塔解锁卡）
     local isFirstUpgrade = (G.level == 1)
@@ -30,7 +36,8 @@ function RL.PrepareUpgrade(G)
     for i = 1, #C.UPGRADES do
         local card = C.UPGRADES[i]
         if card.isTurret then
-            if slotsLeft > 0 and not unlockedTypes[card.turretType] then
+            -- 炮塔卡：槽位有空 + 该类型尚未解锁 + 该类型在局外已装备
+            if slotsLeft > 0 and not unlockedTypes[card.turretType] and equippedSet[card.turretType] then
                 table.insert(available, i)
             end
         else
