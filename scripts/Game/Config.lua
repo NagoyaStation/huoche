@@ -99,7 +99,8 @@ C.SUBMIT_BOX_H = 44
 C.UPGRADES = {
     { id = "speed",    name = "急行军",   desc = "移动速度+25%",       icon = "boot",   apply = function(G) G.speedMul = G.speedMul * 1.25 end },
     { id = "carry",    name = "军用背包", desc = "携带上限+5",         icon = "bag",    apply = function(G) G.maxCarry = G.maxCarry + 5 end },
-    { id = "atk",      name = "利刃强化", desc = "攻击力+1",           icon = "sword",  apply = function(G) G.atkBonus = G.atkBonus + 1 end },
+    { id = "meleeAtk",  name = "利刃强化", desc = "近战攻击力+1",       icon = "sword",  apply = function(G) G.meleeAtkBonus = G.meleeAtkBonus + 1 end },
+    { id = "rangedAtk", name = "精准瞄具", desc = "射击攻击力+1",       icon = "sword",  apply = function(G) G.rangedAtkBonus = G.rangedAtkBonus + 1 end },
     { id = "atkspd",   name = "疾风斩",   desc = "攻击速度+30%",       icon = "wind",   apply = function(G) G.atkSpdMul = G.atkSpdMul * 1.3 end },
     { id = "range",    name = "长臂猿",   desc = "攻击范围+35%",       icon = "magnet", apply = function(G) G.rangeMul = G.rangeMul * 1.35 end },
     { id = "gold",     name = "物资交换", desc = "提交金币+50%",       icon = "coin",   apply = function(G) G.goldMul = G.goldMul * 1.5 end },

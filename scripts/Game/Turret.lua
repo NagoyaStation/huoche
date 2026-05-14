@@ -23,6 +23,15 @@ T.TYPES = {
 
 T.TYPE_LIST = { "arrow", "sniper", "flame", "electric", "rocket", "minigun" }
 
+--- 获取炮台加成后伤害
+local function getTurretDamage(typeKey, baseDmg, G)
+    local bonus = 0
+    if G.turretDmgBonus then
+        bonus = G.turretDmgBonus[typeKey] or 0
+    end
+    return math.floor(baseDmg * (1 + bonus / 100))
+end
+
 ------------------------------------------------------------------------
 -- 渲染尺寸
 ------------------------------------------------------------------------
@@ -33,10 +42,10 @@ local TURRET_W = 36
 -- 4 个炮塔槽位（像素偏移）
 ------------------------------------------------------------------------
 T.SLOTS = {
-    { id = 1, label = "左侧", pxOffX = -18, pxOffY = 6 },
-    { id = 2, label = "右侧", pxOffX =  18, pxOffY = 6 },
-    { id = 3, label = "车头", pxOffX =  0,  pxOffY = 36 },
-    { id = 4, label = "车尾", pxOffX =  0,  pxOffY = -32 },
+    { id = 1, label = "左上", pxOffX = -22, pxOffY = -42 },
+    { id = 2, label = "右上", pxOffX =  22, pxOffY = -42 },
+    { id = 3, label = "左下", pxOffX = -22, pxOffY =  28 },
+    { id = 4, label = "右下", pxOffX =  22, pxOffY =  28 },
 }
 
 ------------------------------------------------------------------------
@@ -371,7 +380,8 @@ function T.Update(G, dt)
                                 local dist = math.sqrt(distSq)
                                 local dot = (fdx * cosA + fdy * sinA) / dist
                                 if dot > math.cos(halfSpread) then
-                                    z.hp = z.hp - def.damage
+                                    local flameDmg = getTurretDamage(turret.typeKey, def.damage, G)
+                                    z.hp = z.hp - flameDmg
                                     z.hitAnim = 0.3
                                     E.SpawnParticles(G, z.x, z.y, BLOOD_COLOR, 3)
                                     if z.hp <= 0 then
@@ -386,7 +396,8 @@ function T.Update(G, dt)
                     -- 弹道类武器不即时造成伤害，弹道到达后才扣血
                     local isProjectile = (turret.typeKey == "arrow" or turret.typeKey == "minigun" or turret.typeKey == "rocket")
                     if not isProjectile then
-                        nearEnemy.hp = nearEnemy.hp - def.damage
+                        local tDmg = getTurretDamage(turret.typeKey, def.damage, G)
+                        nearEnemy.hp = nearEnemy.hp - tDmg
                         nearEnemy.hitAnim = 1.0
                         E.SpawnParticles(G, nearEnemy.x, nearEnemy.y, BLOOD_COLOR, 4)
                         if nearEnemy.hp <= 0 then
@@ -402,7 +413,8 @@ function T.Update(G, dt)
                     local muzzleDist = TURRET_H * 0.45
                     local mx = tx + math.cos(turret.angle) * muzzleDist
                     local my = ty + math.sin(turret.angle) * muzzleDist
-                    spawnProjectile(G, def.projType, mx, my, nearEnemy.x, nearEnemy.y, turret.angle, nearEnemy, def.damage)
+                    local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
+                    spawnProjectile(G, def.projType, mx, my, nearEnemy.x, nearEnemy.y, turret.angle, nearEnemy, projDmg)
                 end
             end
 
@@ -962,7 +974,7 @@ local ROCKET_AOE_RADIUS = 80  -- 爆炸半径(像素)
 
 function T.RocketAOE(G, ex, ey)
     if not G.zombies then return end
-    local dmg = T.TYPES.rocket.damage
+    local dmg = getTurretDamage("rocket", T.TYPES.rocket.damage, G)
     for _, z in ipairs(G.zombies) do
         if not z.dead then
             local dx = z.x - ex

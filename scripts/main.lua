@@ -11,6 +11,7 @@ local Turret = require "Game.Turret"
 local Meta = require "Meta.MetaMain"
 local UIEditor = require "Editor.UIEditor"
 local MD = require "Meta.MetaData"
+local Comic = require "Game.ComicCutscene"
 
 ------------------------------------------------------------------------
 -- 全局游戏状态
@@ -59,6 +60,10 @@ local skillBoardDisabledHandle = 0    -- 上车按钮图片（不可用/灰色�
 local skillDismountHandle = 0         -- 下车按钮图片
 local skillFrameHandle = 0            -- 技能按钮边框
 local skillBombHandle = 0             -- 角色技能图标（炸弹）
+-- 炸弹 & 爆炸帧动画句柄
+local bombImgHandle = 0               -- 落地炸弹图片
+local bombRedImgHandle = 0            -- 炸弹红色闪烁帧
+local explosionFrameHandles = {}      -- 爆炸帧动画(9帧)
 -- 游戏内设置弹窗
 local gameSettingPopup = {
     show = false,
@@ -148,7 +153,8 @@ local function ResetGame()
         maxCarry = C.MAX_CARRY,
 
         -- 自动攻击倍率
-        atkBonus = 0,           -- 额外攻击力
+        meleeAtkBonus = 0,      -- 近战攻击力加成（含采集）
+        rangedAtkBonus = 0,     -- 射击攻击力加成（列车射击）
         atkSpdMul = 1.0,        -- 攻击速度倍率
         rangeMul = 1.0,         -- 攻击范围倍率
 
@@ -160,6 +166,8 @@ local function ResetGame()
         zombies = {},
         turrets = {},
         turretProjectiles = {},
+        bombs = {},
+        explosions = {},
 
         -- 关卡 & 波次系统
         stage = 1,               -- 当前关卡（通关10波后+1）
@@ -281,6 +289,10 @@ local function MountImageHandles()
     G.skillBoardDisabledImg = skillBoardDisabledHandle
     G.skillDismountImg = skillDismountHandle
     G.skillFrameImg = skillFrameHandle
+    -- 炸弹 & 爆炸帧动画
+    G.bombImg = bombImgHandle
+    G.bombRedImg = bombRedImgHandle
+    G.explosionFrames = explosionFrameHandles
     G.skillBombImg = skillBombHandle
 end
 
@@ -355,14 +367,38 @@ local function StartLevel()
     G.activeCharId = sd and sd.activeChar or "warrior"
     -- 将局外装备的炮台列表传入局内（只有装备了的炮台才能在升级中刷到）
     G.equippedTurrets = sd and sd.turretEquipped or {"arrow", "minigun", "sniper", "rocket"}
+
+    -- 装备+角色属性带入局内
+    local eqStats = MD.CalcEquipStats(sd)
+    G.meleeAtkBonus  = G.meleeAtkBonus  + eqStats.meleeAtk              -- 近战攻击力加成
+    G.rangedAtkBonus = G.rangedAtkBonus + eqStats.rangedAtk            -- 射击攻击力加成
+    G.atkSpdMul   = G.atkSpdMul * (1 + eqStats.atkSpd / 100)          -- 攻速百分比
+    G.speedMul    = G.speedMul  * (1 + eqStats.speed / 100)           -- 移速百分比
+    G.rangeMul    = G.rangeMul  * (1 + eqStats.rangePct / 100)        -- 射程百分比
+    G.goldMul     = G.goldMul   * (1 + eqStats.goldBonus / 100)       -- 金币加成百分比
+    G.atkPctMul   = 1 + eqStats.atkPct / 100                          -- 攻击伤害百分比加成
+    G.critRate    = eqStats.critRate                                    -- 暴击率%
+    G.critDmg     = 150 + eqStats.critDmg                              -- 暴击伤害%（基础150%）
+    G.defFlat     = eqStats.def                                        -- 固定减伤
+    G.trainMaxHP  = C.TRAIN_MAX_HP + eqStats.hp                       -- 列车生命值加成
+    G.trainHP     = G.trainMaxHP
+    -- 炮台专属伤害加成（百分比）
+    G.turretDmgBonus = {
+        arrow   = eqStats.arrowDmg,
+        minigun = eqStats.minigunDmg,
+        flame   = eqStats.flameDmg,
+        sniper  = eqStats.sniperDmg,
+    }
+    print(string.format("[Game] EquipStats applied: meleeAtk+%d rangedAtk+%d atkPct+%d%% def+%d hp+%d critRate=%d%% critDmg=%d%% atkSpd+%d%% speed+%d%% range+%d%% gold+%d%%",
+        eqStats.meleeAtk, eqStats.rangedAtk, eqStats.atkPct, eqStats.def, eqStats.hp,
+        eqStats.critRate, eqStats.critDmg, eqStats.atkSpd, eqStats.speed,
+        eqStats.rangePct, eqStats.goldBonus))
+
     Turret.InitTurrets(G)
     G.state = "playing"
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"
     G.hintTimer = 4.0
-    local physW = graphics:GetWidth()
-    local physH = graphics:GetHeight()
-    local dpr = graphics:GetDPR()
-    Rend.CalcLayout(G, physW / dpr, physH / dpr)
+    Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
     Ent.CreatePlayer(G)
     print("[Game] Started playing!")
 end
@@ -371,6 +407,14 @@ end
 -- Start / Stop
 ------------------------------------------------------------------------
 function Start()
+    -- 用 os.date 获取真实时间构造种子（os.time/os.clock/Rand在WASM中可能不可靠）
+    do
+        local dt = os.date("*t")
+        local timeSeed = ((dt.year or 2026) * 366 + (dt.yday or 1)) * 86400
+                       + (dt.hour or 0) * 3600 + (dt.min or 0) * 60 + (dt.sec or 0)
+        math.randomseed(timeSeed)
+    end
+
     vg = nvgCreate(1)
     if not vg then
         print("ERROR: Failed to create NanoVG context")
@@ -556,6 +600,15 @@ function Start()
     skillBombHandle = nvgCreateImage(vg, "image/局内技能炸弹.png", 0)
     print("Loaded skill button images: board=" .. skillBoardTrainHandle .. " disabled=" .. skillBoardDisabledHandle .. " dismount=" .. skillDismountHandle .. " frame=" .. skillFrameHandle .. " bomb=" .. skillBombHandle)
 
+    -- 炸弹 & 爆炸帧动画
+    bombImgHandle = nvgCreateImage(vg, "image/炸弹/炸弹.png", 0)
+    bombRedImgHandle = nvgCreateImage(vg, "image/炸弹/炸弹红帧.png", 0)
+    explosionFrameHandles = {}
+    for i = 1, 9 do
+        explosionFrameHandles[i] = nvgCreateImage(vg, "image/炸弹/" .. i .. ".png", 0)
+    end
+    print("Loaded bomb assets: bomb=" .. bombImgHandle .. " red=" .. bombRedImgHandle .. " explosion frames=" .. #explosionFrameHandles)
+
     -- 弓箭发射物图片
     arrowProjHandle = nvgCreateImage(vg, "image/arrow_projectile.png", 0)
 
@@ -565,7 +618,7 @@ function Start()
     -- 喷火炮台序列帧（21帧，101x235 RGBA）— 存模块级变量，ResetGame 不会丢失
     flameFrameHandles = {}
     for i = 1, 21 do
-        local path = string.format("image/flame_seq/flame_%02d.png", i)
+        local path = string.format("image/火焰特效/flame_%02d.png", i)
         flameFrameHandles[i] = nvgCreateImage(vg, path, 0)
     end
 
@@ -653,6 +706,11 @@ function HandleUpdate(eventType, eventData)
     end
     -- 编辑器键盘处理（R 重置）
     UIEditor.HandleKeyboard()
+
+    -- 漫画剧情更新
+    if Comic.IsActive() then
+        Comic.Update(dt)
+    end
 
     if G.state == "menu" or G.state == "gameover" then
         return
@@ -833,6 +891,10 @@ function HandleUpdate(eventType, eventData)
         G.pendingLevelUp = false
         RL.PrepareUpgrade(G)
     end
+
+    -- 更新炸弹 & 爆炸
+    Ent.UpdateBombs(G, dt, G.lastScrollDelta or 0)
+    Ent.UpdateExplosions(G, dt)
 
     -- 更新浮动文字 & 粒子
     Ent.UpdateFloatTexts(G, dt)
@@ -1336,12 +1398,22 @@ function HandleClick(x, y)
         return
     end
 
+    -- 漫画剧情进行中：接管点击
+    if Comic.IsActive() then
+        Comic.HandleClick(x, y, DESIGN_W, DESIGN_H)
+        return
+    end
+
     if G.state == "menu" then
         local btn = G.menuBtn
         if btn and x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
-            G.state = "lobby"
-            if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
-            print("[Game] Entered lobby")
+            -- 启动开幕漫画剧情
+            Comic.Start(vg, function()
+                G.state = "lobby"
+                if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
+                print("[Game] Comic finished, entered lobby")
+            end)
+            print("[Game] Starting opening comic")
         end
         return
     end
@@ -1440,6 +1512,23 @@ function HandleRender(eventType, eventData)
 
     nvgBeginFrame(vg, W, H, dpr)
 
+    -- 漫画剧情（全屏覆盖，优先级最高）
+    if Comic.IsActive() then
+        if showAllOffX > 0 or showAllOffY > 0 then
+            nvgBeginPath(vg)
+            nvgRect(vg, 0, 0, W, H)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 255))
+            nvgFill(vg)
+        end
+        nvgSave(vg)
+        nvgTranslate(vg, showAllOffX, showAllOffY)
+        nvgScale(vg, showAllScale, showAllScale)
+        Comic.Draw(vg, DESIGN_W, DESIGN_H)
+        nvgRestore(vg)
+        nvgEndFrame(vg)
+        return
+    end
+
     -- 菜单：全屏插画启动页（SHOW_ALL 包装）
     if G.state == "menu" then
         if showAllOffX > 0 or showAllOffY > 0 then
@@ -1510,6 +1599,9 @@ function HandleRender(eventType, eventData)
     Rend.DrawTrain(vg, G)
     Turret.Draw(vg, G)
 
+    -- 炸弹（地面上）
+    Rend.DrawBombs(vg, G)
+
     -- 丧尸
     Rend.DrawZombies(vg, G)
 
@@ -1521,6 +1613,9 @@ function HandleRender(eventType, eventData)
 
     -- 列车血条 (在玩家之后绘制，确保最高显示层级)
     Rend.DrawTrainHP(vg, G)
+
+    -- 爆炸特效
+    Rend.DrawExplosions(vg, G)
 
     -- 粒子 & 浮动文字
     Rend.DrawParticles(vg, G)

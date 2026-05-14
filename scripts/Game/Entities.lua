@@ -2,6 +2,32 @@
 local C = require "Game.Config"
 local E = {}
 
+--- 计算最终伤害（含攻击百分比加成和暴击）
+--- @param baseDmg number 基础伤害
+--- @param G table 全局状态
+--- @return number dmg 最终伤害
+--- @return boolean isCrit 是否暴击
+function E.CalcDamage(baseDmg, G)
+    local dmg = baseDmg * (G.atkPctMul or 1.0)
+    local isCrit = false
+    local critRate = G.critRate or 0
+    if critRate > 0 and math.random(1, 100) <= critRate then
+        isCrit = true
+        dmg = dmg * (G.critDmg or 150) / 100
+    end
+    return math.floor(dmg), isCrit
+end
+
+--- 计算列车受到的伤害（含防御减伤）
+--- @param rawDmg number 原始伤害
+--- @param G table 全局状态
+--- @return number 实际伤害
+function E.CalcTrainDmgTaken(rawDmg, G)
+    local def = G.defFlat or 0
+    local reduced = math.max(1, rawDmg - def)
+    return reduced
+end
+
 -- O(1) 删除：将末尾元素换到当前位置，再移除末尾
 local function swapRemove(arr, i)
     local n = #arr
@@ -128,7 +154,8 @@ function E.AutoAttack(G, dt)
     if p.atkTimer > 0 then return end  -- 冷却中
 
     local range = C.AUTO_ATTACK_RANGE * (G.rangeMul or 1.0)
-    local atkPower = C.PLAYER_ATK + (G.atkBonus or 0)
+    local baseAtk = C.PLAYER_ATK + (G.meleeAtkBonus or 0)   -- 近战攻击力（含采集）
+    local atkPower, _ = E.CalcDamage(baseAtk, G)  -- 资源节点不显示暴击
 
     -- 寻找最近的可攻击目标 (资源节点 或 丧尸)
     local rangeSq = range * range
@@ -218,7 +245,8 @@ function E.AutoAttack(G, dt)
         end
 
     elseif bestType == "zombie" then
-        local dmg = C.PLAYER_ATK_ZOMBIE + (G.atkBonus or 0)
+        local baseZDmg = C.PLAYER_ATK_ZOMBIE + (G.meleeAtkBonus or 0)  -- 近战攻击力
+        local dmg, isCrit = E.CalcDamage(baseZDmg, G)
         bestTarget.hp = bestTarget.hp - dmg
         bestTarget.hitAnim = 0.2
 
@@ -234,7 +262,11 @@ function E.AutoAttack(G, dt)
             G.gold = G.gold + goldReward
             E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 25, "+" .. goldReward, "gold")
         else
-            E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 15, "-" .. dmg, "damage")
+            if isCrit then
+                E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 15, "暴击-" .. dmg, "crit")
+            else
+                E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 15, "-" .. dmg, "damage")
+            end
         end
     end
 end
@@ -369,6 +401,7 @@ function E.UpdateScroll(G, dt)
     local scrollDelta = speed * dt
     G.scrollY = G.scrollY + scrollDelta
     G.distance = G.distance + scrollDelta
+    G.lastScrollDelta = scrollDelta
 
     -- 资源向上滚动
     for i = #G.resources, 1, -1 do
@@ -608,9 +641,10 @@ function E.UpdateZombies(G, dt)
             z.atkTimer = z.atkTimer + dt
             if z.atkTimer >= C.ZOMBIE_ATK_INTERVAL then
                 z.atkTimer = z.atkTimer - C.ZOMBIE_ATK_INTERVAL
-                -- 对列车造成伤害
-                G.trainHP = G.trainHP - C.ZOMBIE_DAMAGE
-                E.SpawnFloatText(G, trainCX, trainBottomY + 5, "-" .. C.ZOMBIE_DAMAGE, "damage")
+                -- 对列车造成伤害（防御减伤）
+                local actualDmg = E.CalcTrainDmgTaken(C.ZOMBIE_DAMAGE, G)
+                G.trainHP = G.trainHP - actualDmg
+                E.SpawnFloatText(G, trainCX, trainBottomY + 5, "-" .. actualDmg, "damage")
                 E.SpawnParticles(G, trainCX + math.random(-15, 15), trainBottomY, {200, 195, 180}, 4)
 
                 if G.trainHP <= 0 then
@@ -668,7 +702,7 @@ function E.MountTrain(G)
     G.mountedAimDir = 0
     local p = G.player
     p.x = G.cartCenterX or (G.screenW / 2)
-    p.y = (G.cartTopY or G.hudH) + 20
+    p.y = (G.cartBottomY or 200) - 135  -- 放到车头位置（火车向下行驶，车头在底部）
     G.skillBoardCD = G.skillBoardCDMax  -- 上车后触发冷却（下车后才开始倒计时）
     print("[Skill] Mounted train")
 end
@@ -686,9 +720,9 @@ end
 --- 上车状态更新：触摸控制瞄准方向，松开后锁定自动射击
 function E.UpdateMounted(G, dt, moveX, moveY)
     local p = G.player
-    -- 锁定位置在列车顶部
+    -- 锁定位置在车头（火车向下行驶，车头在底部）
     p.x = G.cartCenterX or (G.screenW / 2)
-    p.y = (G.cartTopY or G.hudH) + 20
+    p.y = (G.cartBottomY or 200) - 135
     p.vx = 0
     p.vy = 0
 
@@ -760,7 +794,8 @@ end
 function E.FireMountedBullet(G, angle, target)
     local p = G.player
     local spd = 350
-    local dmg = C.PLAYER_ATK_ZOMBIE + (G.atkBonus or 0)
+    local baseMDmg = C.PLAYER_ATK_ZOMBIE + (G.rangedAtkBonus or 0)  -- 射击攻击力（列车射击）
+    local dmg, _ = E.CalcDamage(baseMDmg, G)
 
     if not G.turretProjectiles then G.turretProjectiles = {} end
 
@@ -790,59 +825,52 @@ function E.ActivateCharSkill(G)
     local charId = G.activeCharId or "warrior"
 
     if charId == "warrior" then
+        -- 投掷炸弹：在脚底放置炸弹，1.5秒后爆炸，范围伤害
+        local p = G.player
+        local bomb = {
+            x = p.x,
+            y = p.y,
+            fuseTimer = 1.5,        -- 引信时间
+            radius = 45,            -- 爆炸半径(像素)
+            dmgMul = 2.0,           -- 200%攻击力伤害
+            exploded = false,
+            bobPhase = 0,           -- 抖动动画相位
+        }
+        G.bombs = G.bombs or {}
+        table.insert(G.bombs, bomb)
+        -- 瞬发技能，无持续时间
+        G.skillCharActive = false
+        G.skillCharDuration = 0
+        print("[Skill] Warrior placed bomb at (" .. math.floor(p.x) .. "," .. math.floor(p.y) .. ")")
+
+    elseif charId == "auntie" then
+        -- 鼓舞士气：8秒近战+射击攻击力各+20%
+        G.skillCharActive = true
+        G.skillCharDurationMax = 8
+        G.skillCharDuration = 8
+        local meleeBoost = math.floor(C.PLAYER_ATK * 0.2)
+        local rangedBoost = math.floor(C.PLAYER_ATK * 0.2)
+        G.meleeAtkBonus  = (G.meleeAtkBonus or 0)  + meleeBoost
+        G.rangedAtkBonus = (G.rangedAtkBonus or 0) + rangedBoost
+        G._auntieMeleeBoost  = meleeBoost   -- 记录加成量，结束时回退
+        G._auntieRangedBoost = rangedBoost
+        print("[Skill] Auntie morale boost! MeleeAtk/RangedAtk +20% for 8s")
+
+    elseif charId == "lisanguang" then
         -- 战斗狂怒：7秒内攻速+100%
         G.skillCharActive = true
         G.skillCharDurationMax = 7
         G.skillCharDuration = 7
         G.atkSpdMul = (G.atkSpdMul or 1.0) * 2.0
-        print("[Skill] Warrior fury activated! AtkSpd x2 for 7s")
-
-    elseif charId == "auntie" then
-        -- 鼓舞士气：8秒攻击力+20%
-        G.skillCharActive = true
-        G.skillCharDurationMax = 8
-        G.skillCharDuration = 8
-        G.atkBonus = (G.atkBonus or 0) + math.floor(C.PLAYER_ATK * 0.2)
-        print("[Skill] Auntie morale boost! Atk +20% for 8s")
-
-    elseif charId == "lisanguang" then
-        -- 三连射：立即对最近3个丧尸各造成80%攻击力伤害
-        local atkPower = math.floor((C.PLAYER_ATK + (G.atkBonus or 0)) * 0.8)
-        local p = G.player
-        local hits = 0
-        -- 按距离排序找最近的3个丧尸
-        local sorted = {}
-        for _, z in ipairs(G.zombies or {}) do
-            if not z.dead then
-                local dx = z.x - p.x
-                local dy = z.y - p.y
-                table.insert(sorted, { z = z, dist = dx * dx + dy * dy })
-            end
-        end
-        table.sort(sorted, function(a, b) return a.dist < b.dist end)
-        for i = 1, math.min(3, #sorted) do
-            local z = sorted[i].z
-            z.hp = z.hp - atkPower
-            z.hitAnim = 0.3
-            E.SpawnParticles(G, z.x, z.y, { 255, 180, 50 }, 4)
-            E.SpawnFloatText(G, z.x, z.y - 10, "-" .. atkPower, "damage")
-            hits = hits + 1
-            if z.hp <= 0 then
-                z.dead = true
-                G.killCount = (G.killCount or 0) + 1
-            end
-        end
-        -- 瞬发技能，无持续时间
-        G.skillCharActive = false
-        G.skillCharDuration = 0
-        print("[Skill] Triple shot! Hit " .. hits .. " zombies")
+        print("[Skill] Lisanguang fury activated! AtkSpd x2 for 7s")
 
     elseif charId == "weifenglong" then
-        -- 龙息吐焰：对前方扇形内所有丧尸造成150%攻击力伤害 + 3秒灼烧
+        -- 龙息吐焰：对前方扇形内所有丧尸造成150%近战攻击力伤害 + 3秒灼烧
         G.skillCharActive = true
         G.skillCharDurationMax = 3
         G.skillCharDuration = 3
-        local atkPower = math.floor((C.PLAYER_ATK + (G.atkBonus or 0)) * 1.5)
+        local baseDragonDmg = math.floor((C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * 1.5)
+        local atkPower, _ = E.CalcDamage(baseDragonDmg, G)
         local p = G.player
         for _, z in ipairs(G.zombies or {}) do
             if not z.dead then
@@ -877,16 +905,131 @@ end
 function E.EndCharSkill(G)
     local charId = G.activeCharId or "warrior"
     if charId == "warrior" then
+        -- 炸弹技能是瞬发，无持续效果需要清理
+        print("[Skill] Warrior bomb skill ended (no-op)")
+    elseif charId == "lisanguang" then
         G.atkSpdMul = math.max(1.0, (G.atkSpdMul or 2.0) / 2.0)
-        print("[Skill] Warrior fury ended")
+        print("[Skill] Lisanguang fury ended")
     elseif charId == "auntie" then
-        G.atkBonus = math.max(0, (G.atkBonus or 0) - math.floor(C.PLAYER_ATK * 0.2))
+        G.meleeAtkBonus  = math.max(0, (G.meleeAtkBonus or 0)  - (G._auntieMeleeBoost or 0))
+        G.rangedAtkBonus = math.max(0, (G.rangedAtkBonus or 0) - (G._auntieRangedBoost or 0))
+        G._auntieMeleeBoost  = nil
+        G._auntieRangedBoost = nil
         print("[Skill] Auntie morale ended")
     elseif charId == "weifenglong" then
         print("[Skill] Dragon breath ended")
     end
     G.skillCharActive = false
     G.skillCharDuration = 0
+end
+
+------------------------------------------------------------------------
+-- 炸弹系统
+------------------------------------------------------------------------
+
+--- 炸弹爆炸：对范围内敌人和资源造成伤害
+function E.ExplodeBomb(G, bomb)
+    local baseDmg = math.floor((C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * bomb.dmgMul)
+    local atkPower, _ = E.CalcDamage(baseDmg, G)
+    local r2 = bomb.radius * bomb.radius
+    local hits = 0
+
+    -- 伤害范围内的僵尸
+    for _, z in ipairs(G.zombies or {}) do
+        if not z.dead then
+            local dx = z.x - bomb.x
+            local dy = z.y - bomb.y
+            if dx * dx + dy * dy <= r2 then
+                z.hp = z.hp - atkPower
+                z.hitAnim = 0.3
+                E.SpawnParticles(G, z.x, z.y, { 255, 120, 30 }, 5)
+                E.SpawnFloatText(G, z.x, z.y - 10, "-" .. atkPower, "damage")
+                hits = hits + 1
+                if z.hp <= 0 then
+                    z.dead = true
+                    G.killCount = (G.killCount or 0) + 1
+                end
+            end
+        end
+    end
+
+    -- 炸范围内的资源节点
+    for _, res in ipairs(G.resources or {}) do
+        if not res.dead then
+            local dx = res.x - bomb.x
+            local dy = res.y - bomb.y
+            if dx * dx + dy * dy <= r2 then
+                res.hp = res.hp - atkPower
+                res.hitAnim = 0.3
+                E.SpawnParticles(G, res.x, res.y, { 255, 200, 80 }, 4)
+                if res.hp <= 0 then
+                    res.dead = true
+                    -- 掉落资源（自动拾取到背包）
+                    local resInfo = C.RES[res.rtype]
+                    if resInfo then
+                        local actual = E.AddCarry(G, res.rtype, resInfo.drop)
+                        if actual > 0 then
+                            E.SpawnFloatText(G, res.x, res.y - 10, "+" .. actual, res.rtype)
+                        end
+                    end
+                else
+                    E.SpawnFloatText(G, res.x, res.y - 15, "-" .. atkPower, "damage")
+                end
+            end
+        end
+    end
+
+    -- 创建爆炸特效
+    G.explosions = G.explosions or {}
+    table.insert(G.explosions, {
+        x = bomb.x,
+        y = bomb.y,
+        frame = 1,           -- 当前帧（1-9）
+        maxFrame = 9,        -- 总帧数
+        frameTimer = 0,      -- 帧计时器
+        frameDuration = 0.06, -- 每帧持续时间
+        radius = bomb.radius,
+    })
+
+    print("[Bomb] Exploded at (" .. math.floor(bomb.x) .. "," .. math.floor(bomb.y) .. ") hit " .. hits .. " targets, dmg=" .. atkPower)
+end
+
+--- 更新炸弹（倒计时、滚动、爆炸）
+function E.UpdateBombs(G, dt, scrollDelta)
+    G.bombs = G.bombs or {}
+    for i = #G.bombs, 1, -1 do
+        local b = G.bombs[i]
+        -- 跟随地面滚动
+        b.y = b.y - (scrollDelta or 0)
+        -- 抖动动画
+        b.bobPhase = b.bobPhase + dt * 12
+        -- 倒计时
+        b.fuseTimer = b.fuseTimer - dt
+        if b.fuseTimer <= 0 then
+            E.ExplodeBomb(G, b)
+            b.exploded = true
+        end
+        -- 移除已爆炸或超出屏幕的炸弹
+        if b.exploded or b.y < -50 then
+            table.remove(G.bombs, i)
+        end
+    end
+end
+
+--- 更新爆炸特效动画
+function E.UpdateExplosions(G, dt)
+    G.explosions = G.explosions or {}
+    for i = #G.explosions, 1, -1 do
+        local e = G.explosions[i]
+        e.frameTimer = e.frameTimer + dt
+        if e.frameTimer >= e.frameDuration then
+            e.frameTimer = e.frameTimer - e.frameDuration
+            e.frame = e.frame + 1
+        end
+        if e.frame > e.maxFrame then
+            table.remove(G.explosions, i)
+        end
+    end
 end
 
 return E

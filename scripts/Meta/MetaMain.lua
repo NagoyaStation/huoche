@@ -19,6 +19,8 @@ local scrollY = 0            -- 当前面板滚动偏移
 local maxScrollY = 0         -- 最大滚动
 local touchStartY = 0        -- 触摸拖动起点
 local isDragging = false
+local equipGridScrollY = 0   -- 装备格子区域独立滚动偏移
+local equipGridScrollMax = 0 -- 装备格子区域最大滚动
 local imgCache = {}          -- NanoVG 图片句柄缓存
 local elapsedTime = 0        -- 累计时间（用于动画）
 
@@ -185,6 +187,8 @@ function M.PreloadImages(vg)
     imgCache["common_bg"] = nvgCreateImage(vg, "image/通用背景.png", 0)
     -- 关卡场景图片
     imgCache["level_scene"] = nvgCreateImage(vg, "image/图层_13.png", 0)
+    -- 关卡切换箭头
+    imgCache["arrow_right"] = nvgCreateImage(vg, "image/图层_2 (2).png", 0)
     -- 头像框
     imgCache["avatar_frame"] = nvgCreateImage(vg, "image/Layer_0.png", 0)
     imgCache["avatar_portrait"] = nvgCreateImage(vg, "image/Layer_0 (1).png", 0)
@@ -1020,41 +1024,49 @@ function M.DrawBattlePanel(vg, W)
     end
 
     -- ================================================================
-    -- 6. 左右翻页箭头（如果有多个关卡）
+    -- 6. 左右翻页箭头（如果有多个关卡）— 图片按钮
     -- ================================================================
     if #MD.LEVELS > 1 then
-        local arrowSize = 28
-        local arrowY = sceneCY - arrowSize / 2
+        local arrowImg = imgCache["arrow_right"]
+        local arrowW = 32
+        local arrowH = 56
+        local arrowY = sceneCY - arrowH / 2
 
-        -- 左箭头
+        -- 左箭头（水平翻转）
         if battleSelectedLevel > 1 then
-            local laX = sceneCX - sceneW / 2 - arrowSize - 4
+            local laX = sceneCX - sceneW / 2 - arrowW - 8
             laX, arrowY = Def.Apply("battle.arrow_left", laX, arrowY)
-            Def.Register("battle.arrow_left", laX, arrowY, arrowSize, arrowSize, "左翻页")
-            nvgBeginPath(vg)
-            nvgRoundedRect(vg, laX, arrowY, arrowSize, arrowSize, 6)
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, 180))
-            nvgFill(vg)
-            nvgFontSize(vg, 18)
-            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-            nvgFillColor(vg, nvgRGBA(60, 70, 90, 255))
-            nvgText(vg, laX + arrowSize / 2, arrowY + arrowSize / 2, "◀")
+            Def.Register("battle.arrow_left", laX, arrowY, arrowW, arrowH, "左翻页")
+            if arrowImg ~= nil then
+                nvgSave(vg)
+                -- 水平翻转：平移到中心 → scaleX=-1 → 平移回来
+                local cx = laX + arrowW / 2
+                local cy = arrowY + arrowH / 2
+                nvgTranslate(vg, cx, cy)
+                nvgScale(vg, -1, 1)
+                nvgTranslate(vg, -cx, -cy)
+                local paint = nvgImagePattern(vg, laX, arrowY, arrowW, arrowH, 0, arrowImg, 1.0)
+                nvgBeginPath(vg)
+                nvgRect(vg, laX, arrowY, arrowW, arrowH)
+                nvgFillPaint(vg, paint)
+                nvgFill(vg)
+                nvgRestore(vg)
+            end
         end
 
-        -- 右箭头
+        -- 右箭头（原始方向）
         if battleSelectedLevel < saveData.maxLevel then
-            local raX = sceneCX + sceneW / 2 + 4
+            local raX = sceneCX + sceneW / 2 + 8
             local raY = arrowY
             raX, raY = Def.Apply("battle.arrow_right", raX, raY)
-            Def.Register("battle.arrow_right", raX, raY, arrowSize, arrowSize, "右翻页")
-            nvgBeginPath(vg)
-            nvgRoundedRect(vg, raX, raY, arrowSize, arrowSize, 6)
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, 180))
-            nvgFill(vg)
-            nvgFontSize(vg, 18)
-            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-            nvgFillColor(vg, nvgRGBA(60, 70, 90, 255))
-            nvgText(vg, raX + arrowSize / 2, raY + arrowSize / 2, "▶")
+            Def.Register("battle.arrow_right", raX, raY, arrowW, arrowH, "右翻页")
+            if arrowImg ~= nil then
+                local paint = nvgImagePattern(vg, raX, raY, arrowW, arrowH, 0, arrowImg, 1.0)
+                nvgBeginPath(vg)
+                nvgRect(vg, raX, raY, arrowW, arrowH)
+                nvgFillPaint(vg, paint)
+                nvgFill(vg)
+            end
         end
     end
 
@@ -1670,6 +1682,8 @@ function M.DrawEquipPanel(vg, W)
 
     -- ========== 底部区域（根据标签页切换内容） ==========
     local bottomY = catY + catBarH + 8
+    L.equipGridY = nil  -- 缓存格子区域位置（供触摸判断）
+    L.equipGridH = nil
 
     if equipState.catIndex == 2 then
     -- ========== 3.5 副框（副框外=两侧边框，副框内=中间平铺）[装备] ==========
@@ -1751,13 +1765,6 @@ function M.DrawEquipPanel(vg, W)
     local gridY = subFrameY + subH + 2
     local gridH = contentY + contentH - gridY - 4  -- 填满剩余空间
 
-    -- 底部栏背景（装备界面装备底部栏.png 598×551）
-    local gridBgImg = imgCache["equip_grid_bg"]
-    if gridBgImg and gridBgImg ~= 0 then
-        M.DrawImage(vg, gridBgImg, padX, gridY, W - padX * 2, gridH)
-    end
-    Def.Register("equip.grid_bg", padX, gridY, W - padX * 2, gridH, "装备格子背景")
-
     -- 格子内部布局 (6列)，留出内边距不顶着外框
     local gridCols = 6
     local gridPadX = math.floor(W * 0.04)   -- 左右内边距
@@ -1768,11 +1775,10 @@ function M.DrawEquipPanel(vg, W)
     local cellSize = math.floor((gridInnerW - (gridCols - 1) * cellGap) / gridCols)
     local gridSlotImg = imgCache["equip_grid_slot"]
 
-    -- 计算可用行数
+    -- 计算可见行数（用于确定可见区域高度）
     local gridInnerH = gridH - gridPadTop - gridPadBot
-    local gridRows = math.floor((gridInnerH + cellGap) / (cellSize + cellGap))
-    if gridRows < 1 then gridRows = 1 end
-    local totalCells = gridRows * gridCols
+    local visibleRows = math.floor((gridInnerH + cellGap) / (cellSize + cellGap))
+    if visibleRows < 1 then visibleRows = 1 end
 
     -- 构建未装备物品的 inventory 索引列表（已装备的不在下方格子显示）
     local equippedSet = {}
@@ -1810,13 +1816,36 @@ function M.DrawEquipPanel(vg, W)
         end)
     end
 
+    -- 根据实际物品数量计算所需行数（至少显示 visibleRows 行空格子）
+    local neededRows = math.max(visibleRows, math.ceil(#unequippedList / gridCols))
+    local totalCells = neededRows * gridCols
+    -- 计算格子区域独立滚动量
+    local actualGridContentH = neededRows * (cellSize + cellGap) - cellGap
+    equipGridScrollMax = math.max(0, actualGridContentH - gridInnerH)
+    -- 限制滚动偏移
+    equipGridScrollY = math.max(0, math.min(equipGridScrollMax, equipGridScrollY))
+    -- 缓存格子内容区域位置（供触摸事件判断，排除背景装饰边框）
+    L.equipGridY = gridY + gridPadTop
+    L.equipGridH = gridInnerH
+
+    -- 底部栏背景（固定大小，格子在内部滚动）
+    local gridBgImg = imgCache["equip_grid_bg"]
+    if gridBgImg and gridBgImg ~= 0 then
+        M.DrawImage(vg, gridBgImg, padX, gridY, W - padX * 2, gridH)
+    end
+    Def.Register("equip.grid_bg", padX, gridY, W - padX * 2, gridH, "装备格子背景")
+
+    -- 格子区域内部裁剪滚动（仅裁剪内容区域，保留背景装饰边框）
+    nvgSave(vg)
+    nvgScissor(vg, padX, gridY + gridPadTop, W - padX * 2, gridInnerH)
+
     -- 绘制所有格子
     L.equipGridCells = {}
     for idx = 1, totalCells do
         local col = (idx - 1) % gridCols
         local row = math.floor((idx - 1) / gridCols)
         local cx = padX + gridPadX + col * (cellSize + cellGap)
-        local cy = gridY + gridPadTop + row * (cellSize + cellGap)
+        local cy = gridY + gridPadTop + row * (cellSize + cellGap) - equipGridScrollY
 
         local cellId = "equip.grid_" .. idx
         cx, cy = Def.Apply(cellId, cx, cy)
@@ -1836,7 +1865,7 @@ function M.DrawEquipPanel(vg, W)
                 local eqImg = imgCache[itemData.icon]
                 if eqImg and eqImg ~= 0 then
                     local icoS = math.floor(cellSize * 0.65)
-                    M.DrawImage(vg, eqImg, cx + (cellSize - icoS) / 2, cy + (cellSize - icoS) / 2, icoS, icoS)
+                    M.DrawImageFit(vg, eqImg, cx + (cellSize - icoS) / 2, cy + (cellSize - icoS) / 2, icoS, icoS)
                 end
                 -- 品质光效（弹窗打开时冻结动画）
                 local gt = (equipState.showConfirm or equipState.showDropdown) and 0 or elapsedTime
@@ -1864,6 +1893,8 @@ function M.DrawEquipPanel(vg, W)
             L.equipGridCells[idx] = { x = cx, y = cy, w = cellSize, h = cellSize, invIdx = invIdx }
         end
     end
+
+    nvgRestore(vg)  -- 结束格子区域裁剪
 
     -- 装备详情弹窗（覆盖在格子之上）
     if equipDetailIdx then
@@ -2008,7 +2039,7 @@ function M.DrawEquipPanel(vg, W)
 
     end -- catIndex 条件结束
 
-    return 0 -- 不需要滚动，整体自适应
+    return 0  -- 整页不滚动，格子区域独立滚动
 end
 
 ------------------------------------------------------------------------
@@ -2090,7 +2121,7 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
     local bigIcoPad = math.floor((cardH - bigIcoS) / 2)
     local eqImg = imgCache[eqData.icon]
     if eqImg and eqImg ~= 0 then
-        M.DrawImage(vg, eqImg, px + innerPad + bigIcoPad, cardY + bigIcoPad, bigIcoS, bigIcoS)
+        M.DrawImageFit(vg, eqImg, px + innerPad + bigIcoPad, cardY + bigIcoPad, bigIcoS, bigIcoS)
     end
     -- 品质边框
     nvgBeginPath(vg)
@@ -3293,7 +3324,11 @@ do
             alpha = 80 + math.floor(math.random() * 120),
         }
     end
-    math.randomseed(math.floor(os.clock() * 1000))
+    -- 用 os.date 恢复随机种子（os.time在WASM中可能不可靠）
+    local _dt = os.date("*t")
+    local _timeSeed = ((_dt.year or 2026) * 366 + (_dt.yday or 1)) * 86400
+                    + (_dt.hour or 0) * 3600 + (_dt.min or 0) * 60 + (_dt.sec or 0)
+    math.randomseed(_timeSeed)
 end
 
 -- 判断天赋 i 是否可解锁（前一个已激活 or 第一个天赋）
@@ -5398,6 +5433,7 @@ function M.HandleClick(x, y, W, H)
             if newTab ~= activeTab then
                 activeTab = newTab
                 scrollY = 0
+                equipGridScrollY = 0
                 panelAlpha = 0.3
                 panelFadeTarget = 1.0
                 print("[Meta] Tab switched to: " .. activeTab)
@@ -5478,15 +5514,16 @@ function M.HandleBattleClick(x, y, W)
         return "start_level", battleSelectedLevel
     end
 
-    -- 左右翻页箭头检测
+    -- 左右翻页箭头检测（与绘制尺寸一致）
     if #MD.LEVELS > 1 then
-        local arrowSize = 28
-        local arrowY = sceneCY - arrowSize / 2
+        local arrowW = 32
+        local arrowH = 56
+        local arrowY = sceneCY - arrowH / 2
 
         -- 左箭头
         if battleSelectedLevel > 1 then
-            local laX = sceneCX - sceneW / 2 - arrowSize - 4
-            if x >= laX and x <= laX + arrowSize and y >= arrowY and y <= arrowY + arrowSize then
+            local laX = sceneCX - sceneW / 2 - arrowW - 8
+            if x >= laX and x <= laX + arrowW and y >= arrowY and y <= arrowY + arrowH then
                 battleSelectedLevel = battleSelectedLevel - 1
                 print("[Meta] Switch to level " .. battleSelectedLevel)
                 return true
@@ -5495,8 +5532,8 @@ function M.HandleBattleClick(x, y, W)
 
         -- 右箭头
         if battleSelectedLevel < saveData.maxLevel then
-            local raX = sceneCX + sceneW / 2 + 4
-            if x >= raX and x <= raX + arrowSize and y >= arrowY and y <= arrowY + arrowSize then
+            local raX = sceneCX + sceneW / 2 + 8
+            if x >= raX and x <= raX + arrowW and y >= arrowY and y <= arrowY + arrowH then
                 battleSelectedLevel = battleSelectedLevel + 1
                 print("[Meta] Switch to level " .. battleSelectedLevel)
                 return true
@@ -5741,6 +5778,11 @@ function M.HandleShopClick(x, y, W)
                         -- 发放对应奖励
                         if item.id == "daily_wood" then saveData.wood = saveData.wood + 1000
                         elseif item.id == "daily_stone" then saveData.stone = saveData.stone + 1000
+                        elseif item.turretId then
+                            -- 炮塔碎片
+                            local amount = tonumber(item.desc:match("x(%d+)")) or 5
+                            saveData.turretFrags[item.turretId] = (saveData.turretFrags[item.turretId] or 0) + amount
+                            print("[Meta] 获得 " .. item.name .. " x" .. amount .. "，当前: " .. saveData.turretFrags[item.turretId])
                         elseif item.charId then
                             -- 角色碎片
                             local amount = tonumber(item.desc:match("x(%d+)")) or 3
@@ -5809,6 +5851,7 @@ function M.HandleEquipClick(x, y, W)
                     equipState.showConfirm = false
                     equipDetailIdx = nil
                     charDetailId = nil
+                    equipGridScrollY = 0
                     print("[Equip] 切换标签页: " .. btn.idx)
                 end
                 return true
@@ -5875,7 +5918,11 @@ function M.HandleEquipClick(x, y, W)
 
     -- 检测背包格子点击（仅装备子标签页）
     if equipState.catIndex == 2 and L.equipGridCells then
+        local gTop = L.equipGridY or 0
+        local gBot = gTop + (L.equipGridH or 9999)
         for _, cell in pairs(L.equipGridCells) do
+            -- 跳过滚出可见区域的格子
+            if cell.y + cell.h < gTop or cell.y > gBot then goto continue_cell end
             if x >= cell.x and x <= cell.x + cell.w and y >= cell.y and y <= cell.y + cell.h then
                 local inst = saveData.inventory[cell.invIdx]
                 if inst then
@@ -5892,6 +5939,7 @@ function M.HandleEquipClick(x, y, W)
                 end
                 return true
             end
+            ::continue_cell::
         end
     end
 
@@ -7562,7 +7610,14 @@ function M.HandleTouchMove(x, y)
         isDragging = true
     end
     if isDragging then
-        scrollY = math.max(0, math.min(maxScrollY, scrollY + dy))
+        -- 装备页格子区域独立滚动
+        if activeTab == "equip" and equipState.catIndex == 2
+           and L.equipGridY and touchStartY >= L.equipGridY
+           and touchStartY < L.equipGridY + L.equipGridH then
+            equipGridScrollY = math.max(0, math.min(equipGridScrollMax, equipGridScrollY + dy))
+        else
+            scrollY = math.max(0, math.min(maxScrollY, scrollY + dy))
+        end
         touchStartY = y
     end
 end
@@ -7583,6 +7638,7 @@ function M.SetActiveTab(tabId)
     if activeTab ~= tabId then
         activeTab = tabId
         scrollY = 0
+        equipGridScrollY = 0
         panelAlpha = 0.3
         panelFadeTarget = 1.0
     end

@@ -76,9 +76,9 @@ MD.CHARACTERS = {
     { id = "warrior",   name = "求生者",   quality = 3, icon = "image/hero_idle_20260414072856.png",
       portrait = "image/Layer_0 (1).png",
       equipDisplay = "image/装备界面/装备界面主角 .png",
-      desc = "近战输出，攻守兼备", baseStats = {atk = 12, hp = 120},
+      desc = "近战输出，攻守兼备", baseStats = {hp = 120},
       passive = "经验加成+10%",
-      skill = { name = "战斗狂怒", desc = "在7秒内攻速与冷却速度+100%" },
+      skill = { name = "投掷炸弹", desc = "在脚下放置炸弹，1.5秒后爆炸，对范围内敌人和资源造成200%攻击力伤害" },
       stars = {
           "初始获得武器[铁剑]",
           "近战伤害+10%",
@@ -91,7 +91,7 @@ MD.CHARACTERS = {
     { id = "auntie",    name = "王阿姨", quality = 5, icon = "image/角色素材/艾达待机.png",
       portrait = "image/装备界面/Layer_0 (3).png",
       equipDisplay = "image/装备界面/Layer_0 (4).png",
-      desc = "治愈辅助，全队增益", baseStats = {atk = 10, hp = 140},
+      desc = "治愈辅助，全队增益", baseStats = {hp = 140},
       passive = "全队生命恢复+5/秒",
       skill = { name = "鼓舞士气", desc = "为全体队员提升20%攻击力持续8秒" },
       attackFrames = {
@@ -129,9 +129,9 @@ MD.CHARACTERS = {
     { id = "lisanguang", name = "李三光", quality = 4, icon = "image/角色素材/李三光/李三光待机.png",
       portrait = "image/角色素材/李三光/Layer_0 (5).png",
       equipDisplay = "image/角色素材/李三光/Layer_0 (6).png",
-      desc = "远程输出，精准打击", baseStats = {atk = 14, hp = 100},
+      desc = "远程输出，精准打击", baseStats = {hp = 100},
       passive = "暴击率+8%",
-      skill = { name = "三连射", desc = "快速射出3发子弹，每发造成80%攻击力伤害" },
+      skill = { name = "战斗狂怒", desc = "在7秒内攻速与冷却速度+100%" },
       attackFrames = {
           "image/角色素材/李三光/李三光攻击1.png",
           "image/角色素材/李三光/李三光攻击2.png",
@@ -168,7 +168,7 @@ MD.CHARACTERS = {
     { id = "weifenglong", name = "威风的龙", quality = 6, icon = "image/角色素材/威风的龙/威风的龙待机.png",
       portrait = "image/角色素材/威风的龙/威风的龙头像.png",
       equipDisplay = "image/角色素材/威风的龙/威风的龙人物形象.png",
-      desc = "龙族后裔，近战霸主", baseStats = {atk = 18, hp = 130},
+      desc = "龙族后裔，近战霸主", baseStats = {hp = 130},
       passive = "受伤减免+10%",
       skill = { name = "龙息吐焰", desc = "喷射龙焰灼烧前方敌人，造成150%攻击力伤害并附带3秒灼烧" },
       attackFrames = {
@@ -230,30 +230,152 @@ MD.QUALITY = {
     { id = "supreme",  name = "至臻", color = MD.CLR.quality_supreme },
 }
 
--- 装备数据库（示例装备）
+-- 装备数据库
 MD.EQUIP_DB = {
-    -- 武器
-    { id = "sword_iron",   slot = "weapon",    name = "铁剑",     quality = 1, baseStats = {atk = 5},                   icon = "image/equip_weapon_sword_20260421064504.png" },
-    { id = "axe_war",      slot = "weapon",    name = "战斧",     quality = 2, baseStats = {atk = 8, critRate = 5},      icon = "image/equip_weapon_axe_20260421064553.png" },
-    { id = "sword_rare",   slot = "weapon",    name = "蓝钢剑",   quality = 3, baseStats = {atk = 15, critRate = 8},     icon = "image/equip_weapon_sword_20260421064504.png" },
-    { id = "sword_epic",   slot = "weapon",    name = "暗影之刃", quality = 4, baseStats = {atk = 25, critDmg = 20},     icon = "image/equip_weapon_axe_20260421064553.png" },
-    { id = "sword_legend", slot = "weapon",    name = "龙牙大剑", quality = 5, baseStats = {atk = 40, critRate = 15, critDmg = 30}, icon = "image/equip_weapon_sword_20260421064504.png" },
-    { id = "sword_supreme",slot = "weapon",    name = "天命圣剑", quality = 6, baseStats = {atk = 60, critRate = 20, critDmg = 50}, icon = "image/equip_weapon_axe_20260421064553.png" },
-    -- 饰品
-    { id = "necklace_1",   slot = "accessory", name = "护身符",   quality = 1, baseStats = {def = 3},                   icon = "image/equip_accessory_necklace_20260421064510.png" },
-    { id = "necklace_epic",slot = "accessory", name = "暗夜坠饰", quality = 4, baseStats = {def = 15, hp = 50},          icon = "image/equip_accessory_necklace_20260421064510.png" },
-    -- 戒指
-    { id = "ring_silver",  slot = "ring",      name = "银戒指",   quality = 2, baseStats = {atkSpd = 10},               icon = "image/equip_ring_20260421064511.png" },
-    { id = "ring_legend",  slot = "ring",      name = "永恒之环", quality = 5, baseStats = {atkSpd = 25, critRate = 12}, icon = "image/equip_ring_20260421064511.png" },
-    -- 帽子
-    { id = "hat_winter",   slot = "hat",       name = "冬帽",     quality = 1, baseStats = {hp = 10},                   icon = "image/equip_hat_20260421064515.png" },
-    { id = "hat_rare",     slot = "hat",       name = "精钢头盔", quality = 3, baseStats = {hp = 30, def = 8},           icon = "image/equip_hat_20260421064515.png" },
-    -- 衣服
-    { id = "coat_warm",    slot = "clothes",   name = "棉衣",     quality = 1, baseStats = {def = 5},                   icon = "image/equip_clothes_20260421064729.png" },
-    { id = "coat_supreme", slot = "clothes",   name = "天神战甲", quality = 6, baseStats = {def = 40, hp = 100},         icon = "image/equip_clothes_20260421064729.png" },
-    -- 鞋子
-    { id = "boots_army",   slot = "boots",     name = "军靴",     quality = 1, baseStats = {speed = 8},                 icon = "image/equip_boots_20260421064742.png" },
-    { id = "boots_epic",   slot = "boots",     name = "疾风之靴", quality = 4, baseStats = {speed = 20, atkSpd = 10},    icon = "image/equip_boots_20260421064742.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质1 普通（原始/简陋武器）── 近战 weaponType="melee"
+    ---------------------------------------------------------------------------
+    { id = "stick",             slot = "weapon", name = "木棍",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 3},                                       icon = "image/装备/武器/stick_icon.png" },
+    { id = "stick_nails",       slot = "weapon", name = "钉棍",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 5},                                       icon = "image/装备/武器/stick_nails_icon.png" },
+    { id = "stone_knife",       slot = "weapon", name = "石刀",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 4, atkSpd = 5},                           icon = "image/装备/武器/stone_knife_icon.png" },
+    { id = "stone_pickaxe",     slot = "weapon", name = "石镐",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 4},                                       icon = "image/装备/武器/stone_pickaxe_icon.png" },
+    { id = "stone_axe",         slot = "weapon", name = "石斧",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 5},                                       icon = "image/装备/武器/stone_axe_icon.png" },
+    { id = "knife_basic",       slot = "weapon", name = "匕首",       quality = 1, weaponType = "melee",  baseStats = {meleeAtk = 4, atkSpd = 8},                           icon = "image/装备/武器/knife_icon.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质2 优秀（工具/基础武器）
+    ---------------------------------------------------------------------------
+    { id = "bat",               slot = "weapon", name = "棒球棒",     quality = 2, weaponType = "melee",  baseStats = {meleeAtk = 8},                                       icon = "image/装备/武器/bat_icon.png" },
+    { id = "bat_nails",         slot = "weapon", name = "钉刺球棒",   quality = 2, weaponType = "melee",  baseStats = {meleeAtk = 10, critRate = 3},                        icon = "image/装备/武器/bat_nails_icon.png" },
+    { id = "axe_basic",         slot = "weapon", name = "手斧",       quality = 2, weaponType = "melee",  baseStats = {meleeAtk = 9, critDmg = 5},                          icon = "image/装备/武器/axe_icon.png" },
+    { id = "picaxe",            slot = "weapon", name = "铁镐",       quality = 2, weaponType = "melee",  baseStats = {meleeAtk = 7, critRate = 5},                         icon = "image/装备/武器/picaxe_icon.png" },
+    { id = "bone_spear",        slot = "weapon", name = "骨矛",       quality = 2, weaponType = "melee",  baseStats = {meleeAtk = 9},                                       icon = "image/装备/武器/bone_spear_icon.png" },
+    { id = "bow_basic",         slot = "weapon", name = "短弓",       quality = 2, weaponType = "ranged", baseStats = {rangedAtk = 8, atkSpd = 5},                          icon = "image/装备/武器/bow_icon.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质3 稀有（精良制造/改装武器）
+    ---------------------------------------------------------------------------
+    { id = "metal_hammer",      slot = "weapon", name = "铁锤",       quality = 3, weaponType = "melee",  baseStats = {meleeAtk = 15, critDmg = 10},                        icon = "image/装备/武器/metal_hammer_icon.png" },
+    { id = "cinderblock_hammer",slot = "weapon", name = "重锤",       quality = 3, weaponType = "melee",  baseStats = {meleeAtk = 16, critDmg = 12},                        icon = "image/装备/武器/cinderblock_hammer_icon.png" },
+    { id = "saw_bat",           slot = "weapon", name = "锯刃棒",     quality = 3, weaponType = "melee",  baseStats = {meleeAtk = 14, critRate = 8},                        icon = "image/装备/武器/saw_bat_icon.png" },
+    { id = "rambo_knife",       slot = "weapon", name = "兰博刀",     quality = 3, weaponType = "melee",  baseStats = {meleeAtk = 13, atkSpd = 10, critRate = 5},           icon = "image/装备/武器/rambo_knife_icon.png" },
+    { id = "bone_bow",          slot = "weapon", name = "骨弓",       quality = 3, weaponType = "ranged", baseStats = {rangedAtk = 14, atkSpd = 8},                         icon = "image/装备/武器/bone_bow_icon.png" },
+    { id = "pistol",            slot = "weapon", name = "手枪",       quality = 3, weaponType = "ranged", baseStats = {rangedAtk = 15, atkSpd = 10},                        icon = "image/装备/武器/pistol_icon.png" },
+    { id = "grenade",           slot = "weapon", name = "手雷",       quality = 3, weaponType = "ranged", baseStats = {rangedAtk = 18},                                     icon = "image/装备/武器/grenade_icon.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质4 史诗（军用/高级武器）
+    ---------------------------------------------------------------------------
+    { id = "katana",            slot = "weapon", name = "武士刀",     quality = 4, weaponType = "melee",  baseStats = {meleeAtk = 25, critRate = 12, critDmg = 15},         icon = "image/装备/武器/katana_icon.png" },
+    { id = "revolver",          slot = "weapon", name = "左轮手枪",   quality = 4, weaponType = "ranged", baseStats = {rangedAtk = 22, critDmg = 20},                       icon = "image/装备/武器/revolver_icon.png" },
+    { id = "sport_bow",         slot = "weapon", name = "竞技弓",     quality = 4, weaponType = "ranged", baseStats = {rangedAtk = 23, atkSpd = 12, critRate = 8},          icon = "image/装备/武器/sport_bow_icon_new.png" },
+    { id = "desert_eagle",      slot = "weapon", name = "沙漠之鹰",   quality = 4, weaponType = "ranged", baseStats = {rangedAtk = 28, critDmg = 18},                       icon = "image/装备/武器/desert_eagle_icon.png" },
+    { id = "remington_870",     slot = "weapon", name = "雷明顿霰弹", quality = 4, weaponType = "ranged", baseStats = {rangedAtk = 26, critRate = 10},                      icon = "image/装备/武器/remington_870_icon.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质5 传说（顶级军火）── 远程 weaponType="ranged"
+    ---------------------------------------------------------------------------
+    { id = "akm",               slot = "weapon", name = "AKM突击步枪",quality = 5, weaponType = "ranged", baseStats = {rangedAtk = 38, atkSpd = 15, critRate = 10},         icon = "image/装备/武器/akm_icon.png" },
+    { id = "m16",               slot = "weapon", name = "M16步枪",    quality = 5, weaponType = "ranged", baseStats = {rangedAtk = 35, atkSpd = 18, critRate = 12},         icon = "image/装备/武器/m16_icon.png" },
+    { id = "acr",               slot = "weapon", name = "ACR精准步枪",quality = 5, weaponType = "ranged", baseStats = {rangedAtk = 36, critRate = 15, critDmg = 25},        icon = "image/装备/武器/acr_icon.png" },
+    { id = "remington_700",     slot = "weapon", name = "雷明顿狙击",  quality = 5, weaponType = "ranged", baseStats = {rangedAtk = 42, critDmg = 35},                      icon = "image/装备/武器/remington_700_icon.png" },
+    ---------------------------------------------------------------------------
+    -- 武器 ── 品质6 至臻（限定/收藏级）
+    ---------------------------------------------------------------------------
+    { id = "xmas_revolver",     slot = "weapon", name = "圣诞左轮",   quality = 6, weaponType = "ranged", baseStats = {rangedAtk = 50, critRate = 18, critDmg = 40},        icon = "image/装备/武器/christmas_revolver_icon.png" },
+    { id = "xmas_revolver2",    slot = "weapon", name = "极光左轮",   quality = 6, weaponType = "ranged", baseStats = {rangedAtk = 55, critRate = 20, critDmg = 45},        icon = "image/装备/武器/christmas_revolver2_icon.png" },
+    { id = "xmas_shotgun",      slot = "weapon", name = "圣诞霰弹枪", quality = 6, weaponType = "ranged", baseStats = {rangedAtk = 58, critRate = 15, atkSpd = 15},         icon = "image/装备/武器/christmas_shotgun_icon.png" },
+    { id = "xmas_bat",          slot = "weapon", name = "圣诞战棒",   quality = 6, weaponType = "melee",  baseStats = {meleeAtk = 52, critDmg = 50},                        icon = "image/装备/武器/christmas_bat_icon.png" },
+    { id = "xmas_candy_cane",   slot = "weapon", name = "糖果权杖",   quality = 6, weaponType = "melee",  baseStats = {meleeAtk = 48, atkSpd = 20, critRate = 18},          icon = "image/装备/武器/christmas_candy_cane_icon.png" },
+    { id = "xmas_lollipop",     slot = "weapon", name = "棒棒糖锤",   quality = 6, weaponType = "melee",  baseStats = {meleeAtk = 45, critDmg = 55, hp = 30},               icon = "image/装备/武器/christmas_lollipop.png" },
+    -- 饰品（项链） —— 品质1 普通
+    { id = "common_necklace",    slot = "accessory", name = "破旧绳坠",     quality = 1, baseStats = {def = 3},                                    icon = "image/装备/首饰/common_necklace.png" },
+    { id = "casual_necklace",    slot = "accessory", name = "皮绳铁牌链",   quality = 1, baseStats = {def = 5, hp = 5},                            icon = "image/装备/首饰/casual_necklace.png" },
+    -- 品质2 优秀
+    { id = "cultist_necklace",   slot = "accessory", name = "骷髅图腾链",   quality = 2, baseStats = {def = 8, critRate = 3},                      icon = "image/装备/首饰/cultist_necklace.png" },
+    -- 品质3 稀有
+    { id = "scavenger_necklace", slot = "accessory", name = "拾荒者弹链",   quality = 3, baseStats = {def = 12, hp = 20},                          icon = "image/装备/首饰/scavenger_necklace.png" },
+    { id = "explorer_necklace",  slot = "accessory", name = "探险者罗盘链", quality = 3, baseStats = {def = 10, atkSpd = 5, hp = 15},               icon = "image/装备/首饰/explorer_necklace.png" },
+    -- 品质4 史诗
+    { id = "warchief_necklace",  slot = "accessory", name = "战酋锁链",     quality = 4, baseStats = {def = 18, hp = 40, critRate = 4},             icon = "image/装备/首饰/warchief_necklace.png" },
+    -- 品质5 传说
+    { id = "venom_necklace",     slot = "accessory", name = "剧毒战链",     quality = 5, baseStats = {def = 22, hp = 55, critDmg = 8},              icon = "image/装备/首饰/venom_necklace.png" },
+    { id = "inferno_necklace",   slot = "accessory", name = "炽焰核心链",   quality = 5, baseStats = {def = 25, hp = 50, critRate = 6},             icon = "image/装备/首饰/inferno_necklace.png" },
+    { id = "doom_necklace",      slot = "accessory", name = "末日牛魔链",   quality = 5, baseStats = {def = 20, hp = 60, atkSpd = 8},               icon = "image/装备/首饰/doom_necklace.png" },
+    -- 品质6 至臻
+    { id = "overlord_necklace",  slot = "accessory", name = "霸主蓝晶链",   quality = 6, baseStats = {def = 30, hp = 80, critRate = 10, critDmg = 12}, icon = "image/装备/首饰/overlord_necklace.png" },
+    -- 戒指 —— 品质1 普通
+    { id = "rusty_ring",          slot = "ring", name = "锈铁石环",     quality = 1, baseStats = {atkSpd = 3},                                       icon = "image/装备/戒指/rusty_ring.png" },
+    { id = "pendant_ring",        slot = "ring", name = "铁坠指环",     quality = 1, baseStats = {atkSpd = 4, def = 2},                               icon = "image/装备/戒指/pendant_ring.png" },
+    -- 品质2 优秀
+    { id = "scrap_ring",          slot = "ring", name = "废铁螺母环",   quality = 2, baseStats = {atkSpd = 6, critRate = 2},                           icon = "image/装备/戒指/scrap_ring.png" },
+    { id = "hunter_ring",         slot = "ring", name = "猎人药瓶环",   quality = 2, baseStats = {atkSpd = 5, hp = 10},                               icon = "image/装备/戒指/hunter_ring.png" },
+    { id = "bone_ring",           slot = "ring", name = "兽骨指环",     quality = 2, baseStats = {atkSpd = 7, def = 3},                               icon = "image/装备/戒指/bone_ring.png" },
+    -- 品质3 稀有
+    { id = "crystal_shard_ring",  slot = "ring", name = "紫晶裂片环",   quality = 3, baseStats = {atkSpd = 10, critRate = 3},                          icon = "image/装备/戒指/crystal_shard_ring.png" },
+    { id = "turquoise_ring",      slot = "ring", name = "绿松石铁环",   quality = 3, baseStats = {atkSpd = 8, hp = 15, def = 5},                      icon = "image/装备/戒指/turquoise_ring.png" },
+    { id = "frost_crystal_ring",  slot = "ring", name = "冰蓝晶石环",   quality = 3, baseStats = {atkSpd = 9, critRate = 4},                          icon = "image/装备/戒指/frost_crystal_ring.png" },
+    -- 品质4 史诗
+    { id = "energy_core_ring",    slot = "ring", name = "能量核心环",   quality = 4, baseStats = {atkSpd = 14, critRate = 5, hp = 20},                 icon = "image/装备/戒指/energy_core_ring.png" },
+    { id = "demon_spike_ring",    slot = "ring", name = "恶魔尖刺环",   quality = 4, baseStats = {atkSpd = 12, critDmg = 6, critRate = 4},             icon = "image/装备/戒指/demon_spike_ring.png" },
+    { id = "ruby_signet_ring",    slot = "ring", name = "红宝石印戒",   quality = 4, baseStats = {atkSpd = 15, critRate = 6},                          icon = "image/装备/戒指/ruby_signet_ring.png" },
+    { id = "void_crystal_ring",   slot = "ring", name = "虚空晶环",     quality = 4, baseStats = {atkSpd = 13, critDmg = 5, hp = 25},                 icon = "image/装备/戒指/void_crystal_ring.png" },
+    -- 品质5 传说
+    { id = "radiant_ring",        slot = "ring", name = "辐光翡翠环",   quality = 5, baseStats = {atkSpd = 20, critRate = 8, critDmg = 8},             icon = "image/装备/戒指/radiant_ring.png" },
+    { id = "nuclear_ring",        slot = "ring", name = "核能指环",     quality = 5, baseStats = {atkSpd = 22, critRate = 10, hp = 40},                icon = "image/装备/戒指/nuclear_ring.png" },
+    { id = "magma_ring",          slot = "ring", name = "熔岩之环",     quality = 5, baseStats = {atkSpd = 25, critDmg = 10, critRate = 6},            icon = "image/装备/戒指/magma_ring.png" },
+    -- 品质6 至臻
+    { id = "doomforge_ring",      slot = "ring", name = "末日锻造之环", quality = 6, baseStats = {atkSpd = 30, critRate = 12, critDmg = 15, hp = 60}, icon = "image/装备/戒指/doomforge_ring.png" },
+    -- 头盔 —— 品质1 普通
+    { id = "common_head",   slot = "hat", name = "破旧毛线帽", quality = 1, baseStats = {hp = 8},                              icon = "image/装备/头盔/common_head.png" },
+    { id = "casual_head",   slot = "hat", name = "渔夫防护帽", quality = 1, baseStats = {hp = 10, def = 2},                    icon = "image/装备/头盔/casual_head.png" },
+    -- 品质2 优秀
+    { id = "bad_head",      slot = "hat", name = "破烂兜帽",   quality = 2, baseStats = {hp = 15, def = 4},                    icon = "image/装备/头盔/bad_head.png" },
+    { id = "cultist_head",  slot = "hat", name = "骨面邪盔",   quality = 2, baseStats = {hp = 18, critRate = 3},               icon = "image/装备/头盔/cultist_head.png" },
+    -- 品质3 稀有
+    { id = "garbage_head",  slot = "hat", name = "拾荒者面罩", quality = 3, baseStats = {hp = 25, def = 6},                    icon = "image/装备/头盔/garbage_man_head.png" },
+    { id = "mad_head",      slot = "hat", name = "狂暴战盔",   quality = 3, baseStats = {hp = 28, atkSpd = 6},                 icon = "image/装备/头盔/mad_head.png" },
+    { id = "hazmat_head",   slot = "hat", name = "防化头罩",   quality = 3, baseStats = {hp = 30, def = 8},                    icon = "image/装备/头盔/hazmat_head.png" },
+    -- 品质4 史诗
+    { id = "football_head", slot = "hat", name = "狂怒橄榄盔", quality = 4, baseStats = {hp = 40, def = 10, atkSpd = 5},       icon = "image/装备/头盔/football_player_head.png" },
+    { id = "military_head", slot = "hat", name = "军用战术盔", quality = 4, baseStats = {hp = 45, def = 14},                   icon = "image/装备/头盔/military_head.png" },
+    { id = "noir_head",     slot = "hat", name = "暗影战盔",   quality = 4, baseStats = {hp = 42, def = 12, critRate = 4},     icon = "image/装备/头盔/noir_head.png" },
+    -- 品质5 传说
+    { id = "juggernaut_head", slot = "hat", name = "重装指挥盔", quality = 5, baseStats = {hp = 60, def = 20},                 icon = "image/装备/头盔/juggernaut_head.png" },
+    { id = "warlord_head",  slot = "hat", name = "恶魔领主盔", quality = 5, baseStats = {hp = 55, def = 15, critDmg = 10},     icon = "image/装备/头盔/warlord_head.png" },
+    { id = "overlord_head", slot = "hat", name = "暗金征服盔", quality = 5, baseStats = {hp = 58, def = 18, critRate = 6},     icon = "image/装备/头盔/overlord_head.png" },
+    -- 品质6 至臻
+    { id = "xmas_head",     slot = "hat", name = "圣诞战盔",   quality = 6, baseStats = {hp = 80, def = 25, critRate = 8},     icon = "image/装备/头盔/christmas_armor_head.png" },
+    -- 衣服 —— 品质1 普通
+    { id = "common_body",   slot = "clothes", name = "普通衣物",   quality = 1, baseStats = {def = 3},                              icon = "image/装备/衣服/common_body.png" },
+    { id = "casual_body",   slot = "clothes", name = "休闲服",     quality = 1, baseStats = {def = 4, hp = 5},                      icon = "image/装备/衣服/casual_body.png" },
+    -- 品质2 优秀
+    { id = "bad_body",      slot = "clothes", name = "破旧夹克",   quality = 2, baseStats = {def = 6, speed = 5},                   icon = "image/装备/衣服/bad_body.png" },
+    { id = "cultist_body",  slot = "clothes", name = "邪教徒袍",   quality = 2, baseStats = {def = 7, hp = 10},                     icon = "image/装备/衣服/cultist_body.png" },
+    -- 品质3 稀有
+    { id = "mad_body",      slot = "clothes", name = "疯狂套装",   quality = 3, baseStats = {def = 12, atkSpd = 8},                 icon = "image/装备/衣服/mad_body.png" },
+    { id = "hazmat_body",   slot = "clothes", name = "防化服",     quality = 3, baseStats = {def = 15, hp = 25},                    icon = "image/装备/衣服/hazmat_body.png" },
+    -- 品质4 史诗
+    { id = "military_body", slot = "clothes", name = "军用战术甲", quality = 4, baseStats = {def = 22, hp = 40},                    icon = "image/装备/衣服/military_body.png" },
+    { id = "noir_body",     slot = "clothes", name = "暗影风衣",   quality = 4, baseStats = {def = 18, critRate = 6, speed = 8},    icon = "image/装备/衣服/noir_body.png" },
+    -- 品质5 传说
+    { id = "juggernaut_body", slot = "clothes", name = "重装战甲", quality = 5, baseStats = {def = 35, hp = 80, atkSpd = -5},       icon = "image/装备/衣服/juggernaut_body.png" },
+    -- 品质6 至臻
+    { id = "xmas_armor",    slot = "clothes", name = "圣诞战甲",   quality = 6, baseStats = {def = 40, hp = 100, critRate = 8},     icon = "image/装备/衣服/christmas_armor_upper.png" },
+    -- 鞋子 —— 品质1 普通
+    { id = "common_boots",   slot = "boots", name = "普通布鞋",   quality = 1, baseStats = {speed = 4},                             icon = "image/装备/鞋子/common_boots.png" },
+    { id = "casual_boots",   slot = "boots", name = "休闲运动鞋", quality = 1, baseStats = {speed = 5, hp = 5},                     icon = "image/装备/鞋子/casual_boots.png" },
+    -- 品质2 优秀
+    { id = "bad_boots",      slot = "boots", name = "破旧皮靴",   quality = 2, baseStats = {speed = 7, def = 3},                    icon = "image/装备/鞋子/bad_boots.png" },
+    { id = "cultist_boots",  slot = "boots", name = "邪教徒靴",   quality = 2, baseStats = {speed = 8, hp = 8},                     icon = "image/装备/鞋子/cultist_boots.png" },
+    -- 品质3 稀有
+    { id = "garbage_boots",  slot = "boots", name = "拾荒者长靴", quality = 3, baseStats = {speed = 10, def = 6},                   icon = "image/装备/鞋子/garbage_man_boots.png" },
+    { id = "mad_boots",      slot = "boots", name = "狂暴战靴",   quality = 3, baseStats = {speed = 12, atkSpd = 6},                icon = "image/装备/鞋子/mad_boots.png" },
+    { id = "hazmat_boots",   slot = "boots", name = "防化长靴",   quality = 3, baseStats = {speed = 10, hp = 20, def = 5},          icon = "image/装备/鞋子/hazmat_boots.png" },
+    -- 品质4 史诗
+    { id = "football_boots", slot = "boots", name = "球星战靴",   quality = 4, baseStats = {speed = 18, atkSpd = 8},                icon = "image/装备/鞋子/football_player_boots.png" },
+    { id = "military_boots", slot = "boots", name = "军用作战靴", quality = 4, baseStats = {speed = 15, def = 12, hp = 20},         icon = "image/装备/鞋子/military_boots.png" },
+    { id = "noir_boots",     slot = "boots", name = "暗影之靴",   quality = 4, baseStats = {speed = 16, critRate = 5},              icon = "image/装备/鞋子/noir_boots.png" },
+    -- 品质5 传说
+    { id = "juggernaut_boots", slot = "boots", name = "重装战靴", quality = 5, baseStats = {speed = 20, def = 18, hp = 40},         icon = "image/装备/鞋子/juggernaut_boots.png" },
+    -- 品质6 至臻
+    { id = "xmas_boots",     slot = "boots", name = "圣诞战靴",   quality = 6, baseStats = {speed = 25, atkSpd = 15, critRate = 6}, icon = "image/装备/鞋子/christmas_armor_boots.png" },
 }
 
 ------------------------------------------------------------------------
@@ -261,10 +383,11 @@ MD.EQUIP_DB = {
 ------------------------------------------------------------------------
 -- 属性中文名和单位
 MD.STAT_NAMES = {
-    atk      = "攻击力",
+    meleeAtk   = "近战攻击力",
+    rangedAtk  = "射击攻击力",
     atkPct   = "攻击伤害",
-    def      = "防御力",
-    hp       = "生命值",
+    def      = "列车防御",
+    hp       = "列车生命",
     critRate = "暴击率",
     critDmg  = "暴击伤害",
     atkSpd   = "攻击速度",
@@ -294,7 +417,8 @@ MD.AFFIX_GRADE_COLORS = {
 
 -- 随机词条池（values 对应 D/C/B/A/S 五个等级的数值）
 MD.EQUIP_AFFIXES = {
-    { id = "atk",        values = {3, 5, 8, 12, 18} },
+    { id = "meleeAtk",   values = {3, 5, 8, 12, 18} },
+    { id = "rangedAtk",  values = {3, 5, 8, 12, 18} },
     { id = "atkPct",     values = {5, 8, 12, 18, 25} },
     { id = "def",        values = {2, 4, 7, 10, 15} },
     { id = "hp",         values = {10, 20, 35, 50, 80} },
@@ -343,16 +467,100 @@ function MD.FindAffix(affixId)
     return nil
 end
 
+-- 查找装备定义
+function MD.FindEquipDef(equipId)
+    for _, e in ipairs(MD.EQUIP_DB) do
+        if e.id == equipId then return e end
+    end
+    return nil
+end
+
+--- 计算装备+角色总属性加成，返回统一的 stats 表
+--- @param saveData table 存档数据（含 equipped, inventory, activeChar）
+--- @return table stats 各属性总值
+function MD.CalcEquipStats(saveData)
+    local stats = {
+        meleeAtk = 0, rangedAtk = 0, atkPct = 0, def = 0, hp = 0,
+        critRate = 0, critDmg = 0, atkSpd = 0, speed = 0,
+        arrowDmg = 0, minigunDmg = 0, flameDmg = 0, sniperDmg = 0,
+        goldBonus = 0, rangePct = 0,
+    }
+    if not saveData then return stats end
+
+    -- 1. 角色基础属性
+    local charId = saveData.activeChar or "warrior"
+    for _, ch in ipairs(MD.CHARACTERS) do
+        if ch.id == charId then
+            stats.meleeAtk  = stats.meleeAtk  + (ch.baseStats.meleeAtk or 0)
+            stats.rangedAtk = stats.rangedAtk + (ch.baseStats.rangedAtk or 0)
+            stats.hp        = stats.hp        + (ch.baseStats.hp or 0)
+            break
+        end
+    end
+
+    -- 2. 装备属性（baseStats + 词条）
+    local equipped = saveData.equipped or {}
+    local inventory = saveData.inventory or {}
+    for _, invIdx in pairs(equipped) do
+        local item = inventory[invIdx]
+        if item then
+            -- 查找装备定义获取 baseStats
+            local def = MD.FindEquipDef(item.id)
+            if def and def.baseStats then
+                for k, v in pairs(def.baseStats) do
+                    if stats[k] then
+                        stats[k] = stats[k] + v
+                    end
+                end
+            end
+            -- 累加词条属性
+            if item.affixes then
+                for _, aff in ipairs(item.affixes) do
+                    local pool = MD.FindAffix(aff.affixId)
+                    if pool and aff.grade then
+                        local grade = math.max(1, math.min(aff.grade, 5))
+                        local val = pool.values[grade] or 0
+                        if stats[aff.affixId] then
+                            stats[aff.affixId] = stats[aff.affixId] + val
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return stats
+end
+
 ------------------------------------------------------------------------
 -- 关卡系统
 ------------------------------------------------------------------------
 MD.LEVELS = {
-    { id = 1,  name = "保卫村庄", waves = 15, reward_gold = 50,  chest = "bronze", unlocked = true },
-    { id = 2,  name = "冰封隧道", waves = 7,  reward_gold = 80,  chest = "bronze", unlocked = false },
-    { id = 3,  name = "暴风雪谷", waves = 8,  reward_gold = 100, chest = "silver", unlocked = false },
-    { id = 4,  name = "死寂车站", waves = 10, reward_gold = 150, chest = "silver", unlocked = false },
-    { id = 5,  name = "钢铁废墟", waves = 12, reward_gold = 200, chest = "gold",   unlocked = false },
-    { id = 6,  name = "末日核心", waves = 15, reward_gold = 300, chest = "gold",   unlocked = false },
+    { id = 1,  name = "保卫村庄",   waves = 15, reward_gold = 50,   chest = "bronze", unlocked = true },
+    { id = 2,  name = "冰封隧道",   waves = 7,  reward_gold = 80,   chest = "bronze", unlocked = false },
+    { id = 3,  name = "暴风雪谷",   waves = 8,  reward_gold = 100,  chest = "bronze", unlocked = false },
+    { id = 4,  name = "死寂车站",   waves = 10, reward_gold = 150,  chest = "silver", unlocked = false },
+    { id = 5,  name = "钢铁废墟",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false },
+    { id = 6,  name = "末日核心",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false },
+    { id = 7,  name = "荒野据点",   waves = 8,  reward_gold = 120,  chest = "bronze", unlocked = false },
+    { id = 8,  name = "毒雾沼泽",   waves = 10, reward_gold = 160,  chest = "bronze", unlocked = false },
+    { id = 9,  name = "断桥峡谷",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false },
+    { id = 10, name = "地下矿井",   waves = 14, reward_gold = 250,  chest = "silver", unlocked = false },
+    { id = 11, name = "烈焰熔炉",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false },
+    { id = 12, name = "幽暗森林",   waves = 10, reward_gold = 180,  chest = "bronze", unlocked = false },
+    { id = 13, name = "冻土荒原",   waves = 12, reward_gold = 220,  chest = "silver", unlocked = false },
+    { id = 14, name = "铁锈港口",   waves = 14, reward_gold = 280,  chest = "silver", unlocked = false },
+    { id = 15, name = "风暴要塞",   waves = 16, reward_gold = 350,  chest = "gold",   unlocked = false },
+    { id = 16, name = "枯骨墓地",   waves = 12, reward_gold = 240,  chest = "bronze", unlocked = false },
+    { id = 17, name = "酸雨废都",   waves = 14, reward_gold = 300,  chest = "silver", unlocked = false },
+    { id = 18, name = "雷鸣山脉",   waves = 16, reward_gold = 360,  chest = "silver", unlocked = false },
+    { id = 19, name = "深渊裂缝",   waves = 18, reward_gold = 420,  chest = "gold",   unlocked = false },
+    { id = 20, name = "机械蜂巢",   waves = 15, reward_gold = 350,  chest = "silver", unlocked = false },
+    { id = 21, name = "血月祭坛",   waves = 18, reward_gold = 450,  chest = "gold",   unlocked = false },
+    { id = 22, name = "永冻冰窟",   waves = 16, reward_gold = 400,  chest = "silver", unlocked = false },
+    { id = 23, name = "炼狱火山",   waves = 20, reward_gold = 500,  chest = "gold",   unlocked = false },
+    { id = 24, name = "虚空裂隙",   waves = 22, reward_gold = 600,  chest = "gold",   unlocked = false },
+    { id = 25, name = "终焉之战",   waves = 25, reward_gold = 800,  chest = "gold",   unlocked = false },
 }
 
 MD.CHEST_ICONS = {
@@ -410,11 +618,11 @@ MD.SHOP_DAILY_FREE = { id = "daily_gold", name = "免费金币", desc = "x100", 
 -- 随机池：每天从中抽5个填入后5格
 MD.SHOP_DAILY_POOL = {
     -- 炮塔碎片
-    { id = "daily_gatling", name = "加特林碎片",   desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png" },
-    { id = "daily_commando",name = "突击队员碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png" },
-    { id = "daily_flame",   name = "喷火碎片",     desc = "x5",      price = 120, currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png" },
-    { id = "daily_sniper",  name = "狙击碎片",     desc = "x5",      price = 150, currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png" },
-    { id = "daily_rocket",  name = "火箭碎片",     desc = "x3",      price = 200, currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png" },
+    { id = "daily_gatling", name = "机关枪塔碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png",              turretId = "minigun" },
+    { id = "daily_commando",name = "弓箭炮塔碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png",                turretId = "arrow" },
+    { id = "daily_flame",   name = "喷火炮塔碎片", desc = "x5",      price = 120, currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png",     turretId = "flame" },
+    { id = "daily_sniper",  name = "狙击炮塔碎片", desc = "x5",      price = 150, currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png",               turretId = "sniper" },
+    { id = "daily_rocket",  name = "火箭炮塔碎片", desc = "x3",      price = 200, currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png",               turretId = "rocket" },
     -- 资源
     { id = "daily_wood",    name = "木材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/meta_icon_wood_20260421063709.png" },
     { id = "daily_stone",   name = "石材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/图层_3 (1).png" },
@@ -445,7 +653,7 @@ MD.SIGN_IN_REWARDS = {
     { day = 4, type = "gold",   amount = 3000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 2 },
     { day = 5, type = "diamond", amount = 500,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 4 },
     { day = 6, type = "wood",   amount = 800,  name = "木材",     icon = "image/图层_2 (1).png",   quality = 2 },
-    { day = 7, type = "equip",  id = "sword_epic", name = "暗影之刃", icon = "image/equip_weapon_axe_20260421064553.png", quality = 5 },
+    { day = 7, type = "equip",  id = "katana", name = "武士刀", icon = "image/装备/武器/katana_icon.png", quality = 4 },
 }
 
 ------------------------------------------------------------------------
@@ -469,22 +677,108 @@ MD.MAIL_LIST = {
 -- 抽奖奖池（权重越高出现概率越大）
 MD.GACHA_POOL = {
     -- 装备类（直接获得装备，加入背包）
-    { type = "equip", id = "sword_iron",    weight = 25 },
-    { type = "equip", id = "hat_winter",    weight = 25 },
-    { type = "equip", id = "coat_warm",     weight = 25 },
-    { type = "equip", id = "boots_army",    weight = 25 },
-    { type = "equip", id = "necklace_1",    weight = 25 },
-    { type = "equip", id = "axe_war",       weight = 18 },
-    { type = "equip", id = "ring_silver",   weight = 18 },
-    { type = "equip", id = "sword_rare",    weight = 12 },
-    { type = "equip", id = "hat_rare",      weight = 12 },
-    { type = "equip", id = "necklace_epic", weight = 6 },
-    { type = "equip", id = "sword_epic",    weight = 6 },
-    { type = "equip", id = "boots_epic",    weight = 6 },
-    { type = "equip", id = "ring_legend",   weight = 2 },
-    { type = "equip", id = "sword_legend",  weight = 2 },
-    { type = "equip", id = "coat_supreme",  weight = 0.5 },
-    { type = "equip", id = "sword_supreme", weight = 0.5 },
+    -- 品质1 普通
+    { type = "equip", id = "stick",             weight = 25 },
+    { type = "equip", id = "stick_nails",       weight = 25 },
+    { type = "equip", id = "stone_knife",       weight = 25 },
+    { type = "equip", id = "stone_pickaxe",     weight = 25 },
+    { type = "equip", id = "stone_axe",         weight = 25 },
+    { type = "equip", id = "knife_basic",       weight = 25 },
+    { type = "equip", id = "common_head",       weight = 25 },
+    { type = "equip", id = "casual_head",       weight = 25 },
+    { type = "equip", id = "common_body",       weight = 25 },
+    { type = "equip", id = "casual_body",       weight = 25 },
+    { type = "equip", id = "common_boots",      weight = 25 },
+    { type = "equip", id = "casual_boots",      weight = 25 },
+    { type = "equip", id = "common_necklace",    weight = 25 },
+    { type = "equip", id = "casual_necklace",    weight = 25 },
+    { type = "equip", id = "rusty_ring",          weight = 25 },
+    { type = "equip", id = "pendant_ring",        weight = 25 },
+    -- 品质2 优秀
+    { type = "equip", id = "bat",               weight = 18 },
+    { type = "equip", id = "bat_nails",         weight = 18 },
+    { type = "equip", id = "axe_basic",         weight = 18 },
+    { type = "equip", id = "picaxe",            weight = 18 },
+    { type = "equip", id = "bone_spear",        weight = 18 },
+    { type = "equip", id = "bow_basic",         weight = 18 },
+    { type = "equip", id = "scrap_ring",         weight = 18 },
+    { type = "equip", id = "hunter_ring",        weight = 18 },
+    { type = "equip", id = "bone_ring",          weight = 18 },
+    { type = "equip", id = "bad_head",          weight = 18 },
+    { type = "equip", id = "cultist_head",      weight = 18 },
+    { type = "equip", id = "bad_body",          weight = 18 },
+    { type = "equip", id = "cultist_body",      weight = 18 },
+    { type = "equip", id = "bad_boots",         weight = 18 },
+    { type = "equip", id = "cultist_boots",     weight = 18 },
+    { type = "equip", id = "cultist_necklace",  weight = 18 },
+    -- 品质3 稀有
+    { type = "equip", id = "metal_hammer",      weight = 12 },
+    { type = "equip", id = "cinderblock_hammer",weight = 12 },
+    { type = "equip", id = "saw_bat",           weight = 12 },
+    { type = "equip", id = "rambo_knife",       weight = 12 },
+    { type = "equip", id = "bone_bow",          weight = 12 },
+    { type = "equip", id = "pistol",            weight = 12 },
+    { type = "equip", id = "grenade",           weight = 12 },
+    { type = "equip", id = "garbage_head",      weight = 12 },
+    { type = "equip", id = "mad_head",          weight = 12 },
+    { type = "equip", id = "hazmat_head",       weight = 12 },
+    { type = "equip", id = "mad_body",          weight = 12 },
+    { type = "equip", id = "hazmat_body",       weight = 12 },
+    { type = "equip", id = "garbage_boots",     weight = 12 },
+    { type = "equip", id = "mad_boots",         weight = 12 },
+    { type = "equip", id = "hazmat_boots",      weight = 12 },
+    { type = "equip", id = "scavenger_necklace", weight = 12 },
+    { type = "equip", id = "explorer_necklace",  weight = 12 },
+    { type = "equip", id = "crystal_shard_ring",  weight = 12 },
+    { type = "equip", id = "turquoise_ring",      weight = 12 },
+    { type = "equip", id = "frost_crystal_ring",  weight = 12 },
+    -- 品质4 史诗
+    { type = "equip", id = "katana",            weight = 6 },
+    { type = "equip", id = "revolver",          weight = 6 },
+    { type = "equip", id = "sport_bow",         weight = 6 },
+    { type = "equip", id = "desert_eagle",      weight = 6 },
+    { type = "equip", id = "remington_870",     weight = 6 },
+    { type = "equip", id = "warchief_necklace", weight = 6 },
+    { type = "equip", id = "football_boots",    weight = 6 },
+    { type = "equip", id = "military_boots",    weight = 6 },
+    { type = "equip", id = "noir_boots",        weight = 6 },
+    { type = "equip", id = "football_head",     weight = 6 },
+    { type = "equip", id = "military_head",     weight = 6 },
+    { type = "equip", id = "noir_head",         weight = 6 },
+    { type = "equip", id = "military_body",     weight = 6 },
+    { type = "equip", id = "noir_body",         weight = 6 },
+    { type = "equip", id = "energy_core_ring",    weight = 6 },
+    { type = "equip", id = "demon_spike_ring",    weight = 6 },
+    { type = "equip", id = "ruby_signet_ring",    weight = 6 },
+    { type = "equip", id = "void_crystal_ring",   weight = 6 },
+    -- 品质5 传说
+    { type = "equip", id = "akm",               weight = 2 },
+    { type = "equip", id = "m16",               weight = 2 },
+    { type = "equip", id = "acr",               weight = 2 },
+    { type = "equip", id = "remington_700",     weight = 2 },
+    { type = "equip", id = "radiant_ring",       weight = 2 },
+    { type = "equip", id = "nuclear_ring",       weight = 2 },
+    { type = "equip", id = "magma_ring",         weight = 2 },
+    { type = "equip", id = "juggernaut_head",   weight = 2 },
+    { type = "equip", id = "warlord_head",      weight = 2 },
+    { type = "equip", id = "overlord_head",     weight = 2 },
+    { type = "equip", id = "juggernaut_body",   weight = 2 },
+    { type = "equip", id = "juggernaut_boots",  weight = 2 },
+    { type = "equip", id = "venom_necklace",    weight = 2 },
+    { type = "equip", id = "inferno_necklace",  weight = 2 },
+    { type = "equip", id = "doom_necklace",     weight = 2 },
+    -- 品质6 至臻
+    { type = "equip", id = "xmas_revolver",     weight = 0.5 },
+    { type = "equip", id = "xmas_revolver2",    weight = 0.5 },
+    { type = "equip", id = "xmas_shotgun",      weight = 0.5 },
+    { type = "equip", id = "xmas_bat",          weight = 0.5 },
+    { type = "equip", id = "xmas_candy_cane",   weight = 0.5 },
+    { type = "equip", id = "xmas_lollipop",     weight = 0.5 },
+    { type = "equip", id = "xmas_armor",        weight = 0.5 },
+    { type = "equip", id = "xmas_boots",        weight = 0.5 },
+    { type = "equip", id = "xmas_head",         weight = 0.5 },
+    { type = "equip", id = "overlord_necklace", weight = 0.5 },
+    { type = "equip", id = "doomforge_ring",    weight = 0.5 },
     -- 资源类
     { type = "gold",   amount = 200,  weight = 30, name = "金币",     icon = "image/图层_1 (2).png" },
     { type = "gold",   amount = 500,  weight = 15, name = "金币",     icon = "image/图层_1 (2).png" },
@@ -623,32 +917,32 @@ function MD.NewSaveData()
     return {
         -- 货币
         gold = 500,
-        diamond = 2000,
+        diamond = 4000,
         wood = 30,
         stone = 20,
 
         -- 关卡进度
-        maxLevel = 1,       -- 已解锁最高关卡
+        maxLevel = 25,      -- 已解锁最高关卡（临时测试用，原值1）
         levelStars = {},    -- 每关星数 {[1]=3, [2]=2, ...}
         chestClaimed = {},  -- 已领取宝箱 {["1_1"]=true, ["1_2"]=true} 键="关卡_宝箱序号"
 
         -- 装备（inventory 存实例对象，含随机词条）
         equipped = {},      -- {weapon=1, hat=2, ...} 槽位 -> inventory索引
         inventory = {       -- 背包装备实例
-            { id = "sword_iron",    level = 1, affixes = { {affixId = "atk", grade = 1} } },
-            { id = "hat_winter",    level = 1, affixes = { {affixId = "hp", grade = 1} } },
-            { id = "coat_warm",     level = 1, affixes = { {affixId = "def", grade = 2} } },
-            { id = "boots_army",    level = 1, affixes = { {affixId = "atkSpd", grade = 1}, {affixId = "goldBonus", grade = 2} } },
-            { id = "axe_war",       level = 3, affixes = { {affixId = "atk", grade = 2} } },
-            { id = "sword_rare",    level = 5, affixes = { {affixId = "critRate", grade = 3}, {affixId = "atk", grade = 2} } },
-            { id = "sword_epic",    level = 8, affixes = { {affixId = "critDmg", grade = 4}, {affixId = "atk", grade = 3} } },
-            { id = "sword_legend",  level = 12, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 4} } },
-            { id = "sword_supreme", level = 15, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 5} } },
-            { id = "necklace_epic", level = 6, affixes = { {affixId = "hp", grade = 3}, {affixId = "def", grade = 3} } },
-            { id = "ring_legend",   level = 10, affixes = { {affixId = "atkSpd", grade = 5}, {affixId = "critRate", grade = 4} } },
-            { id = "hat_rare",      level = 4, affixes = { {affixId = "hp", grade = 2}, {affixId = "def", grade = 2} } },
-            { id = "coat_supreme",  level = 15, affixes = { {affixId = "def", grade = 5}, {affixId = "hp", grade = 5} } },
-            { id = "boots_epic",    level = 7, affixes = { {affixId = "atkSpd", grade = 3} } },
+            { id = "knife_basic",   level = 1, affixes = { {affixId = "meleeAtk", grade = 1} } },
+            { id = "common_head",   level = 1, affixes = { {affixId = "hp", grade = 1} } },
+            { id = "common_body",   level = 1, affixes = { {affixId = "def", grade = 2} } },
+            { id = "common_boots",  level = 1, affixes = { {affixId = "atkSpd", grade = 1}, {affixId = "goldBonus", grade = 2} } },
+            { id = "bat",           level = 3, affixes = { {affixId = "meleeAtk", grade = 2} } },
+            { id = "pistol",        level = 5, affixes = { {affixId = "critRate", grade = 3}, {affixId = "rangedAtk", grade = 2} } },
+            { id = "katana",        level = 8, affixes = { {affixId = "critDmg", grade = 4}, {affixId = "meleeAtk", grade = 3} } },
+            { id = "akm",           level = 12, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 4} } },
+            { id = "xmas_revolver", level = 15, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 5} } },
+            { id = "overlord_necklace", level = 6, affixes = { {affixId = "hp", grade = 3}, {affixId = "def", grade = 3} } },
+            { id = "doomforge_ring", level = 10, affixes = { {affixId = "atkSpd", grade = 5}, {affixId = "critRate", grade = 4} } },
+            { id = "xmas_head",     level = 4, affixes = { {affixId = "hp", grade = 2}, {affixId = "def", grade = 2} } },
+            { id = "xmas_armor",    level = 15, affixes = { {affixId = "def", grade = 5}, {affixId = "hp", grade = 5} } },
+            { id = "xmas_boots",    level = 7, affixes = { {affixId = "atkSpd", grade = 3} } },
         },
 
         -- 角色

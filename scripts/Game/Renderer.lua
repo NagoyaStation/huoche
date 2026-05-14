@@ -42,8 +42,8 @@ function R.CalcLayout(G, W, H)
     -- 列车位置 (屏幕上方，蒸汽机车)
     G.cartCenterX = W / 2
     G.cartTopY = G.hudH + 4
-    G.cartW = 90
-    G.cartH = 215
+    G.cartW = 103
+    G.cartH = 247
     G.cartBottomY = G.cartTopY + G.cartH
 
     -- 铁轨参数
@@ -1173,12 +1173,16 @@ function R.DrawFloatTexts(vg, G)
             col = C.CLR.bush_color
         elseif ft.rtype == "pebble" then
             col = C.CLR.pebble_color
+        elseif ft.rtype == "crit" then
+            col = {255, 200, 40}  -- 金黄色暴击
         elseif ft.rtype == "damage" then
             col = C.CLR.text_red
         else
             col = C.CLR.text_white
         end
-        nvgFontSize(vg, 14 * scale)
+        local fontSize = 14
+        if ft.rtype == "crit" then fontSize = 18 end  -- 暴击字体更大
+        nvgFontSize(vg, fontSize * scale)
         nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
         nvgFillColor(vg, nvgRGBA(col[1], col[2], col[3], math.floor(alpha * 255)))
         nvgText(vg, ft.x, ft.y, ft.text, nil)
@@ -1762,19 +1766,33 @@ function R.DrawMenu(vg, G)
     nvgFillPaint(vg, botVig)
     nvgFill(vg)
 
-    -- ======== 3. 飘雪粒子（程序化）========
-    math.randomseed(42)  -- 固定种子，粒子位置稳定
+    -- ======== 3. 飘雪粒子（预生成数据，不污染随机种子）========
+    if not R._snowData then
+        local _rdt = os.date("*t")
+        local oldSeed = ((_rdt.hour or 0) * 3600 + (_rdt.min or 0) * 60 + (_rdt.sec or 0))
+                      * ((_rdt.yday or 1) + 1)
+        math.randomseed(42)
+        R._snowData = {}
+        for i = 1, 30 do
+            R._snowData[i] = {
+                xr = math.random() * 1.0,
+                yr = math.random() * 1.0,
+                spd = 15 + math.random() * 20,
+                sr = 1 + math.random() * 2,
+                sa = 80 + math.random(80),
+            }
+        end
+        math.randomseed(oldSeed)
+    end
     for i = 1, 30 do
-        local sx = math.random() * W
-        local sy = (math.random() * H + t * (15 + math.random() * 20)) % (H + 10) - 5
-        local sr = 1 + math.random() * 2
-        local sa = 80 + math.random(80)
+        local sd = R._snowData[i]
+        local sx = sd.xr * W
+        local sy = (sd.yr * H + t * sd.spd) % (H + 10) - 5
         nvgBeginPath(vg)
-        nvgCircle(vg, sx, sy, sr)
-        nvgFillColor(vg, nvgRGBA(210, 225, 240, sa))
+        nvgCircle(vg, sx, sy, sd.sr)
+        nvgFillColor(vg, nvgRGBA(210, 225, 240, sd.sa))
         nvgFill(vg)
     end
-    math.randomseed(math.floor(os.clock() * 1000))  -- 恢复随机种子
 
     local s = G.uiScale or 1
     nvgFontFace(vg, "sans")
@@ -2020,7 +2038,7 @@ function R.DrawSkillButtons(vg, G)
     local bombImg  = G.skillBombImg         -- 炸弹图标（红色圆）
 
     -- ===== 统一尺寸与对称布局 =====
-    local btnSize   = 72                   -- 按钮整体尺寸（外框 = 图标 = 同尺寸）
+    local btnSize   = 58                   -- 按钮整体尺寸（外框 = 图标 = 同尺寸）
     local margin    = 28                   -- 距屏幕边缘
     local btnY      = H - 128             -- 垂直位置（底部摇杆区域）
     local leftX     = margin + btnSize / 2           -- 左按钮中心 X
@@ -2187,6 +2205,99 @@ function R.DrawAimLine(vg, G)
     nvgMoveTo(vg, cx + math.cos(a2) * startDist, cy + math.sin(a2) * startDist)
     nvgLineTo(vg, cx + math.cos(a2) * coneLen,   cy + math.sin(a2) * coneLen)
     nvgStroke(vg)
+end
+
+------------------------------------------------------------------------
+-- 炸弹绘制 (落地炸弹 + 倒计时抖动)
+------------------------------------------------------------------------
+function R.DrawBombs(vg, G)
+    local img = G.bombImg
+    if not img or img == 0 then return end
+    local t = G.gameTime or 0
+
+    -- 获取炸弹图片原始尺寸（保持比例）
+    local imgW, imgH = nvgImageSize(vg, img)
+    if imgW <= 0 then imgW = 1 end
+    if imgH <= 0 then imgH = 1 end
+    local aspect = imgW / imgH  -- 宽高比
+
+    for _, b in ipairs(G.bombs or {}) do
+        if b.y < (G.renderTopY or 0) - 80 or b.y > G.screenH + 80 then goto cont_bomb end
+        local radius = b.radius or 45  -- 爆炸范围半径
+        local bombH = 12               -- 炸弹绘制高度（半值）
+        local bombW = bombH * aspect   -- 按原始比例计算宽度
+
+        -- 倒计时进度 0→1
+        local fuseRatio = math.max(0, math.min(1, 1 - b.fuseTimer / 1.5))
+
+        -- 倒计时抖动：剩余时间越短越剧烈
+        local shake = 0
+        if b.fuseTimer < 0.6 then
+            shake = math.sin((b.bobPhase or 0) * 3) * (1 - b.fuseTimer / 0.6) * 3
+        end
+        local dx = b.x + shake
+        local dy = b.y
+
+        -- 1) 爆炸范围圈（半透明填充 + 边缘光环）
+        local pulse = 1.0 + math.sin(t * 8) * 0.03 * fuseRatio
+        local drawR = radius * pulse
+
+        local alpha = math.floor(20 + fuseRatio * 30)
+        nvgBeginPath(vg)
+        nvgCircle(vg, b.x, b.y, drawR)
+        nvgFillColor(vg, nvgRGBA(255, 80, 60, alpha))
+        nvgFill(vg)
+
+        local ringAlpha = math.floor(60 + fuseRatio * 120)
+        nvgBeginPath(vg)
+        nvgCircle(vg, b.x, b.y, drawR)
+        nvgStrokeWidth(vg, 1.5 + fuseRatio * 1.0)
+        nvgStrokeColor(vg, nvgRGBA(255, 120, 100, ringAlpha))
+        nvgStroke(vg)
+
+        -- 2) 炸弹小图标（保持原始比例）
+        nvgBeginPath(vg)
+        nvgEllipse(vg, dx, dy + bombH * 0.4, bombW * 0.45, bombH * 0.1)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 40))
+        nvgFill(vg)
+
+        -- 选择当前帧：普通 or 红帧交替闪烁
+        local curImg = img
+        if fuseRatio > 0.2 then
+            local freq = 4 + fuseRatio * 8
+            local flash = math.sin(t * freq * 6.28)
+            if flash > 0 and G.bombRedImg and G.bombRedImg ~= 0 then
+                curImg = G.bombRedImg
+            end
+        end
+
+        local paint = nvgImagePattern(vg, dx - bombW, dy - bombH, bombW * 2, bombH * 2, 0, curImg, 1.0)
+        nvgBeginPath(vg)
+        nvgRect(vg, dx - bombW, dy - bombH, bombW * 2, bombH * 2)
+        nvgFillPaint(vg, paint)
+        nvgFill(vg)
+        ::cont_bomb::
+    end
+end
+
+------------------------------------------------------------------------
+-- 爆炸特效绘制 (帧动画)
+------------------------------------------------------------------------
+function R.DrawExplosions(vg, G)
+    local frames = G.explosionFrames
+    if not frames or #frames == 0 then return end
+    for _, e in ipairs(G.explosions or {}) do
+        local fi = math.max(1, math.min(e.frame, #frames))
+        local fimg = frames[fi]
+        if not fimg or fimg == 0 then goto cont_exp end
+        local sz = (e.radius or 45) * 3.0  -- 爆炸特效比范围圈更大
+        local paint = nvgImagePattern(vg, e.x - sz, e.y - sz, sz * 2, sz * 2, 0, fimg, 1.0)
+        nvgBeginPath(vg)
+        nvgRect(vg, e.x - sz, e.y - sz, sz * 2, sz * 2)
+        nvgFillPaint(vg, paint)
+        nvgFill(vg)
+        ::cont_exp::
+    end
 end
 
 return R
