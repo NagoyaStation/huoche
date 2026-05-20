@@ -1,4 +1,4 @@
--- Game/Config.lua - 雪国列车：末日求生 资源收集配置
+-- Game/Config.lua - 末世：我开火车送快递 资源收集配置
 local C = {}
 
 -- 延迟加载 Turret 模块（避免循环依赖，且只 require 一次）
@@ -8,7 +8,14 @@ local function getTurret()
     return _Turret
 end
 
-C.TITLE = "雪国列车"
+-- 延迟加载 Drone 模块
+local _Drone
+local function getDrone()
+    if not _Drone then _Drone = require("Game.Drone") end
+    return _Drone
+end
+
+C.TITLE = "末世：我开火车送快递"
 
 ------------------------------------------------------------------------
 -- 滚动 & 世界
@@ -73,6 +80,19 @@ C.ZOMBIE_MAX_PER_LEVEL = 2       -- 每级增加最大丧尸数
 C.ZOMBIE_MAX_CAP = 30            -- 绝对上限
 
 ------------------------------------------------------------------------
+-- 自动采集无人机
+------------------------------------------------------------------------
+C.DRONE = {
+    SPEED        = 180,      -- 飞行速度 px/s
+    COLLECT_TIME = 0.35,     -- 采集停留时间(秒)
+    SEARCH_RADIUS = 600,     -- 搜索资源半径(px)
+    MAX_COUNT    = 3,        -- 最大无人机数量
+    SIZE         = 36,       -- 绘制尺寸(px)
+    HOVER_AMP    = 3,        -- 悬停上下浮动幅度(px)
+    HOVER_FREQ   = 2,        -- 悬停频率(Hz)
+}
+
+------------------------------------------------------------------------
 -- 装饰物生成
 ------------------------------------------------------------------------
 C.DECO_INTERVAL = 2.5             -- 装饰物大幅减少(资源才是主角)
@@ -90,8 +110,8 @@ C.LEVEL_DIST_TARGET = 1000   -- 每关行驶目标距离(米)
 ------------------------------------------------------------------------
 -- 提交区域
 ------------------------------------------------------------------------
-C.SUBMIT_BOX_W = 44
-C.SUBMIT_BOX_H = 44
+C.SUBMIT_BOX_W = 52
+C.SUBMIT_BOX_H = 56
 
 ------------------------------------------------------------------------
 -- 升级卡 (末日求生主题)
@@ -124,6 +144,10 @@ C.UPGRADES = {
       apply = function(G) getTurret().UnlockTurret(G, "electric") end },
     { id = "turret_rocket",   name = "火箭炮塔",   desc = "解锁火箭炮塔",       icon = "turret_rocket",   isTurret = true, turretType = "rocket",
       apply = function(G) getTurret().UnlockTurret(G, "rocket") end },
+
+    -- 无人机解锁卡（可叠加，每次+1架）
+    { id = "drone",  name = "采集无人机", desc = "采集无人机+1",  icon = "drone", isDrone = true,
+      apply = function(G) getDrone().UnlockDrone(G) end },
 }
 
 ------------------------------------------------------------------------

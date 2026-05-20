@@ -113,13 +113,14 @@ end
 function CC.HandleClick(x, y, DW, DH)
     if not state.active then return end
 
-    -- 跳过按钮点击区域（右上角，宽松区域确保可点击）
-    local skipW = 90
-    local skipH = 36
-    local skipX = DW - skipW - 10
-    local skipY = 8
-    if x >= skipX and x <= skipX + skipW
-       and y >= skipY and y <= skipY + skipH then
+    -- 跳过按钮点击区域（右上角，与 Draw 中绘制位置对齐，加宽松区域）
+    local skipH = 30
+    local skipW = 78
+    local skipX = DW - skipW - 12
+    local skipY = 46
+    -- 扩大点击区域（上下左右各扩展 10px）
+    if x >= skipX - 10 and x <= skipX + skipW + 10
+       and y >= skipY - 10 and y <= skipY + skipH + 10 then
         CC.Close()
         return
     end

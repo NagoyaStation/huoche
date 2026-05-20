@@ -1,4 +1,4 @@
--- main.lua - 雪国列车：末日求生 Roguelike
+-- main.lua - 末世：我开火车送快递 Roguelike
 -- 竖屏2D 俯视角，NanoVG 渲染 + VirtualControls 触摸输入
 
 require "urhox-libs.UI.VirtualControls"
@@ -8,6 +8,7 @@ local Ent  = require "Game.Entities"
 local Rend = require "Game.Renderer"
 local RL   = require "Game.Roguelike"
 local Turret = require "Game.Turret"
+local Drone  = require "Game.Drone"
 local Meta = require "Meta.MetaMain"
 local UIEditor = require "Editor.UIEditor"
 local MD = require "Meta.MetaData"
@@ -20,21 +21,26 @@ local Comic = require "Game.ComicCutscene"
 local G = {}
 local vg = nil
 local vc_joystick = nil
-local toolImgHandle = 0  -- 采集装备图片句柄 (模块级，ResetGame不丢失)
+
 local heroImgHandle = 0  -- 主角立绘图片句柄
 local heroAnimHandles = {}  -- 主角序列帧: {idle, raise, swing, hit, recover}
 local heroWalkHandles = {}  -- 主角行走序列帧: {walk1, walk2, walk3, walk4}
 local zombieIdleHandle = 0  -- 僵尸1 idle图片句柄
 local zombieWalkHandles = {} -- 僵尸1 行走序列帧: {a, b, c, d}
+
 local zombie2IdleHandle = 0  -- 僵尸2 idle图片句柄
 local zombie2WalkHandles = {} -- 僵尸2 行走序列帧: {a, b, c, d}
 local crawlerIdleHandle = 0   -- 爬行僵尸 idle图片句柄
 local crawlerWalkHandles = {} -- 爬行僵尸 行走序列帧: 8帧爬行动画
 local trainImgHandle = 0     -- 火车精灵图片句柄
 local trainFrontHandle = 0   -- 火车正面图（升级UI用）
+local trainSandbagHandle = 0 -- 火车顶部沙袋图片句柄
+local mountedShootHandle = 0 -- 上车射击角色图片句柄
+local muzzleFlashHandles = {} -- 开火帧序列: 4帧
 local titleBannerHandle = 0  -- 标题横幅背景
 -- 背景纹理句柄
 local bgGroundHandle = 0
+local railwayImgHandle = 0   -- 铁轨图片句柄
 -- 地图素材图片句柄
 local mapDeadTreeHandle = 0
 local mapPineTreeHandle = 0
@@ -44,6 +50,9 @@ local mapStoneHandle = 0
 local mapOreHandle = 0
 local mapBushHandle = 0
 local mapPebbleHandle = 0
+local droneImgHandle = 0  -- 自动采集无人机图片句柄
+-- 路边装饰物句柄
+local decoHandles = {}  -- { poles={}, houses={}, ruins={} }
 -- HUD 图标句柄
 local hudIconGoldHandle = 0
 local hudIconWoodHandle = 0
@@ -161,13 +170,19 @@ local function ResetGame()
         -- 实体列表
         resources = {},
         decorations = {},
+        lastDecoSide = 0,       -- 上次装饰物生成侧(1=左,2=右)，用于交替
         floatTexts = {},
         particles = {},
+        puffs = {},             -- 烟雾特效（序列帧）
+        bursts = {},            -- 攻击爆点特效（序列帧）
+        dropItems = {},         -- 弹出资源动画
         zombies = {},
         turrets = {},
         turretProjectiles = {},
         bombs = {},
         explosions = {},
+        drones = {},
+        bloodStains = {},
 
         -- 关卡 & 波次系统
         stage = 1,               -- 当前关卡（通关10波后+1）
@@ -232,12 +247,13 @@ end
 -- 挂载图片句柄到 G（ResetGame 后调用）
 ------------------------------------------------------------------------
 local function MountImageHandles()
-    G.toolImg = toolImgHandle
+
     G.heroImg = heroImgHandle
     G.heroAnimFrames = heroAnimHandles
     G.heroWalkFrames = heroWalkHandles
     G.zombieIdleImg = zombieIdleHandle
     G.zombieWalkFrames = zombieWalkHandles
+
     G.zombie2IdleImg = zombie2IdleHandle
     G.zombie2WalkFrames = zombie2WalkHandles
     G.crawlerIdleImg = crawlerIdleHandle
@@ -245,8 +261,12 @@ local function MountImageHandles()
     G.trainImg = trainImgHandle
     G.trainCarriageImg = trainCarriageHandle
     G.trainFrontImg = trainFrontHandle
+    G.trainSandbagImg = trainSandbagHandle
+    G.mountedShootImg = mountedShootHandle
+    G.muzzleFlashFrames = muzzleFlashHandles
     G.titleBannerImg = titleBannerHandle
     G.bgGroundImg = bgGroundHandle
+    G.railwayImg = railwayImgHandle
     G.mapDeadTreeImg = mapDeadTreeHandle
     G.mapPineTreeImg = mapPineTreeHandle
     G.mapGreenTreeImg = mapGreenTreeHandle
@@ -284,16 +304,23 @@ local function MountImageHandles()
     G.FLAME_FRAME_COUNT = 21
     G.FLAME_FRAME_W = 101
     G.FLAME_FRAME_H = 235
+    -- 烟雾 & 攻击爆点序列帧
+    G.smokeAFrames = smokeAFrameHandles
+    G.smokeBFrames = smokeBFrameHandles
+    G.burstFrames = burstFrameHandles
     -- 技能按钮图片
     G.skillBoardTrainImg = skillBoardTrainHandle
     G.skillBoardDisabledImg = skillBoardDisabledHandle
     G.skillDismountImg = skillDismountHandle
+    G.droneImg = droneImgHandle
     G.skillFrameImg = skillFrameHandle
     -- 炸弹 & 爆炸帧动画
     G.bombImg = bombImgHandle
     G.bombRedImg = bombRedImgHandle
     G.explosionFrames = explosionFrameHandles
     G.skillBombImg = skillBombHandle
+    -- 路边装饰物图片
+    G.decoImgs = decoHandles
 end
 
 --- 根据局外选择的角色动态加载图片到 G
@@ -329,6 +356,14 @@ local function LoadActiveCharImages()
             wFrames[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
         end
         G.heroWalkFrames = wFrames
+    end
+
+    -- 加载角色专属上车图片（mounted shooting image）
+    if charDef.mountedImg then
+        local mImg = nvgCreateImage(vg, charDef.mountedImg, NVG_IMAGE_NEAREST)
+        if mImg and mImg ~= 0 then
+            G.mountedShootImg = mImg
+        end
     end
 
     -- 扫描所有帧图片，取最大宽高作为统一画布尺寸（避免帧间大小跳变）
@@ -399,6 +434,8 @@ local function StartLevel()
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"
     G.hintTimer = 4.0
     Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
+    Drone.Init(G)
+    Drone.UnlockDrone(G)  -- 默认解锁1架采集无人机
     Ent.CreatePlayer(G)
     print("[Game] Started playing!")
 end
@@ -426,13 +463,7 @@ function Start()
         return
     end
 
-    -- 加载采集装备图片
-    toolImgHandle = nvgCreateImage(vg, "image/tile_0115.png", 0)
-    if toolImgHandle == 0 then
-        print("WARNING: Failed to load tool image tile_0115.png")
-    else
-        print("Loaded tool image, handle=" .. tostring(toolImgHandle))
-    end
+
 
     -- 加载主角序列帧动画 (idle, raise, swing, hit, recover)
     local animFiles = {
@@ -482,6 +513,8 @@ function Start()
     end
     print("Loaded zombie1 frames: idle + " .. #zombieWalkHandles .. " walk")
 
+
+
     -- 加载僵尸2序列帧 (棕色大衣版)
     zombie2IdleHandle = nvgCreateImage(vg, "image/zombie_idle_20260415074148.png", NVG_IMAGE_NEAREST)
     local zombie2WalkFiles = {
@@ -518,11 +551,17 @@ function Start()
     trainImgHandle = nvgCreateImage(vg, "image/edited_train_clean_edge_20260416031151.png", NVG_IMAGE_NEAREST)
     trainCarriageHandle = nvgCreateImage(vg, "image/train_carriage_20260416100938.png", NVG_IMAGE_NEAREST)
     trainFrontHandle = nvgCreateImage(vg, "image/train_front_20260422062046.png", 0)
+    trainSandbagHandle = nvgCreateImage(vg, "image/沙袋雪地.png", 0)
+    mountedShootHandle = nvgCreateImage(vg, "image/Layer_0 (11).png", 0)
+    for i = 1, 4 do
+        muzzleFlashHandles[i] = nvgCreateImage(vg, "image/开火帧" .. i .. ".png", 0)
+    end
     titleBannerHandle = nvgCreateImage(vg, "image/title_banner_20260422074156.png", 0)
-    print("Loaded train sprite: " .. trainImgHandle .. " carriage: " .. trainCarriageHandle .. " front: " .. trainFrontHandle)
+    print("Loaded train sprite: " .. trainImgHandle .. " carriage: " .. trainCarriageHandle .. " front: " .. trainFrontHandle .. " sandbag: " .. trainSandbagHandle)
 
     -- 背景纹理
     bgGroundHandle = nvgCreateImage(vg, "image/bg_white_snow_20260416070957.png", NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY)
+    railwayImgHandle = nvgCreateImage(vg, "image/铁轨旧.png", NVG_IMAGE_REPEATY)
 
     -- 地图素材（像素风统一风格）
     mapDeadTreeHandle = nvgCreateImage(vg, "image/edited_map_dead_tree_clean_20260416060145.png", NVG_IMAGE_NEAREST)
@@ -534,16 +573,46 @@ function Start()
     mapBushHandle = nvgCreateImage(vg, "image/map_bush_small_20260416074158.png", NVG_IMAGE_NEAREST)
     mapPebbleHandle = nvgCreateImage(vg, "image/map_pebble_v2_20260416074909.png", NVG_IMAGE_NEAREST)
 
+    -- 路边装饰物图片
+    decoHandles.poles = {
+        nvgCreateImage(vg, "image/地图装饰/电线杆.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/电线杆2.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/电线杆3.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/电线杆4.png", 0),
+    }
+    decoHandles.houses = {
+        nvgCreateImage(vg, "image/地图装饰/装饰房.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰房1.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰房2.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰房3.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰房4.png", 0),
+    }
+    decoHandles.small = {
+        nvgCreateImage(vg, "image/地图装饰/装饰房5.png", 0),  -- 小门栏
+    }
+    decoHandles.ruins = {
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟1.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟2.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟3.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟4.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟5.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟6.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟7.png", 0),
+        nvgCreateImage(vg, "image/地图装饰/装饰废墟8.png", 0),
+    }
+    print("Loaded deco images: poles=" .. #decoHandles.poles .. " houses=" .. #decoHandles.houses .. " ruins=" .. #decoHandles.ruins)
+
     -- 标题背景
     titleBgHandle = nvgCreateImage(vg, "image/title_bg_20260421072428.png", 0)
 
     -- HUD 图标
     hudIconGoldHandle = nvgCreateImage(vg, "image/hud_gold_coin.png", 0)
-    hudIconWoodHandle = nvgCreateImage(vg, "image/hud_wood_log.png", 0)
-    hudIconStoneHandle = nvgCreateImage(vg, "image/hud_icon_stone_20260416075733.png", 0)
-    hudIconGemHandle = nvgCreateImage(vg, "image/hud_icon_gem_20260416075717.png", 0)
+    hudIconWoodHandle = nvgCreateImage(vg, "image/图层_2 (1).png", 0)
+    hudIconStoneHandle = nvgCreateImage(vg, "image/图层_3 (1).png", 0)
+    hudIconGemHandle = nvgCreateImage(vg, "image/图层_4 (1).png", 0)
     hudSettingsHandle = nvgCreateImage(vg, "image/hud_settings.png", 0)
-    hudFrameCapHandle = nvgCreateImage(vg, "image/图层_6.png", 0)
+    hudFrameCapHandle = nvgCreateImage(vg, "image/局内资源外框.png", 0)
     hudFrameMidHandle = nvgCreateImage(vg, "image/图层_7.png", NVG_IMAGE_REPEATX)
     hudInnerFrameHandle = nvgCreateImage(vg, "image/内框.png", 0)
     hudSettingsFrameHandle = nvgCreateImage(vg, "image/设置框底.png", 0)
@@ -590,7 +659,13 @@ function Start()
         turret_sniper   = nvgCreateImage(vg, "image/icon_sniper.png", 0),
         turret_electric = nvgCreateImage(vg, "image/icon_electric.png", 0),
         turret_rocket   = nvgCreateImage(vg, "image/icon_rocket.png", 0),
+        -- 无人机卡图标
+        drone = nvgCreateImage(vg, "image/b262b1ff-cae3-4ba3-99e6-9e7f9f63f9bb.png", 0),
     }
+
+    -- 无人机图片
+    droneImgHandle = nvgCreateImage(vg, "image/b262b1ff-cae3-4ba3-99e6-9e7f9f63f9bb.png", 0)
+    print("Loaded drone image: " .. droneImgHandle)
 
     -- 技能按钮图片
     skillBoardTrainHandle = nvgCreateImage(vg, "image/局内上车按钮.png", 0)
@@ -620,6 +695,21 @@ function Start()
     for i = 1, 21 do
         local path = string.format("image/火焰特效/flame_%02d.png", i)
         flameFrameHandles[i] = nvgCreateImage(vg, path, 0)
+    end
+
+    -- 烟雾特效序列帧 (A: 9帧, B: 16帧)
+    smokeAFrameHandles = {}
+    for i = 1, 9 do
+        smokeAFrameHandles[i] = nvgCreateImage(vg, "image/特效/烟雾特效" .. i .. ".png", 0)
+    end
+    smokeBFrameHandles = {}
+    for i = 1, 16 do
+        smokeBFrameHandles[i] = nvgCreateImage(vg, "image/特效/第二种烟雾特效" .. i .. ".png", 0)
+    end
+    -- 攻击爆点序列帧 (4帧)
+    burstFrameHandles = {}
+    for i = 1, 4 do
+        burstFrameHandles[i] = nvgCreateImage(vg, "image/特效/攻击爆点" .. i .. ".png", 0)
     end
 
     print("Loaded map sprites: deadTree=" .. mapDeadTreeHandle .. " pine=" .. mapPineTreeHandle .. " green=" .. mapGreenTreeHandle .. " stone=" .. mapStoneHandle .. " ore=" .. mapOreHandle .. " bush=" .. mapBushHandle .. " pebble=" .. mapPebbleHandle)
@@ -871,6 +961,7 @@ function HandleUpdate(eventType, eventData)
     -- 更新丧尸 (朝列车移动 + 攻击列车)
     Ent.UpdateZombies(G, dt)
     Turret.Update(G, dt)
+    Drone.Update(G, dt)
 
     -- 更新资源节点 (受击动画/清理)
     Ent.UpdateResources(G, dt)
@@ -896,9 +987,19 @@ function HandleUpdate(eventType, eventData)
     Ent.UpdateBombs(G, dt, G.lastScrollDelta or 0)
     Ent.UpdateExplosions(G, dt)
 
-    -- 更新浮动文字 & 粒子
+    -- 更新浮动文字 & 粒子 & 血迹
     Ent.UpdateFloatTexts(G, dt)
     Ent.UpdateParticles(G, dt)
+    Ent.UpdatePuffs(G, dt)
+    Ent.UpdateBursts(G, dt)
+    Ent.UpdateDropItems(G, dt)
+    Ent.UpdateBloodStains(G, dt)
+
+    -- 火车受击闪红递减
+    if (G.trainHitFlash or 0) > 0 then
+        G.trainHitFlash = G.trainHitFlash - dt
+        if G.trainHitFlash < 0 then G.trainHitFlash = 0 end
+    end
 
     -- 提示计时器
     if G.hintTimer > 0 then
@@ -911,9 +1012,14 @@ end
 ------------------------------------------------------------------------
 local mouseDragging = false
 
+local lastPointerDownFrame = -1
 function HandleMouseDown(eventType, eventData)
+    -- 帧级去重：触摸屏会同时触发 Mouse + Touch，只处理第一个
+    local frame = time.frameNumber
+    if frame == lastPointerDownFrame then return end
     local button = eventData["Button"]:GetInt()
     if button ~= MOUSEB_LEFT then return end
+    lastPointerDownFrame = frame
     local mx = eventData["X"]:GetInt()
     local my = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
@@ -981,6 +1087,11 @@ function HandleMouseUp(eventType, eventData)
 end
 
 function HandleTouchBegin(eventType, eventData)
+    -- 帧级去重（与 HandleMouseDown 共享）
+    local frame = time.frameNumber
+    if frame == lastPointerDownFrame then return end
+    lastPointerDownFrame = frame
+
     local tx = eventData["X"]:GetInt()
     local ty = eventData["Y"]:GetInt()
     local dpr = graphics:GetDPR()
@@ -1391,7 +1502,13 @@ local function HandleGameSettingClick(x, y)
     return true  -- 吞掉弹窗内点击
 end
 
+local lastClickFrame = -1
 function HandleClick(x, y)
+    -- 同一帧内去重（触摸屏会同时触发 Mouse + Touch 事件）
+    local frame = time.frameNumber
+    if frame == lastClickFrame then return end
+    lastClickFrame = frame
+
     -- 游戏内设置弹窗优先拦截（所有状态）
     if gameSettingPopup.show then
         HandleGameSettingClick(x, y)
@@ -1589,6 +1706,9 @@ function HandleRender(eventType, eventData)
     -- 装饰物 (枯树、雪堆)
     Rend.DrawDecorations(vg, G)
 
+    -- 地面血迹（僵尸死亡残留，在装饰物之后、资源之前）
+    Rend.DrawBloodStains(vg, G)
+
     -- 资源
     Rend.DrawResources(vg, G)
 
@@ -1598,6 +1718,7 @@ function HandleRender(eventType, eventData)
     -- 装甲列车
     Rend.DrawTrain(vg, G)
     Turret.Draw(vg, G)
+    Drone.Draw(vg, G)
 
     -- 炸弹（地面上）
     Rend.DrawBombs(vg, G)
@@ -1605,8 +1726,14 @@ function HandleRender(eventType, eventData)
     -- 丧尸
     Rend.DrawZombies(vg, G)
 
+    -- 携带资源跟随队列（在玩家后面层级）
+    Rend.DrawCarryQueue(vg, G)
+
     -- 玩家 (人类幸存者)
     Rend.DrawPlayer(vg, G)
+
+    -- 资源血条 & 掉落信息（在玩家之后绘制，保证不被遮挡）
+    Rend.DrawResourceUI(vg, G)
 
     -- 瞄准虚线（上车状态，玩家之后绘制）
     Rend.DrawAimLine(vg, G)
@@ -1617,8 +1744,11 @@ function HandleRender(eventType, eventData)
     -- 爆炸特效
     Rend.DrawExplosions(vg, G)
 
-    -- 粒子 & 浮动文字
+    -- 粒子 & 烟雾 & 弹出资源 & 浮动文字
     Rend.DrawParticles(vg, G)
+    Rend.DrawPuffs(vg, G)
+    Rend.DrawBursts(vg, G)
+    Rend.DrawDropItems(vg, G)
     Rend.DrawFloatTexts(vg, G)
 
     -- HUD

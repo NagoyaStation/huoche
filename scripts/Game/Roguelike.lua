@@ -2,6 +2,7 @@
 local C = require "Game.Config"
 local Ent = require "Game.Entities"
 local Turret = require "Game.Turret"
+local Drone = require "Game.Drone"
 local RL = {}
 
 ------------------------------------------------------------------------
@@ -39,6 +40,13 @@ function RL.PrepareUpgrade(G)
             -- 炮塔卡：槽位有空 + 该类型尚未解锁 + 该类型在局外已装备
             if slotsLeft > 0 and not unlockedTypes[card.turretType] and equippedSet[card.turretType] then
                 table.insert(available, i)
+            end
+        elseif card.isDrone then
+            -- 无人机卡：数量未达上限
+            if Drone.GetCount(G) < (C.DRONE.MAX_COUNT or 3) then
+                if not isFirstUpgrade then
+                    table.insert(available, i)
+                end
             end
         else
             if not isFirstUpgrade then

@@ -387,6 +387,7 @@ function T.Update(G, dt)
                                     if z.hp <= 0 then
                                         z.dead = true
                                         G.gold = (G.gold or 0) + (z.reward or 5)
+                                        E.SpawnZombieDeath(G, z.x, z.y)
                                     end
                                 end
                             end
@@ -403,6 +404,7 @@ function T.Update(G, dt)
                         if nearEnemy.hp <= 0 then
                             nearEnemy.dead = true
                             G.gold = (G.gold or 0) + (nearEnemy.reward or 5)
+                            E.SpawnZombieDeath(G, nearEnemy.x, nearEnemy.y)
                         end
                     end
 
@@ -518,6 +520,7 @@ function T.UpdateProjectiles(G, dt)
                         if p.target.hp <= 0 then
                             p.target.dead = true
                             G.gold = (G.gold or 0) + (p.target.reward or 5)
+                            E.SpawnZombieDeath(G, p.target.x, p.target.y)
                         end
                     end
                     -- 命中火花
@@ -551,6 +554,7 @@ function T.UpdateProjectiles(G, dt)
                         if p.target.hp <= 0 then
                             p.target.dead = true
                             G.gold = (G.gold or 0) + (p.target.reward or 5)
+                            E.SpawnZombieDeath(G, p.target.x, p.target.y)
                         end
                     end
                     -- 命中火花
@@ -611,8 +615,9 @@ function T.UpdateProjectiles(G, dt)
                                 G.killCount = (G.killCount or 0) + 1
                                 G.gold = (G.gold or 0) + (z.reward or 5)
                                 E.SpawnFloatText(G, z.x, z.y - 10, "击杀!", "gold")
+                                E.SpawnZombieDeath(G, z.x, z.y)
                             else
-                                E.SpawnFloatText(G, z.x, z.y - 15, "-" .. (p.damage or 5), "damage")
+                                E.SpawnFloatText(G, z.x, z.y - 15, tostring(p.damage or 5), "damage")
                             end
                             break
                         end
@@ -990,6 +995,7 @@ function T.RocketAOE(G, ex, ey)
                 if z.hp <= 0 then
                     z.dead = true
                     G.gold = (G.gold or 0) + (z.reward or 5)
+                    E.SpawnZombieDeath(G, z.x, z.y)
                 end
             end
         end

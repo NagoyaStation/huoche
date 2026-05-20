@@ -1,4 +1,4 @@
--- Game/Renderer.lua - NanoVG 渲染：雪国列车末日求生
+-- Game/Renderer.lua - NanoVG 渲染：末世：我开火车送快递
 local C = require "Game.Config"
 local Ent = require "Game.Entities"
 local Turret = require "Game.Turret"
@@ -327,116 +327,127 @@ function R.DrawRailway(vg, G)
     local W, H = G.screenW, G.screenH
     local cx = G.cartCenterX
     local scrollY = G.scrollY or 0
-    local railSep = G.railSep or 36
-    local railW = 3.5
 
-    -- 道碴底层 → 横向渐变路基（中间稍亮，两侧暗）
-    local ballastW = railSep + 24
-    local blR, blG, blB = C.CLR.ballast_color[1], C.CLR.ballast_color[2], C.CLR.ballast_color[3]
-    do
-        local ballastPaint = nvgLinearGradient(vg, cx - ballastW / 2, 0, cx + ballastW / 2, 0,
-            nvgRGBA(blR - 5, blG - 5, blB - 5, 50),
-            nvgRGBA(blR + 5, blG + 5, blB + 3, 70))
+    local img = G.railwayImg
+    if not img or img == 0 then return end
+
+    -- 获取铁轨图片原始尺寸
+    local imgW, imgH = nvgImageSize(vg, img)
+    if imgW == 0 or imgH == 0 then return end
+
+    -- 铁轨显示宽度 = railSep + 一些余量，与道路宽度协调
+    local railSep = G.railSep or 40
+    local displayW = railSep + 24
+    -- 按宽度等比计算显示高度
+    local displayH = displayW * (imgH / imgW)
+
+    -- 用 scrollY 控制铁轨滚动（向下平铺）
+    local offsetY = scrollY % displayH
+
+    -- 从屏幕顶部往下平铺铁轨图片
+    local startY = G.renderTopY - offsetY
+    for ty = startY, H, displayH do
+        local paint = nvgImagePattern(vg, cx - displayW / 2, ty, displayW, displayH, 0, img, 1.0)
         nvgBeginPath(vg)
-        nvgRect(vg, cx - ballastW / 2, G.renderTopY, ballastW, H - G.renderTopY)
-        nvgFillPaint(vg, ballastPaint)
+        nvgRect(vg, cx - displayW / 2, ty, displayW, displayH)
+        nvgFillPaint(vg, paint)
         nvgFill(vg)
-    end
-
-    -- 枕木 (随世界滚动) → 渐变 + 轮廓
-    local sleeperW = railSep + 20
-    local sleeperH = 7
-    local sleeperSpacing = 26
-    local offset = sleeperSpacing - (scrollY % sleeperSpacing)
-    local slR, slG, slB = C.CLR.sleeper_color[1], C.CLR.sleeper_color[2], C.CLR.sleeper_color[3]
-
-    for sy = G.renderTopY - sleeperH + offset, H + sleeperH, sleeperSpacing do
-        -- 枕木主体 → 上亮下暗渐变
-        do
-            local sleeperPaint = nvgLinearGradient(vg, 0, sy, 0, sy + sleeperH,
-                nvgRGBA(slR + 12, slG + 10, slB + 8, 255),
-                nvgRGBA(slR - 10, slG - 12, slB - 8, 255))
-            nvgBeginPath(vg)
-            nvgRoundedRect(vg, cx - sleeperW / 2, sy, sleeperW, sleeperH, 1.5)
-            nvgFillPaint(vg, sleeperPaint)
-            nvgFill(vg)
-            -- 枕木轮廓
-            nvgStrokeColor(vg, nvgRGBA(slR - 20, slG - 22, slB - 18, 60))
-            nvgStrokeWidth(vg, 0.6)
-            nvgStroke(vg)
-        end
-    end
-
-    -- 钢轨 (两根平行) → 横向渐变 + 高光条
-    for _, side in ipairs({-1, 1}) do
-        local rx = cx + side * railSep / 2 - railW / 2
-        -- 轨道主体 → 横向渐变（左亮右暗，柱面感）
-        do
-            local railPaint = nvgLinearGradient(vg, rx, 0, rx + railW, 0,
-                nvgRGBA(C.CLR.rail_color[1] + 10, C.CLR.rail_color[2] + 8, C.CLR.rail_color[3] + 6, 255),
-                nvgRGBA(C.CLR.rail_color[1] - 8, C.CLR.rail_color[2] - 10, C.CLR.rail_color[3] - 8, 255))
-            nvgBeginPath(vg)
-            nvgRect(vg, rx, G.renderTopY, railW, H - G.renderTopY)
-            nvgFillPaint(vg, railPaint)
-            nvgFill(vg)
-        end
-        -- 轨道高光条（偏左中心亮线，金属反光）
-        nvgBeginPath(vg)
-        nvgRect(vg, rx + 0.8, G.renderTopY, 0.8, H - G.renderTopY)
-        nvgFillColor(vg, nvgRGBA(C.CLR.rail_light[1], C.CLR.rail_light[2], C.CLR.rail_light[3], 90))
-        nvgFill(vg)
-        -- 轨道右侧暗边
-        nvgBeginPath(vg)
-        nvgRect(vg, rx + railW - 0.5, G.renderTopY, 0.5, H - G.renderTopY)
-        nvgFillColor(vg, nvgRGBA(C.CLR.rail_color[1] - 20, C.CLR.rail_color[2] - 22, C.CLR.rail_color[3] - 18, 80))
-        nvgFill(vg)
-    end
-
-    -- 碎石纹理点缀 → 径向渐变微光斑
-    local gSeed = math.floor(scrollY * 0.05) % 50
-    for i = 0, 10 do
-        local gx = cx + ((i * 11 + gSeed * 7) % math.floor(ballastW)) - ballastW / 2
-        local gy = G.renderTopY + ((i * 53 + gSeed * 19) % math.floor(H - G.renderTopY))
-        local gr = 1 + (i % 3) * 0.6
-        do
-            local gravelPaint = nvgRadialGradient(vg, gx, gy, 0, gr,
-                nvgRGBA(blR + 10, blG + 8, blB + 5, 55),
-                nvgRGBA(blR, blG, blB, 0))
-            nvgBeginPath(vg)
-            nvgCircle(vg, gx, gy, gr * 1.4)
-            nvgFillPaint(vg, gravelPaint)
-            nvgFill(vg)
-        end
-    end
-
-    -- 铁轨两侧碎石边缘渐变
-    local edgeW = 8
-    for _, side in ipairs({-1, 1}) do
-        local bx = cx + side * ballastW / 2
-        do
-            local grad
-            if side == -1 then
-                grad = nvgLinearGradient(vg, bx - edgeW, 0, bx, 0,
-                    nvgRGBA(blR, blG, blB, 0),
-                    nvgRGBA(blR, blG, blB, 40))
-            else
-                grad = nvgLinearGradient(vg, bx, 0, bx + edgeW, 0,
-                    nvgRGBA(blR, blG, blB, 40),
-                    nvgRGBA(blR, blG, blB, 0))
-            end
-            nvgBeginPath(vg)
-            nvgRect(vg, side == -1 and (bx - edgeW) or bx, G.renderTopY, edgeW, H - G.renderTopY)
-            nvgFillPaint(vg, grad)
-            nvgFill(vg)
-        end
     end
 end
 
 ------------------------------------------------------------------------
 -- 3. 绘制装饰物 (枯树、雪堆、残骸)
 ------------------------------------------------------------------------
+------------------------------------------------------------------------
+-- 地面血迹（僵尸死亡后残留）
+------------------------------------------------------------------------
+function R.DrawBloodStains(vg, G)
+    local stains = G.bloodStains
+    if not stains or #stains == 0 then return end
+
+    for _, b in ipairs(stains) do
+        if b.y < -30 or b.y > G.screenH + 30 then goto cont_bs end
+
+        -- 淡出：最后2秒开始渐隐
+        local alpha = 1.0
+        if b.life < 2.0 then
+            alpha = math.max(0, b.life / 2.0)
+        end
+        local a = math.floor(alpha * 160)
+
+        nvgSave(vg)
+        nvgTranslate(vg, b.x, b.y)
+        nvgRotate(vg, b.angle)
+
+        -- 主血迹（不规则椭圆，绿色僵尸血）
+        nvgBeginPath(vg)
+        nvgEllipse(vg, 0, 0, b.size, b.size * 0.6)
+        nvgFillColor(vg, nvgRGBA(20, 100, 15, a))
+        nvgFill(vg)
+
+        -- 深色内核
+        nvgBeginPath(vg)
+        nvgEllipse(vg, 0, 0, b.size * 0.5, b.size * 0.3)
+        nvgFillColor(vg, nvgRGBA(10, 70, 5, a))
+        nvgFill(vg)
+
+        -- 溅射斑点
+        for _, sp in ipairs(b.splats) do
+            nvgBeginPath(vg)
+            nvgCircle(vg, sp.dx, sp.dy, sp.sz)
+            nvgFillColor(vg, nvgRGBA(25, 110, 20, math.floor(alpha * 120)))
+            nvgFill(vg)
+        end
+
+        nvgRestore(vg)
+        ::cont_bs::
+    end
+end
+
 function R.DrawDecorations(vg, G)
-    -- 装饰物已移除
+    -- 裁剪区域：限制在设计分辨率内，不让装饰物溢出到黑边
+    nvgSave(vg)
+    nvgScissor(vg, 0, 0, G.screenW, G.screenH)
+
+    for _, d in ipairs(G.decorations) do
+        if d.y < G.renderTopY - 80 or d.y > G.screenH + 80 then goto continue_deco end
+        local img = d.img
+        if not img or img == 0 then goto continue_deco end
+
+        -- 获取图片原始尺寸，保持宽高比
+        local imgW, imgH = nvgImageSize(vg, img)
+        if imgW <= 0 or imgH <= 0 then goto continue_deco end
+
+        -- 装饰物使用固定缩放（不随滚动变化，避免看起来在"动"）
+        local baseH
+        if d.cat == "pole" then
+            baseH = 70
+        elseif d.cat == "small" then
+            baseH = 35
+        else
+            baseH = 80
+        end
+        local drawH = baseH
+        local drawW = drawH * (imgW / imgH)
+
+        -- 翻转支持：左侧默认朝右，右侧翻转朝左
+        local flipX = (d.side == 2)
+        if d.flip then flipX = not flipX end
+
+        if flipX then
+            nvgSave(vg)
+            nvgTranslate(vg, d.x, d.y)
+            nvgScale(vg, -1, 1)
+            drawSprite(vg, img, 0, 0, drawW, drawH, 0.9)
+            nvgRestore(vg)
+        else
+            drawSprite(vg, img, d.x, d.y, drawW, drawH, 0.9)
+        end
+
+        ::continue_deco::
+    end
+
+    nvgRestore(vg)  -- 移除裁剪
 end
 
 ------------------------------------------------------------------------
@@ -461,6 +472,13 @@ function R.DrawTrain(vg, G)
         nvgFill(vg)
     end
 
+    -- 闪红参数
+    local hitFlash = (G.trainHitFlash or 0) > 0
+    local hitShakeX = 0
+    if hitFlash then
+        hitShakeX = math.sin(t * 50) * 2.0
+    end
+
     -- === 车厢精灵 (先绘制，图层在火车下方) ===
     local carriageImg = G.trainCarriageImg
     if carriageImg and carriageImg ~= 0 then
@@ -474,14 +492,40 @@ function R.DrawTrain(vg, G)
         local cVibeY = math.sin(t * 30 + 0.3) * 0.25
 
         -- 紧接火车顶部上方（火车朝下行驶，后方=屏幕上方）
-        local cDrawX = cx - cDrawW / 2 + cVibeX
+        local cDrawX = cx - cDrawW / 2 + cVibeX + hitShakeX
         local cDrawY = topY - 5 - cDrawH + 32 + cVibeY
 
-        local cPaint = nvgImagePattern(vg, cDrawX, cDrawY, cDrawW, cDrawH, 0, carriageImg, 1.0)
-        nvgBeginPath(vg)
-        nvgRect(vg, cDrawX, cDrawY, cDrawW, cDrawH)
-        nvgFillPaint(vg, cPaint)
-        nvgFill(vg)
+        -- 车厢闪红：三步法（擦除→红色填充→降透明度重绘）
+        if hitFlash then
+            local ts = math.min(1.0, G.trainHitFlash / 0.25)
+            -- Step1: 用精灵alpha擦除该区域，打出精灵形状的"透明洞"
+            nvgGlobalCompositeBlendFunc(vg, NVG_ZERO, NVG_ONE_MINUS_SRC_ALPHA)
+            local cErase = nvgImagePattern(vg, cDrawX, cDrawY, cDrawW, cDrawH, 0, carriageImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, cDrawX, cDrawY, cDrawW, cDrawH)
+            nvgFillPaint(vg, cErase)
+            nvgFill(vg)
+            -- Step2: 红色只填充透明洞（1-dst_alpha仅在洞内>0）
+            nvgGlobalCompositeBlendFunc(vg, NVG_ONE_MINUS_DST_ALPHA, NVG_ONE)
+            nvgBeginPath(vg)
+            nvgRect(vg, cDrawX, cDrawY, cDrawW, cDrawH)
+            nvgFillColor(vg, nvgRGBA(255, 50, 25, 255))
+            nvgFill(vg)
+            -- Step3: 恢复正常混合，降透明度重绘让红色透出
+            nvgGlobalCompositeOperation(vg, NVG_SOURCE_OVER)
+            local cBlendA = 1.0 - ts * 0.55
+            local cPaint = nvgImagePattern(vg, cDrawX, cDrawY, cDrawW, cDrawH, 0, carriageImg, cBlendA)
+            nvgBeginPath(vg)
+            nvgRect(vg, cDrawX, cDrawY, cDrawW, cDrawH)
+            nvgFillPaint(vg, cPaint)
+            nvgFill(vg)
+        else
+            local cPaint = nvgImagePattern(vg, cDrawX, cDrawY, cDrawW, cDrawH, 0, carriageImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, cDrawX, cDrawY, cDrawW, cDrawH)
+            nvgFillPaint(vg, cPaint)
+            nvgFill(vg)
+        end
     end
 
     -- === 火车精灵 ===
@@ -495,18 +539,90 @@ function R.DrawTrain(vg, G)
         local vibeX = math.sin(t * 25) * 0.4
         local vibeY = math.sin(t * 30) * 0.3
 
-        local drawX = cx - drawW / 2 + vibeX
+        local drawX = cx - drawW / 2 + vibeX + hitShakeX
         local drawY = topY - 5 + vibeY
 
-        local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, trainImg, 1.0)
-        nvgBeginPath(vg)
-        nvgRect(vg, drawX, drawY, drawW, drawH)
-        nvgFillPaint(vg, imgPaint)
-        nvgFill(vg)
+        -- 火车闪红：三步法（擦除→红色填充→降透明度重绘）
+        if hitFlash then
+            local ts = math.min(1.0, G.trainHitFlash / 0.25)
+            -- Step1: 用精灵alpha擦除该区域
+            nvgGlobalCompositeBlendFunc(vg, NVG_ZERO, NVG_ONE_MINUS_SRC_ALPHA)
+            local tErase = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, trainImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, drawX, drawY, drawW, drawH)
+            nvgFillPaint(vg, tErase)
+            nvgFill(vg)
+            -- Step2: 红色填充透明洞
+            nvgGlobalCompositeBlendFunc(vg, NVG_ONE_MINUS_DST_ALPHA, NVG_ONE)
+            nvgBeginPath(vg)
+            nvgRect(vg, drawX, drawY, drawW, drawH)
+            nvgFillColor(vg, nvgRGBA(255, 50, 25, 255))
+            nvgFill(vg)
+            -- Step3: 恢复正常混合，降透明度重绘
+            nvgGlobalCompositeOperation(vg, NVG_SOURCE_OVER)
+            local tBlendA = 1.0 - ts * 0.55
+            local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, trainImg, tBlendA)
+            nvgBeginPath(vg)
+            nvgRect(vg, drawX, drawY, drawW, drawH)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+        else
+            local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, trainImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, drawX, drawY, drawW, drawH)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+        end
     end
 
-    -- === 程序化烟雾粒子 (绘制在火车上层，向车尾后方飘散) ===
-    do
+    -- === 沙袋射击掩体 (绘制在火车精灵上方，作为上车射击点) ===
+    local sandbagImg = G.trainSandbagImg
+    if sandbagImg and sandbagImg ~= 0 then
+        -- 沙袋原图 925x589，等比缩放到适合火车的尺寸
+        local sbDrawW = 52
+        local sbDrawH = sbDrawW * 589 / 925
+
+        -- 同步火车震动
+        local sbVibeX = math.sin(t * 25) * 0.4
+        local sbVibeY = math.sin(t * 30) * 0.3
+
+        -- 放在上车射击点位置（cartBottomY - 125 = 玩家上车锁定Y）
+        local sbCenterY = bottomY - 125
+        local sbDrawX = cx - sbDrawW / 2 + sbVibeX + hitShakeX
+        local sbDrawY = sbCenterY - sbDrawH / 2 + sbVibeY
+
+        -- 沙袋闪红：同火车三步法
+        if hitFlash then
+            local ts = math.min(1.0, G.trainHitFlash / 0.25)
+            nvgGlobalCompositeBlendFunc(vg, NVG_ZERO, NVG_ONE_MINUS_SRC_ALPHA)
+            local sbErase = nvgImagePattern(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH, 0, sandbagImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH)
+            nvgFillPaint(vg, sbErase)
+            nvgFill(vg)
+            nvgGlobalCompositeBlendFunc(vg, NVG_ONE_MINUS_DST_ALPHA, NVG_ONE)
+            nvgBeginPath(vg)
+            nvgRect(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH)
+            nvgFillColor(vg, nvgRGBA(255, 50, 25, 255))
+            nvgFill(vg)
+            nvgGlobalCompositeOperation(vg, NVG_SOURCE_OVER)
+            local sbBlendA = 1.0 - ts * 0.55
+            local sbPaint = nvgImagePattern(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH, 0, sandbagImg, sbBlendA)
+            nvgBeginPath(vg)
+            nvgRect(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH)
+            nvgFillPaint(vg, sbPaint)
+            nvgFill(vg)
+        else
+            local sbPaint = nvgImagePattern(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH, 0, sandbagImg, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, sbDrawX, sbDrawY, sbDrawW, sbDrawH)
+            nvgFillPaint(vg, sbPaint)
+            nvgFill(vg)
+        end
+    end
+
+    -- === 程序化烟雾粒子 (血量低于50%时出现) ===
+    if (G.trainHP or 0) < (G.trainMaxHP or 1) * 0.5 then
         -- 烟囱位置：火车中部偏下（图片约70%高度处的圆形烟囱口）
         local chimneyX = cx
         local chimneyY = topY + ch * 0.72
@@ -628,7 +744,8 @@ function R.DrawTrainHP(vg, G)
 end
 
 ------------------------------------------------------------------------
--- 5. 绘制提交方块 (固定正方形方块 — 列车下方)
+-- 5. 绘制提交方块 (资源收集框 — 列车下方)
+--    上方: 资源图标堆叠  下方: 进度数字+绿色填充条
 ------------------------------------------------------------------------
 function R.DrawSubmitBox(vg, G)
     local sb = G.submitBox
@@ -637,56 +754,76 @@ function R.DrawSubmitBox(vg, G)
     local sh = C.SUBMIT_BOX_H
     local sx = sb.x - sw / 2
     local sy = sb.y - sh / 2
-    local pulse = math.sin(t * 3) * 0.15 + 0.85
+    local r = 8        -- 圆角
+    local ratio = math.min(1, G.levelProgress / math.max(1, G.levelTarget))
 
     -- 投影
     do
-        local shP = nvgRadialGradient(vg, sb.x, sb.y + sh / 2 + 3, 4, sw * 0.4,
-            nvgRGBA(0, 0, 0, 40), nvgRGBA(0, 0, 0, 0))
+        local shP = nvgRadialGradient(vg, sb.x, sb.y + sh / 2 + 3, 4, sw * 0.45,
+            nvgRGBA(0, 0, 0, 50), nvgRGBA(0, 0, 0, 0))
         nvgBeginPath(vg)
-        nvgEllipse(vg, sb.x, sb.y + sh / 2 + 3, sw * 0.4, 4)
+        nvgEllipse(vg, sb.x, sb.y + sh / 2 + 3, sw * 0.45, 5)
         nvgFillPaint(vg, shP)
         nvgFill(vg)
     end
 
-    -- 方块背景
+    -- 底部深色背景（整个框体）
     nvgBeginPath(vg)
-    nvgRoundedRect(vg, sx, sy, sw, sh, 8)
-    nvgFillColor(vg, clr(C.CLR.submit_bg))
+    nvgRoundedRect(vg, sx, sy, sw, sh, r)
+    nvgFillColor(vg, nvgRGBA(45, 40, 35, 230))
     nvgFill(vg)
 
-    -- 边框
-    nvgBeginPath(vg)
-    nvgRoundedRect(vg, sx, sy, sw, sh, 8)
-    nvgStrokeColor(vg, clr(C.CLR.submit_border, math.floor(pulse * 180)))
-    nvgStrokeWidth(vg, 1.5)
-    nvgStroke(vg)
-
-    -- 进度条
-    local ratio = math.min(1, G.levelProgress / math.max(1, G.levelTarget))
-    local barH = 4
-    local barW = sw - 8
-    local barX = sx + 4
-    local barY = sy + sh - barH - 4
-
-    nvgBeginPath(vg)
-    nvgRoundedRect(vg, barX, barY, barW, barH, 2)
-    nvgFillColor(vg, nvgRGBA(15, 15, 15, 160))
-    nvgFill(vg)
+    -- 绿色进度条从底部往上填充（整个框体高度）
+    local numZoneH = sh               -- 进度条覆盖整个框体
+    local numZoneY = sy
+    local fillH = numZoneH * ratio
 
     if ratio > 0 then
+        nvgSave(vg)
+        -- 裁剪到框体范围
         nvgBeginPath(vg)
-        nvgRoundedRect(vg, barX, barY, barW * ratio, barH, 2)
-        nvgFillColor(vg, clr(C.CLR.submit_full))
+        nvgRoundedRect(vg, sx, sy, sw, sh, r)
+        nvgPathWinding(vg, NVG_SOLID)
+        nvgIntersectScissor(vg, sx, numZoneY + numZoneH - fillH, sw, fillH)
+
+        -- 绿色渐变填充
+        local gp = nvgLinearGradient(vg, 0, numZoneY + numZoneH, 0, numZoneY,
+            nvgRGBA(60, 150, 50, 255), nvgRGBA(90, 180, 60, 255))
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, sx, sy, sw, sh, r)
+        nvgFillPaint(vg, gp)
         nvgFill(vg)
+        nvgRestore(vg)
     end
 
-    -- 进度文字
+    -- 框体边框（白色边框）
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, sx, sy, sw, sh, r)
+    nvgStrokeColor(vg, nvgRGBA(240, 240, 240, 220))
+    nvgStrokeWidth(vg, 2.0)
+    nvgStroke(vg)
+
+    -- 上方资源图标堆叠（木头在下层偏左，石头在上层偏右，紧凑叠放）
+    local iconSz = 20
+    local iconCY = sy + sh * 0.28    -- 图标中心在上部28%处
+    -- 木头：底层，略偏左下
+    drawSprite(vg, G.hudIconWood, sb.x - 3, iconCY + 1, iconSz, iconSz, 1.0)
+    -- 石头：上层，略偏右上，稍小
+    drawSprite(vg, G.hudIconStone, sb.x + 4, iconCY + 3, iconSz * 0.8, iconSz * 0.8, 1.0)
+
+    -- 下方数字：显示升级所需总资源量
+    local remaining = math.max(0, (G.levelTarget or 0) - (G.levelProgress or 0))
+    local targetStr = tostring(remaining)
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, 11)
+    nvgFontSize(vg, 16)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-    nvgFillColor(vg, clr(C.CLR.text_white))
-    nvgText(vg, sb.x, sb.y - 2, G.levelProgress .. "/" .. G.levelTarget, nil)
+    local numCY = sy + sh * 0.72
+    -- 阴影
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 120))
+    nvgText(vg, sb.x + 0.8, numCY + 0.8, targetStr, nil)
+    -- 白色数字
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+    nvgText(vg, sb.x, numCY, targetStr, nil)
 end
 
 ------------------------------------------------------------------------
@@ -702,6 +839,18 @@ function R.DrawResources(vg, G)
     local bushImg = G.mapBushImg
     local pebbleImg = G.mapPebbleImg
     local woodImgs = { deadTreeImg, pineTreeImg, greenTreeImg }
+
+    -- 当前攻击目标引用（用于画红色光圈）
+    local atkTargetRef = G.player and G.player.atkTarget and G.player.atkTarget.ref or nil
+
+    -- 资源类型 → 掉落图标映射
+    local dropIconMap = {
+        wood   = G.hudIconWood,
+        stone  = G.hudIconStone,
+        ore    = G.hudIconGem,
+        bush   = G.hudIconWood,     -- 灌木掉木材
+        pebble = G.hudIconStone,    -- 碎石掉石头
+    }
 
     for _, r in ipairs(G.resources) do
         if r.dead then goto continue_res end
@@ -728,36 +877,149 @@ function R.DrawResources(vg, G)
 
         -- 选择对应精灵
         local img = nil
+        local treeIdx = 0
         if r.rtype == "wood" then
-            -- 用bobPhase决定随机选哪棵树
-            local treeIdx = (math.floor(r.bobPhase * 10) % 3) + 1
+            treeIdx = (math.floor(r.bobPhase * 10) % 3) + 1
             img = woodImgs[treeIdx]
-            drawSz = sz * 7.2  -- 树木再放大1.5倍 (4.8 * 1.5)
+            drawSz = sz * 7.2
         elseif r.rtype == "stone" then
             img = stoneImg
         elseif r.rtype == "ore" then
             img = oreImg
         elseif r.rtype == "bush" then
             img = bushImg
-            drawSz = sz * 4.0  -- 灌木比树小
+            drawSz = sz * 4.0
         elseif r.rtype == "pebble" then
             img = pebbleImg
-            drawSz = sz * 3.0  -- 小石头更小
+            drawSz = sz * 3.0
+        end
+
+        -- ① 被攻击时：脚底红色光圈（类似玩家金色光圈）
+        local isBeingAttacked = (atkTargetRef == r)
+        if isBeingAttacked then
+            -- 基于碰撞尺寸而非精灵尺寸，避免树木等高精灵圈太大
+            local haloBase = sz * 2.2
+            if r.rtype == "pebble" then
+                haloBase = sz * 1.4      -- 小石头：光圈缩小
+            end
+            local haloRX = haloBase
+            local haloRY = haloRX * 0.38
+            -- 红圈画在树根/石头底部（精灵以ry为中心，底部在 ry+drawSz/2）
+            local haloCY
+            if r.rtype == "wood" and treeIdx == 2 then
+                haloCY = drawSz * 0.32   -- 松树
+            elseif r.rtype == "wood" and treeIdx == 3 then
+                haloCY = drawSz * 0.28   -- 绿树：树冠大，光环不宜太低
+            elseif r.rtype == "wood" then
+                haloCY = drawSz * 0.24   -- 枯树
+            elseif r.rtype == "bush" then
+                haloCY = drawSz * 0.2    -- 灌木
+            elseif r.rtype == "pebble" then
+                haloCY = drawSz * 0.15   -- 小石头
+            elseif r.rtype == "ore" then
+                haloCY = drawSz * 0.2    -- 矿石
+            else
+                haloCY = drawSz * 0.35   -- 其他资源
+            end
+            local orbAngle = t * 2.0
+
+            nvgSave(vg)
+            nvgTranslate(vg, rx, ry + haloCY)
+
+            -- 底层红色椭圆环
+            nvgBeginPath(vg)
+            nvgEllipse(vg, 0, 0, haloRX, haloRY)
+            nvgStrokeColor(vg, nvgRGBA(255, 60, 40, 80))
+            nvgStrokeWidth(vg, 1.5)
+            nvgStroke(vg)
+
+            -- 两个对称环绕红色亮点 + 拖尾
+            for s = 0, 1 do
+                local baseAngle = orbAngle + s * math.pi
+                for ti = 1, 4 do
+                    local ta = baseAngle - ti * 0.2
+                    local tx = haloRX * math.cos(ta)
+                    local ty = haloRY * math.sin(ta)
+                    local alpha = math.floor(120 * (1 - ti / 5))
+                    local cr = 2.0 - ti * 0.3
+                    nvgBeginPath(vg)
+                    nvgCircle(vg, tx, ty, cr)
+                    nvgFillColor(vg, nvgRGBA(255, 80, 50, alpha))
+                    nvgFill(vg)
+                end
+                local sx = haloRX * math.cos(baseAngle)
+                local sy = haloRY * math.sin(baseAngle)
+                -- 辉光
+                local gp = nvgRadialGradient(vg, sx, sy, 1, 6,
+                    nvgRGBA(255, 70, 40, 180), nvgRGBA(255, 50, 30, 0))
+                nvgBeginPath(vg)
+                nvgCircle(vg, sx, sy, 6)
+                nvgFillPaint(vg, gp)
+                nvgFill(vg)
+                -- 核心亮点
+                nvgBeginPath(vg)
+                nvgCircle(vg, sx, sy, 1.8)
+                nvgFillColor(vg, nvgRGBA(255, 200, 150, 240))
+                nvgFill(vg)
+            end
+
+            nvgRestore(vg)
+        end
+
+        -- ② 受击压缩动画（squash & stretch）
+        local squash = r.squashAnim or 0
+        local scaleX = 1.0
+        local scaleY = 1.0
+        if squash > 0 then
+            -- 压扁：宽变大、高变小，弹性恢复
+            local phase = (1.0 - squash) * math.pi  -- 0→π
+            local squashAmount = math.sin(phase) * 0.25 * squash
+            scaleX = 1.0 + squashAmount
+            scaleY = 1.0 - squashAmount
         end
 
         if img and img ~= 0 then
-            -- 受击闪白效果：叠加白色半透明层
-            if hitFlash then
-                -- 先绘制精灵
-                drawSprite(vg, img, drawX, ry, drawSz, drawSz, 1.0)
-                -- 叠加白色闪光
-                nvgBeginPath(vg)
-                nvgCircle(vg, drawX, ry, drawSz * 0.45)
-                nvgFillColor(vg, nvgRGBA(255, 255, 255, 140))
-                nvgFill(vg)
-            else
-                drawSprite(vg, img, drawX, ry, drawSz, drawSz, 1.0)
+            nvgSave(vg)
+            nvgTranslate(vg, drawX, ry)
+            nvgScale(vg, scaleX, scaleY)
+
+            -- 绘制精灵（原点居中）
+            local halfSz = drawSz / 2
+            local imgPaint = nvgImagePattern(vg, -halfSz, -halfSz, drawSz, drawSz, 0, img, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, -halfSz, -halfSz, drawSz, drawSz)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+
+
+
+            -- ③ 攻击爆点特效（受击瞬间的冲击波）
+            if hitFlash and (r.hitAnim or 0) > 0.12 then
+                local burstR = drawSz * 0.5 * (1.0 - (r.hitAnim - 0.12) / 0.08)
+                local burstAlpha = math.floor(200 * ((r.hitAnim - 0.12) / 0.08))
+                if burstR > 0 and burstAlpha > 0 then
+                    local bp = nvgRadialGradient(vg, 0, -drawSz * 0.15, 2, burstR,
+                        nvgRGBA(255, 240, 180, burstAlpha), nvgRGBA(255, 180, 60, 0))
+                    nvgBeginPath(vg)
+                    nvgCircle(vg, 0, -drawSz * 0.15, burstR)
+                    nvgFillPaint(vg, bp)
+                    nvgFill(vg)
+                    -- 星形碎片线条
+                    nvgStrokeColor(vg, nvgRGBA(255, 220, 100, burstAlpha))
+                    nvgStrokeWidth(vg, 1.2)
+                    for si = 0, 5 do
+                        local sa = si * math.pi * 2 / 6 + r.bobPhase
+                        local sr1 = burstR * 0.3
+                        local sr2 = burstR * 0.9
+                        nvgBeginPath(vg)
+                        nvgMoveTo(vg, math.cos(sa) * sr1, -drawSz * 0.15 + math.sin(sa) * sr1)
+                        nvgLineTo(vg, math.cos(sa) * sr2, -drawSz * 0.15 + math.sin(sa) * sr2)
+                        nvgStroke(vg)
+                    end
+                end
             end
+
+            nvgRestore(vg)
 
             -- 矿石保留发光效果
             if r.rtype == "ore" and not hitFlash then
@@ -771,7 +1033,6 @@ function R.DrawResources(vg, G)
                 nvgFillPaint(vg, glowPaint)
                 nvgFill(vg)
 
-                -- 十字微光
                 local sparkle = math.sin(t * 5 + r.bobPhase) * 0.5 + 0.5
                 local sLen = 3 * sparkle * sc
                 nvgBeginPath(vg)
@@ -785,26 +1046,189 @@ function R.DrawResources(vg, G)
             end
         end
 
-        -- 血条 (HP < maxHp 时显示)
+        ::continue_res::
+    end
+end
+
+------------------------------------------------------------------------
+-- 6b. 绘制资源 UI 覆盖层（血条 + 掉落信息）— 在玩家之后绘制，保证最高层级
+------------------------------------------------------------------------
+function R.DrawResourceUI(vg, G)
+    -- 资源类型 → 掉落图标映射
+    local dropIconMap = {
+        wood   = G.hudIconWood,
+        stone  = G.hudIconStone,
+        ore    = G.hudIconGem,
+        bush   = G.hudIconWood,
+        pebble = G.hudIconStone,
+    }
+
+    for _, r in ipairs(G.resources) do
+        if r.dead then goto continue_rui end
+        if r.y < G.renderTopY - 30 or r.y > G.screenH + 30 then goto continue_rui end
+
+        local rx = r.x
+        local ry = r.y
+        -- 纵深缩放（与 DrawResources 保持一致）
+        local depthRatio = math.max(0, math.min(1, (r.y - G.renderTopY) / math.max(1, G.screenH - G.renderTopY)))
+        local depthScale = 0.65 + depthRatio * 0.35
+        local sc = (r.scale or 1.0) * depthScale
+        local sz = C.RES_SIZE / 2 * sc
+
+        -- 计算 drawSz（与 DrawResources 一致）
+        local drawSz = sz * 3.2
+        if r.rtype == "wood" then
+            drawSz = sz * 7.2
+        elseif r.rtype == "bush" then
+            drawSz = sz * 4.0
+        elseif r.rtype == "pebble" then
+            drawSz = sz * 3.0
+        end
+
+        -- ④ 血条（HP < maxHp 时显示）+ 延时扣除效果
         if r.hp and r.maxHp and r.hp < r.maxHp and r.hp > 0 then
-            local barW = 24 * sc
-            local barH = 3
-            local bx = drawX - barW / 2
-            local by = ry - drawSz / 2 - 4
+            local barW = 36
+            local barH = 5
+            local bx = rx - barW / 2
+            local by = ry - drawSz / 2 - 8
             local ratio = r.hp / r.maxHp
+            local displayRatio = (r.displayHp or r.hp) / r.maxHp
+
             -- 背景
             nvgBeginPath(vg)
-            nvgRoundedRect(vg, bx, by, barW, barH, 1)
-            nvgFillColor(vg, nvgRGBA(30, 30, 30, 160))
+            nvgRoundedRect(vg, bx - 1, by - 1, barW + 2, barH + 2, 3)
+            nvgFillColor(vg, nvgRGBA(20, 20, 20, 200))
             nvgFill(vg)
-            -- 填充
+
+            -- 延时扣除部分（橙色/黄色，显示即将消失的HP）
+            if displayRatio > ratio then
+                nvgBeginPath(vg)
+                nvgRoundedRect(vg, bx, by, barW * displayRatio, barH, 2)
+                nvgFillColor(vg, nvgRGBA(255, 180, 50, 200))
+                nvgFill(vg)
+            end
+
+            -- 当前 HP（绿色）
             nvgBeginPath(vg)
-            nvgRoundedRect(vg, bx, by, barW * ratio, barH, 1)
-            nvgFillColor(vg, nvgRGBA(80, 200, 80, 220))
+            nvgRoundedRect(vg, bx, by, barW * ratio, barH, 2)
+            nvgFillColor(vg, nvgRGBA(80, 210, 80, 230))
+            nvgFill(vg)
+
+            -- ⑤ 血条上方：掉落资源图标 + 数量
+            local resInfo = C.RES[r.rtype]
+            local dropAmount = resInfo and resInfo.drop or 1
+            local dropIcon = dropIconMap[r.rtype]
+            if dropIcon and dropIcon ~= 0 then
+                local iconSz = 18
+                local iconX = rx
+                local iconY = by - iconSz / 2 - 2
+
+                -- 资源图标
+                drawSprite(vg, dropIcon, iconX - 8, iconY, iconSz, iconSz, 1.0)
+
+                -- 数量文字
+                nvgFontFace(vg, "sans")
+                nvgFontSize(vg, 12)
+                nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+                -- 描边
+                nvgFillColor(vg, nvgRGBA(0, 0, 0, 220))
+                nvgText(vg, iconX + 2, iconY + 1, "x" .. dropAmount)
+                -- 正文
+                nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+                nvgText(vg, iconX + 1, iconY, "x" .. dropAmount)
+            end
+        end
+
+        ::continue_rui::
+    end
+end
+
+------------------------------------------------------------------------
+-- 6c. 绘制携带资源跟随队列（排成队跟在玩家屁股后面）
+------------------------------------------------------------------------
+function R.DrawCarryQueue(vg, G)
+    local p = G.player
+    local queue = p.carryQueue
+    local count = #queue
+    if count <= 0 then return end
+    if G.mounted then return end  -- 上车时不显示
+
+    local trail = p.trail
+    if #trail < 2 then return end
+
+    -- 资源类型→图片映射
+    local imgMap = {
+        wood   = G.hudIconWood,
+        stone  = G.hudIconStone,
+        ore    = G.hudIconGem,
+        bush   = G.mapBushImg,
+        pebble = G.mapPebbleImg,
+    }
+
+    local iconSize = 16          -- 每个资源图标大小
+    local spacing  = 14          -- 轨迹点间距（与TRAIL_STEP匹配）
+    local t = G.gameTime or 0
+
+    local smooth = p.carrySmooth
+
+    -- 沿轨迹放置每个资源图标（使用平滑插值位置）
+    for i = 1, count do
+        if i > #smooth then break end
+        local trailIdx = i + 1
+        if trailIdx > #trail then break end
+
+        local sp = smooth[i]
+        local rtype = queue[i]
+        local img = imgMap[rtype]
+
+        -- 轻微上下浮动，依序错开相位
+        local bobY = math.sin(t * 3 + i * 0.8) * 1.5
+
+        nvgSave(vg)
+        nvgTranslate(vg, sp.x, sp.y + bobY)
+
+        if img and img ~= 0 then
+            -- 用资源图标
+            local sz = iconSize
+            local imgPaint = nvgImagePattern(vg, -sz / 2, -sz / 2, sz, sz, 0, img, 0.95)
+            nvgBeginPath(vg)
+            nvgRect(vg, -sz / 2, -sz / 2, sz, sz)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+        else
+            -- 无图标时用彩色圆点
+            local rc = C.CLR[rtype .. "_color"] or {150, 150, 150}
+            nvgBeginPath(vg)
+            nvgCircle(vg, 0, 0, 5)
+            nvgFillColor(vg, nvgRGBA(rc[1], rc[2], rc[3], 220))
             nvgFill(vg)
         end
 
-        ::continue_res::
+        nvgRestore(vg)
+    end
+
+    -- 满载时在队伍末尾显示 "Max"
+    if p.carrying >= (G.maxCarry or C.MAX_CARRY) then
+        -- 在最后一个资源图标位置之后显示
+        local lastIdx = math.min(count + 2, #trail)
+        if lastIdx >= 2 then
+            local pt = trail[lastIdx]
+            nvgSave(vg)
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, 12)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            -- 黑底标签
+            local tw = 28
+            local th = 14
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, pt.x - tw / 2, pt.y - th / 2 - 1, tw, th, 3)
+            nvgFillColor(vg, nvgRGBA(20, 20, 20, 200))
+            nvgFill(vg)
+            -- 白色文字
+            nvgFillColor(vg, nvgRGBA(255, 80, 80, 255))
+            nvgText(vg, pt.x, pt.y - 1, "Max", nil)
+            nvgRestore(vg)
+        end
     end
 end
 
@@ -830,14 +1254,135 @@ function R.DrawPlayer(vg, G)
         nvgFill(vg)
     end
 
-    -- 翻转
-    if p.facing < 0 then nvgScale(vg, -1, 1) end
+    -- 下车状态：脚底金色光圈（光点沿椭圆轨道环绕）
+    if not G.mounted then
+        local haloRX = 18          -- 椭圆水平半径
+        local haloRY = 7           -- 椭圆垂直半径（扁椭圆）
+        local haloCY = C.PLAYER_H / 2 + 2  -- 脚底位置
+        local orbAngle = t * 1.5   -- 环绕速度
+
+        nvgSave(vg)
+        nvgTranslate(vg, 0, haloCY)
+
+        -- 底层椭圆环（半透明底色）
+        nvgBeginPath(vg)
+        nvgEllipse(vg, 0, 0, haloRX, haloRY)
+        nvgStrokeColor(vg, nvgRGBA(255, 200, 50, 70))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+
+        -- 两个对称环绕亮点 + 拖尾
+        for s = 0, 1 do
+            local baseAngle = orbAngle + s * math.pi
+
+            -- 拖尾（5个逐渐变淡的小点）
+            for ti = 1, 5 do
+                local ta = baseAngle - ti * 0.18
+                local tx = haloRX * math.cos(ta)
+                local ty = haloRY * math.sin(ta)
+                local alpha = math.floor(100 * (1 - ti / 6))
+                local r = 2.0 - ti * 0.25
+                nvgBeginPath(vg)
+                nvgCircle(vg, tx, ty, r)
+                nvgFillColor(vg, nvgRGBA(255, 210, 60, alpha))
+                nvgFill(vg)
+            end
+
+            -- 亮点位置
+            local sx = haloRX * math.cos(baseAngle)
+            local sy = haloRY * math.sin(baseAngle)
+
+            -- 辉光
+            local glow = nvgRadialGradient(vg, sx, sy, 1, 8,
+                nvgRGBA(255, 220, 60, 160), nvgRGBA(255, 200, 40, 0))
+            nvgBeginPath(vg)
+            nvgCircle(vg, sx, sy, 8)
+            nvgFillPaint(vg, glow)
+            nvgFill(vg)
+
+            -- 核心亮点
+            nvgBeginPath(vg)
+            nvgCircle(vg, sx, sy, 2.0)
+            nvgFillColor(vg, nvgRGBA(255, 245, 170, 240))
+            nvgFill(vg)
+        end
+
+        nvgRestore(vg)
+    end
 
     -- 无敌闪烁
     local stunAlpha = 255
     if p.stunTimer and p.stunTimer > 0 then
         stunAlpha = math.sin(t * 16) > 0 and 255 or 100
     end
+
+    -- 上车射击状态：炮塔模式，纯旋转控制方向（跳过 facing 翻转）
+    if G.mounted and G.mountedShootImg and G.mountedShootImg ~= 0 then
+        local imgW, imgH = nvgImageSize(vg, G.mountedShootImg)
+        if imgW <= 0 or imgH <= 0 then imgW, imgH = 542, 1103 end
+        local ratio = imgH / imgW  -- ~2.03
+        local drawW = C.PLAYER_W      -- 上车状态角色
+        local drawH = drawW * ratio
+
+        -- 原图枪口朝下(π/2)，旋转到瞄准方向
+        local aimAngle = G.mountedAimDir or 0
+        local rot = aimAngle - math.pi / 2
+
+        nvgSave(vg)
+        nvgRotate(vg, rot)
+
+        local dx = -drawW / 2
+        local dy = -drawH / 2
+        local imgPaint = nvgImagePattern(vg, dx, dy, drawW, drawH, 0, G.mountedShootImg, stunAlpha / 255.0)
+        nvgBeginPath(vg)
+        nvgRect(vg, dx, dy, drawW, drawH)
+        nvgFillPaint(vg, imgPaint)
+        nvgFill(vg)
+        nvgRestore(vg)
+
+        -- 枪口开火帧动画（在角色坐标系内绘制）
+        local mf = G.muzzleFlash
+        local mfFrames = G.muzzleFlashFrames
+        if mf and mfFrames and #mfFrames >= 4 then
+            local progress = mf.elapsed / mf.timer  -- 0~1
+            local frameIdx = math.min(4, math.floor(progress * 4) + 1)
+            local flashImg = mfFrames[frameIdx]
+            if flashImg and flashImg ~= 0 then
+                local fImgW, fImgH = nvgImageSize(vg, flashImg)
+                if fImgW > 0 and fImgH > 0 then
+                    local flashSize = 18
+                    local scl = 0.3 + 0.7 * progress
+                    local fDrawW = flashSize * scl
+                    local fDrawH = fDrawW * (fImgH / fImgW)
+                    -- 枪口在角色图片底部（原图朝下），偏移 = drawH/2
+                    local muzzleDist = drawH / 2
+
+                    nvgSave(vg)
+                    -- 与角色同旋转基准：原图朝下(π/2)旋转到瞄准方向
+                    nvgRotate(vg, rot)
+                    -- 沿旋转后的+Y轴（原图朝下方向）偏移到枪口
+                    -- 开火帧原图朝右，需额外旋转+π/2使其沿枪管方向
+                    nvgTranslate(vg, 0, muzzleDist)
+                    nvgRotate(vg, math.pi / 2)
+                    -- 火焰从枪口向外延伸
+                    local fx = -fDrawW * 0.2
+                    local fy = -fDrawH / 2
+                    local imgPaintF = nvgImagePattern(vg, fx, fy, fDrawW, fDrawH, 0, flashImg, 1.0)
+                    nvgBeginPath(vg)
+                    nvgRect(vg, fx, fy, fDrawW, fDrawH)
+                    nvgFillPaint(vg, imgPaintF)
+                    nvgFill(vg)
+                    nvgRestore(vg)
+                end
+            end
+        end
+
+        nvgRestore(vg)
+        return
+    end
+
+    -- 翻转（仅非上车状态）
+    if p.facing < 0 then nvgScale(vg, -1, 1) end
 
     -- 主角序列帧动画绘制
     -- 攻击帧: 1=idle, 2=raise, 3=swing, 4=hit, 5=recover
@@ -954,26 +1499,6 @@ function R.DrawPlayer(vg, G)
         nvgRestore(vg)
     end
 
-    -- 背包 (携带物品时显示，渐变 + 描边)
-    if p.carrying > 0 then
-        local bagX = -C.PLAYER_W / 2 - 6
-        local bagPaint = nvgLinearGradient(vg, bagX, -2, bagX + 7, -2,
-            nvgRGBA(75, 68, 58, math.floor(stunAlpha * 0.9)),
-            nvgRGBA(50, 44, 36, math.floor(stunAlpha * 0.9)))
-        nvgBeginPath(vg)
-        nvgRoundedRect(vg, bagX, -2, 7, 14, 3)
-        nvgFillPaint(vg, bagPaint)
-        nvgFill(vg)
-        nvgStrokeColor(vg, nvgRGBA(40, 35, 28, math.floor(stunAlpha * 0.7)))
-        nvgStrokeWidth(vg, 0.7)
-        nvgStroke(vg)
-        nvgFontFace(vg, "sans")
-        nvgFontSize(vg, 8)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(200, 195, 185, stunAlpha))
-        nvgText(vg, -C.PLAYER_W / 2 - 3, 5, tostring(p.carrying), nil)
-    end
-
     -- 收集光效 (暗化，偏冷色)
     if p.collectAnim and p.collectAnim > 0 then
         local alpha = p.collectAnim / 0.3 * 50
@@ -985,6 +1510,48 @@ function R.DrawPlayer(vg, G)
     end
 
     -- 攻击挥砍弧光已移除 (角色序列帧自带挥斧动画)
+
+    -- 背包数量显示（下车且有携带资源时显示 "当前/上限"）
+    if not G.mounted and p.carrying and p.carrying > 0 then
+        -- 抵消角色朝向翻转，保持文字正向
+        if p.facing < 0 then nvgScale(vg, -1, 1) end
+
+        local maxC = G.maxCarry or C.MAX_CARRY
+        local bagStr = p.carrying .. "/" .. maxC
+        local bagX = 0
+        local bagY = -C.PLAYER_H / 2 - 12
+
+        -- 背景小药丸
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 10)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        local tw = nvgTextBounds(vg, 0, 0, bagStr)
+        local pw = tw + 8
+        local ph = 13
+
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, bagX - pw / 2, bagY - ph / 2, pw, ph, ph / 2)
+        if p.carrying >= maxC then
+            nvgFillColor(vg, nvgRGBA(200, 50, 30, 200))
+        else
+            nvgFillColor(vg, nvgRGBA(40, 40, 40, 180))
+        end
+        nvgFill(vg)
+
+        -- 白色边框
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, bagX - pw / 2, bagY - ph / 2, pw, ph, ph / 2)
+        nvgStrokeColor(vg, nvgRGBA(255, 255, 255, 160))
+        nvgStrokeWidth(vg, 1.0)
+        nvgStroke(vg)
+
+        -- 文字
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+        nvgText(vg, bagX, bagY, bagStr)
+
+        -- 恢复翻转
+        if p.facing < 0 then nvgScale(vg, -1, 1) end
+    end
 
     nvgRestore(vg)
 end
@@ -1001,6 +1568,9 @@ function R.DrawZombies(vg, G)
     local idleImg3 = G.crawlerIdleImg
     local walkFrames3 = G.crawlerWalkFrames
 
+    -- 当前攻击目标引用（用于画红色锁定光圈）
+    local atkTargetRef = G.player and G.player.atkTarget and G.player.atkTarget.ref or nil
+
     for _, z in ipairs(G.zombies or {}) do
         if z.dead then goto continue_z end
         if z.y < G.renderTopY - 20 or z.y > G.screenH + 20 then goto continue_z end
@@ -1009,11 +1579,61 @@ function R.DrawZombies(vg, G)
         local zy = z.y
         local hitFlash = (z.hitAnim or 0) > 0
 
-        nvgSave(vg)
-        nvgTranslate(vg, zx, zy)
-
         -- 根据僵尸类型选择精灵集
         local zType = z.zombieType or 1
+
+        -- 被攻击时：脚底红色锁定光圈
+        if atkTargetRef == z then
+            local haloRX = 16
+            local haloRY = 6
+            local haloCY = (zType == 3) and 6 or (C.ZOMBIE_SIZE * 0.9)
+            local orbAngle = t * 2.0
+
+            nvgSave(vg)
+            nvgTranslate(vg, zx, zy + haloCY)
+
+            -- 底层红色椭圆环
+            nvgBeginPath(vg)
+            nvgEllipse(vg, 0, 0, haloRX, haloRY)
+            nvgStrokeColor(vg, nvgRGBA(255, 60, 40, 80))
+            nvgStrokeWidth(vg, 1.5)
+            nvgStroke(vg)
+
+            -- 两个对称环绕红色亮点 + 拖尾
+            for s = 0, 1 do
+                local baseAngle = orbAngle + s * math.pi
+                for ti = 1, 4 do
+                    local ta = baseAngle - ti * 0.2
+                    local tx = haloRX * math.cos(ta)
+                    local ty = haloRY * math.sin(ta)
+                    local alpha = math.floor(120 * (1 - ti / 5))
+                    local cr = 2.0 - ti * 0.3
+                    nvgBeginPath(vg)
+                    nvgCircle(vg, tx, ty, cr)
+                    nvgFillColor(vg, nvgRGBA(255, 80, 50, alpha))
+                    nvgFill(vg)
+                end
+                local sx = haloRX * math.cos(baseAngle)
+                local sy = haloRY * math.sin(baseAngle)
+                -- 辉光
+                local gp = nvgRadialGradient(vg, sx, sy, 1, 6,
+                    nvgRGBA(255, 70, 40, 180), nvgRGBA(255, 50, 30, 0))
+                nvgBeginPath(vg)
+                nvgCircle(vg, sx, sy, 6)
+                nvgFillPaint(vg, gp)
+                nvgFill(vg)
+                -- 核心亮点
+                nvgBeginPath(vg)
+                nvgCircle(vg, sx, sy, 1.8)
+                nvgFillColor(vg, nvgRGBA(255, 200, 150, 240))
+                nvgFill(vg)
+            end
+
+            nvgRestore(vg)
+        end
+
+        nvgSave(vg)
+        nvgTranslate(vg, zx, zy)
 
         -- 柔阴影 (径向渐变，爬行僵尸阴影贴地)
         do
@@ -1159,7 +1779,8 @@ function R.DrawFloatTexts(vg, G)
     nvgFontFace(vg, "sans")
     for _, ft in ipairs(G.floatTexts) do
         local alpha = ft.life / ft.maxLife
-        local scale = 0.8 + (1 - alpha) * 0.4
+        local a255 = math.floor(alpha * 255)
+        local isDmg = (ft.rtype == "damage" or ft.rtype == "crit" or ft.rtype == "train_damage")
         local col
         if ft.rtype == "gold" then
             col = C.CLR.gold_color
@@ -1174,17 +1795,39 @@ function R.DrawFloatTexts(vg, G)
         elseif ft.rtype == "pebble" then
             col = C.CLR.pebble_color
         elseif ft.rtype == "crit" then
-            col = {255, 200, 40}  -- 金黄色暴击
+            col = {255, 60, 50}   -- 暴击：红色
+        elseif ft.rtype == "train_damage" then
+            col = {255, 50, 40}   -- 火车受击：红色
         elseif ft.rtype == "damage" then
-            col = C.CLR.text_red
+            col = {255, 255, 255} -- 普通伤害：白色
         else
             col = C.CLR.text_white
         end
         local fontSize = 14
-        if ft.rtype == "crit" then fontSize = 18 end  -- 暴击字体更大
+        local scale = 0.8 + (1 - alpha) * 0.4
+        if isDmg then fontSize = 16 end
+        if ft.rtype == "crit" then fontSize = 20 end  -- 暴击更大
         nvgFontSize(vg, fontSize * scale)
         nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(col[1], col[2], col[3], math.floor(alpha * 255)))
+        -- 伤害/暴击：8方向粗黑描边
+        if isDmg then
+            local o = 1.5  -- 描边厚度
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, a255))
+            nvgText(vg, ft.x - o, ft.y, ft.text, nil)
+            nvgText(vg, ft.x + o, ft.y, ft.text, nil)
+            nvgText(vg, ft.x, ft.y - o, ft.text, nil)
+            nvgText(vg, ft.x, ft.y + o, ft.text, nil)
+            nvgText(vg, ft.x - o, ft.y - o, ft.text, nil)
+            nvgText(vg, ft.x + o, ft.y - o, ft.text, nil)
+            nvgText(vg, ft.x - o, ft.y + o, ft.text, nil)
+            nvgText(vg, ft.x + o, ft.y + o, ft.text, nil)
+        end
+        -- 主体文字多次绘制模拟加粗
+        nvgFillColor(vg, nvgRGBA(col[1], col[2], col[3], a255))
+        if isDmg then
+            nvgText(vg, ft.x - 0.5, ft.y, ft.text, nil)
+            nvgText(vg, ft.x + 0.5, ft.y, ft.text, nil)
+        end
         nvgText(vg, ft.x, ft.y, ft.text, nil)
     end
 end
@@ -1199,6 +1842,87 @@ function R.DrawParticles(vg, G)
         nvgCircle(vg, p.x, p.y, p.size * alpha)
         nvgFillColor(vg, nvgRGBA(p.r, p.g, p.b, math.floor(alpha * 255)))
         nvgFill(vg)
+    end
+end
+
+------------------------------------------------------------------------
+-- 10.2 烟雾特效
+------------------------------------------------------------------------
+function R.DrawPuffs(vg, G)
+    for _, p in ipairs(G.puffs) do
+        local frames = p.smokeType == 1 and G.smokeAFrames or G.smokeBFrames
+        local img = frames[p.frame]
+        if img and img ~= 0 then
+            local iw, ih = nvgImageSize(vg, img)
+            nvgSave(vg)
+            nvgTranslate(vg, p.x, p.y)
+            nvgBeginPath(vg)
+            nvgRect(vg, -iw / 2, -ih / 2, iw, ih)
+            nvgFillPaint(vg, nvgImagePattern(vg, -iw / 2, -ih / 2, iw, ih, 0, img, 1.0))
+            nvgFill(vg)
+            nvgRestore(vg)
+        end
+    end
+end
+
+function R.DrawBursts(vg, G)
+    local frames = G.burstFrames
+    if not frames then return end
+    local sc = 0.4
+    for _, b in ipairs(G.bursts) do
+        local img = frames[b.frame]
+        if img and img ~= 0 then
+            local iw, ih = nvgImageSize(vg, img)
+            local dw, dh = iw * sc, ih * sc
+            nvgSave(vg)
+            nvgTranslate(vg, b.x, b.y)
+            nvgBeginPath(vg)
+            nvgRect(vg, -dw / 2, -dh / 2, dw, dh)
+            nvgFillPaint(vg, nvgImagePattern(vg, -dw / 2, -dh / 2, dw, dh, 0, img, 1.0))
+            nvgFill(vg)
+            nvgRestore(vg)
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- 10.3 弹出资源图标
+------------------------------------------------------------------------
+function R.DrawDropItems(vg, G)
+    local imgMap = {
+        wood   = G.hudIconWood,
+        stone  = G.hudIconStone,
+        ore    = G.hudIconGem,
+        bush   = G.hudIconWood,
+        pebble = G.hudIconStone,
+    }
+    local sz = 14
+    for _, d in ipairs(G.dropItems) do
+        local img = imgMap[d.rtype]
+        if img and img ~= 0 then
+            local sc = d.scale or 1.0
+            local sqX, sqY = 1.0, 1.0
+            if d.squash and d.squash > 0 then
+                sqX = 1.0 + d.squash   -- 着地时横向拉伸
+                sqY = 1.0 - d.squash   -- 着地时纵向压扁
+            end
+            nvgSave(vg)
+            nvgTranslate(vg, d.x, d.y)
+            nvgScale(vg, sc * sqX, sc * sqY)
+            nvgRotate(vg, d.rot)
+            local imgPaint = nvgImagePattern(vg, -sz / 2, -sz / 2, sz, sz, 0, img, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, -sz / 2, -sz / 2, sz, sz)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+            nvgRestore(vg)
+        else
+            local rc = C.CLR[(d.rtype or "") .. "_color"] or {150, 150, 150}
+            nvgBeginPath(vg)
+            nvgCircle(vg, d.x, d.y, 5)
+            nvgFillColor(vg, nvgRGBA(rc[1], rc[2], rc[3], 230))
+            nvgFill(vg)
+        end
     end
 end
 
@@ -1498,7 +2222,7 @@ function R.DrawHUD(vg, G)
     -- 资源区域总宽度 = 4个内框 + 3个间距
     local totalResW = innerW * #items + gap * (#items - 1)
 
-    -- 1) 外框底：端盖(70×78) + 中间平铺(136×78) 组装，只罩资源区域
+    -- 1) 外框底：端盖(局内资源外框) + 中间平铺(图层_7) 组装
     local capImg = G.hudFrameCap
     local midImg = G.hudFrameMid
     local outerPad = 4 * s
@@ -1506,22 +2230,28 @@ function R.DrawHUD(vg, G)
     local outerW = totalResW + outerPad * 2
     local outerY = 0
     local outerH = hudH
-    local capScale = outerH / 78
-    local capW = 70 * capScale
 
-    if capImg and capImg ~= 0 and midImg and midImg ~= 0 then
-        local midX = outerX + capW
-        local midW = outerW - capW * 2
-        if midW < 0 then midW = 0 end
+    if capImg and capImg ~= 0 then
+        -- 获取端盖原始尺寸，按高度等比缩放
+        local capImgW, capImgH = nvgImageSize(vg, capImg)
+        local capScale = outerH / capImgH
+        local capW = capImgW * capScale
 
         -- 中间平铺段
-        local midTileH = 78 * capScale
-        local midTileW = 136 * capScale
-        local midPaint = nvgImagePattern(vg, midX, outerY, midTileW, midTileH, 0, midImg, 1.0)
-        nvgBeginPath(vg)
-        nvgRect(vg, midX, outerY, midW, outerH)
-        nvgFillPaint(vg, midPaint)
-        nvgFill(vg)
+        if midImg and midImg ~= 0 then
+            local midX = outerX + capW
+            local midW = outerW - capW * 2
+            if midW > 0 then
+                local midImgW, midImgH = nvgImageSize(vg, midImg)
+                local midTileW = midImgW * capScale
+                local midTileH = midImgH * capScale
+                local midPaint = nvgImagePattern(vg, midX, outerY, midTileW, midTileH, 0, midImg, 1.0)
+                nvgBeginPath(vg)
+                nvgRect(vg, midX, outerY, midW, outerH)
+                nvgFillPaint(vg, midPaint)
+                nvgFill(vg)
+            end
+        end
 
         -- 左端盖
         local capPaint = nvgImagePattern(vg, outerX, outerY, capW, outerH, 0, capImg, 1.0)
@@ -1531,9 +2261,8 @@ function R.DrawHUD(vg, G)
         nvgFill(vg)
 
         -- 右端盖（水平镜像）
-        local rightCapX = outerX + outerW - capW
         nvgSave(vg)
-        nvgTranslate(vg, rightCapX + capW, 0)
+        nvgTranslate(vg, outerX + outerW, 0)
         nvgScale(vg, -1, 1)
         local rCapPaint = nvgImagePattern(vg, 0, outerY, capW, outerH, 0, capImg, 1.0)
         nvgBeginPath(vg)
@@ -1610,9 +2339,9 @@ end
 function R.DrawWavePanel(vg, G)
     local s = G.uiScale or 1
     -- 面板尺寸按原图 208×119 等比缩放
-    local scale = 0.55 * s
-    local panelW = 208 * scale       -- ≈114*s
-    local panelH = 119 * scale       -- ≈65*s
+    local scale = 0.34 * s
+    local panelW = 208 * scale
+    local panelH = 119 * scale
     local px = 4 * s
     local py = G.hudH + 4 * s
 
@@ -1631,15 +2360,15 @@ function R.DrawWavePanel(vg, G)
 
     -- 第一行: "波次  3/20"
     local lineY1 = py + panelH * 0.35
-    local textX = px + 12 * s
+    local textX = px + 8 * s
 
-    nvgFontSize(vg, 13 * s)
+    nvgFontSize(vg, 8 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
     nvgText(vg, textX, lineY1, "波次", nil)
 
-    nvgFontSize(vg, 16 * s)
+    nvgFontSize(vg, 10 * s)
     nvgFillColor(vg, nvgRGBA(255, 210, 80, 255))
-    nvgText(vg, textX + 32 * s, lineY1, tostring(G.currentWave or 1) .. "/" .. tostring(G.maxWaves or 20), nil)
+    nvgText(vg, textX + 20 * s, lineY1, tostring(G.currentWave or 1) .. "/" .. tostring(G.maxWaves or 20), nil)
 
     -- 第二行: "下一波  00:23"
     local lineY2 = py + panelH * 0.7
@@ -1649,7 +2378,7 @@ function R.DrawWavePanel(vg, G)
     local secs = math.floor(cd % 60)
     local timeStr = string.format("%02d:%02d", mins, secs)
 
-    nvgFontSize(vg, 12 * s)
+    nvgFontSize(vg, 8 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
     nvgText(vg, textX, lineY2, cdLabel .. "  " .. timeStr, nil)
 
@@ -1674,13 +2403,13 @@ function R.DrawWavePanel(vg, G)
     nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
     local kcY = killY + killH / 2
 
-    nvgFontSize(vg, 12 * s)
+    nvgFontSize(vg, 8 * s)
     nvgFillColor(vg, nvgRGBA(220, 220, 220, 255))
-    nvgText(vg, killX + 28 * s, kcY, "击杀数", nil)
+    nvgText(vg, killX + 18 * s, kcY, "击杀数", nil)
 
-    nvgFontSize(vg, 14 * s)
+    nvgFontSize(vg, 9 * s)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
-    nvgText(vg, killX + 70 * s, kcY, tostring(G.killCount or 0), nil)
+    nvgText(vg, killX + 44 * s, kcY, tostring(G.killCount or 0), nil)
 end
 
 ------------------------------------------------------------------------
@@ -1802,13 +2531,13 @@ function R.DrawMenu(vg, G)
     local titleY = H * 0.12
 
     -- 大标题阴影
-    nvgFontSize(vg, 38 * s)
+    nvgFontSize(vg, 28 * s)
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
-    nvgText(vg, W / 2 + 2, titleY + 2, "雪国列车")
+    nvgText(vg, W / 2 + 2, titleY + 2, "末世：我开火车送快递")
 
     -- 大标题
     nvgFillColor(vg, nvgRGBA(230, 240, 255, 255))
-    nvgText(vg, W / 2, titleY, "雪国列车")
+    nvgText(vg, W / 2, titleY, "末世：我开火车送快递")
 
     -- 装饰分割线
     local lineW = 90 * s
