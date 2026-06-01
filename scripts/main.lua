@@ -25,21 +25,20 @@ local vc_joystick = nil
 local heroImgHandle = 0  -- 主角立绘图片句柄
 local heroAnimHandles = {}  -- 主角序列帧: {idle, raise, swing, hit, recover}
 local heroWalkHandles = {}  -- 主角行走序列帧: {walk1, walk2, walk3, walk4}
-local zombieIdleHandle = 0  -- 僵尸1 idle图片句柄
-local zombieWalkHandles = {} -- 僵尸1 行走序列帧: {a, b, c, d}
-
-local zombie2IdleHandle = 0  -- 僵尸2 idle图片句柄
-local zombie2WalkHandles = {} -- 僵尸2 行走序列帧: {a, b, c, d}
-local crawlerIdleHandle = 0   -- 爬行僵尸 idle图片句柄
-local crawlerWalkHandles = {} -- 爬行僵尸 行走序列帧: 8帧爬行动画
+-- Spine 丧尸实例池: zombieType id → { instances = {spInst,...}, nextIdx = 1 }
+local spineZombiePool = {}  -- typeId -> { free={inst,...}, loaded=true }
+local SPINE_POOL_PRELOAD = 6  -- 每种丧尸类型预创建空闲实例数
 local trainImgHandle = 0     -- 火车精灵图片句柄
 local trainFrontHandle = 0   -- 火车正面图（升级UI用）
 local trainSandbagHandle = 0 -- 火车顶部沙袋图片句柄
 local mountedShootHandle = 0 -- 上车射击角色图片句柄
+local mountedBulletHandle = 0 -- 上车子弹图片句柄
 local muzzleFlashHandles = {} -- 开火帧序列: 4帧
+local burnFlameHandles = {}   -- 温压弹火焰帧序列: 12帧
 local titleBannerHandle = 0  -- 标题横幅背景
 -- 背景纹理句柄
 local bgGroundHandle = 0
+local floorImgCache = {}  -- 关卡地板贴图缓存: path -> nvgImage handle
 local railwayImgHandle = 0   -- 铁轨图片句柄
 -- 地图素材图片句柄
 local mapDeadTreeHandle = 0
@@ -67,8 +66,17 @@ local hudSettingsFrameHandle = 0
 local skillBoardTrainHandle = 0       -- 上车按钮图片（可用/绿色）
 local skillBoardDisabledHandle = 0    -- 上车按钮图片（不可用/灰色）
 local skillDismountHandle = 0         -- 下车按钮图片
+-- 升级品质标签图片句柄
+local qualityImgHandles = {}          -- [1..6]: 普通/优质/稀有/史诗/传说/至臻
+
 local skillFrameHandle = 0            -- 技能按钮边框
-local skillBombHandle = 0             -- 角色技能图标（炸弹）
+local skillBombHandle = 0             -- 角色技能图标（炸弹/默认）
+local skillIconHandles = {}           -- 角色技能图标 {charId = handle}
+-- 升级面板：刷新/获取全部按钮图片
+local refreshFreeHandle = 0           -- 免费刷新按钮
+local refreshVideoHandle = 0          -- 视频刷新按钮
+local refreshDiamondHandle = 0        -- 钻石刷新按钮（免费用完后）
+local getAllHandle = 0                 -- 获取全部按钮（钻石版）
 -- 炸弹 & 爆炸帧动画句柄
 local bombImgHandle = 0               -- 落地炸弹图片
 local bombRedImgHandle = 0            -- 炸弹红色闪烁帧
@@ -162,8 +170,10 @@ local function ResetGame()
         maxCarry = C.MAX_CARRY,
 
         -- 自动攻击倍率
-        meleeAtkBonus = 0,      -- 近战攻击力加成（含采集）
-        rangedAtkBonus = 0,     -- 射击攻击力加成（列车射击）
+        meleeAtkBonus = 0,      -- 近战攻击力加成（绝对值，装备系统用）
+        rangedAtkBonus = 0,     -- 射击攻击力加成（绝对值，装备系统用）
+        meleeAtkMul = 1.0,      -- 近战攻击力百分比倍率（利刃强化卡）
+        rangedAtkMul = 1.0,     -- 射击攻击力百分比倍率（精准瞄具卡）
         atkSpdMul = 1.0,        -- 攻击速度倍率
         rangeMul = 1.0,         -- 攻击范围倍率
 
@@ -176,6 +186,9 @@ local function ResetGame()
         puffs = {},             -- 烟雾特效（序列帧）
         bursts = {},            -- 攻击爆点特效（序列帧）
         dropItems = {},         -- 弹出资源动画
+        submitFlyItems = {},    -- 提交资源飞行动画
+        goldFlyItems = {},      -- 击杀僵尸掉落金币飞行动画
+        rewardToasts = {},      -- 左侧获得提示（带图标toast）
         zombies = {},
         turrets = {},
         turretProjectiles = {},
@@ -186,12 +199,13 @@ local function ResetGame()
 
         -- 关卡 & 波次系统
         stage = 1,               -- 当前关卡（通关10波后+1）
-        currentWave = 1,
+        currentWave = 0,         -- 开局为0，倒计时结束后递增到1才是第一波
         maxWaves = 10,
         waveTimer = 0,           -- 当前波次已进行时间
         waveDuration = 30,       -- 每波持续时间(秒)
-        waveCountdown = 0,       -- 下一波倒计时
-        waveActive = true,       -- 当前波次是否正在进行
+        waveProgress = 0,        -- 波次进度 0~1（用于新丧尸mid-wave出场）
+        waveCountdown = 30,      -- 开局30秒后再出僵尸
+        waveActive = false,      -- 开局不立刻出僵尸
         killCount = 0,           -- 总击杀数
 
         -- 生成计时器
@@ -215,6 +229,9 @@ local function ResetGame()
         -- 升级 UI
         upgradeCards = {},
         upgradeCardBtns = {},
+        refreshFreeLeft = 1,        -- 免费刷新剩余次数（每局1次）
+        refreshVideoLeft = 3,       -- 视频刷新剩余次数（每局3次）
+        getAllVideoLeft = 2,         -- 获取全部剩余次数（每局2次）
 
         -- 菜单/重开按钮
         menuBtn = nil,
@@ -251,19 +268,13 @@ local function MountImageHandles()
     G.heroImg = heroImgHandle
     G.heroAnimFrames = heroAnimHandles
     G.heroWalkFrames = heroWalkHandles
-    G.zombieIdleImg = zombieIdleHandle
-    G.zombieWalkFrames = zombieWalkHandles
-
-    G.zombie2IdleImg = zombie2IdleHandle
-    G.zombie2WalkFrames = zombie2WalkHandles
-    G.crawlerIdleImg = crawlerIdleHandle
-    G.crawlerWalkFrames = crawlerWalkHandles
     G.trainImg = trainImgHandle
     G.trainCarriageImg = trainCarriageHandle
     G.trainFrontImg = trainFrontHandle
     G.trainSandbagImg = trainSandbagHandle
     G.mountedShootImg = mountedShootHandle
     G.muzzleFlashFrames = muzzleFlashHandles
+    G.burnFlameFrames = burnFlameHandles
     G.titleBannerImg = titleBannerHandle
     G.bgGroundImg = bgGroundHandle
     G.railwayImg = railwayImgHandle
@@ -297,6 +308,8 @@ local function MountImageHandles()
     G.upgradeIcons = upgradeIconHandles
     -- 弓箭发射物图片
     G.arrowProjImg = arrowProjHandle
+    -- 上车子弹图片
+    G.mountedBulletImg = mountedBulletHandle
     -- 火箭弹图片
     G.rocketProjImg = rocketProjHandle
     -- 喷火序列帧
@@ -319,8 +332,143 @@ local function MountImageHandles()
     G.bombRedImg = bombRedImgHandle
     G.explosionFrames = explosionFrameHandles
     G.skillBombImg = skillBombHandle
+    G.skillIconImgs = skillIconHandles   -- 角色专属技能图标
     -- 路边装饰物图片
     G.decoImgs = decoHandles
+    -- 升级品质标签图片
+    G.qualityImgs = qualityImgHandles
+    -- 升级面板刷新/获取全部按钮图片
+    G.refreshFreeImg = refreshFreeHandle
+    G.refreshVideoImg = refreshVideoHandle
+    G.refreshDiamondImg = refreshDiamondHandle
+    G.getAllImg = getAllHandle
+    -- 激光序列帧（ResetGame会清空G，每次MountImageHandles重新挂载）
+    G.laserOpenFrames   = laserOpenFrames
+    G.laserLoopFrames   = laserLoopFrames
+    G.laserCloseFrames  = laserCloseFrames
+    G.laserMuzzleFrames = laserMuzzleFrames
+end
+
+------------------------------------------------------------------------
+-- Spine 丧尸池管理
+------------------------------------------------------------------------
+
+--- 创建一个新的 Spine 实例（内部辅助）
+--- @param spinePath string
+--- @return userdata|nil
+local function CreateSpineInst(spinePath)
+    ---@diagnostic disable-next-line: undefined-global
+    local inst = nvgSpineCreate(vg)
+    if not inst then return nil end
+    local ok = inst:Load(spinePath)
+    if not ok then
+        print("[Spine] WARN: Failed to load " .. spinePath)
+        return nil
+    end
+    inst:SetPremultipliedAlpha(true)
+    inst:SetDefaultMix(0.1)
+    return inst
+end
+
+--- 从独占池中获取一个 Spine 实例（每个丧尸独占，不共享）
+--- @param typeId string 丧尸类型ID
+--- @param spinePath string Spine JSON 路径
+--- @return userdata|nil spineInst
+local function AcquireSpineInstance(typeId, spinePath)
+    if not vg then return nil end
+    local pool = spineZombiePool[typeId]
+    if not pool then
+        -- 首次使用该类型：创建池并预创建空闲实例
+        pool = { free = {}, spinePath = spinePath, loaded = true }
+        spineZombiePool[typeId] = pool
+        for i = 1, SPINE_POOL_PRELOAD do
+            local inst = CreateSpineInst(spinePath)
+            if inst then
+                pool.free[#pool.free + 1] = inst
+            end
+        end
+        if #pool.free == 0 then
+            print("[Spine] ERROR: Pool empty for " .. typeId .. " path=" .. spinePath)
+        end
+    end
+
+    -- 从空闲池取一个；如果空了就动态创建
+    local free = pool.free
+    local inst
+    if #free > 0 then
+        inst = free[#free]
+        free[#free] = nil
+    else
+        inst = CreateSpineInst(spinePath)
+    end
+
+    -- 重置动画状态和位置（避免回收实例残影闪现）
+    if inst then
+        inst:SetAnimation(0, "run", true)
+        inst:SetPosition(-9999, -9999)  -- 移到屏幕外，防止旧位置残影
+    end
+    return inst
+end
+
+--- 回收丧尸的 Spine 实例到空闲池
+--- @param z table 丧尸对象
+local function ReleaseSpineInstance(z)
+    if not z.spineInst then return end
+    local typeId = z.zombieType
+    local pool = spineZombiePool[typeId]
+    if pool then
+        -- 回收前移到屏幕外，防止残影
+        z.spineInst:SetPosition(-9999, -9999)
+        pool.free[#pool.free + 1] = z.spineInst
+    end
+    z.spineInst = nil
+end
+
+--- 为所有缺少 spineInst 的丧尸分配 Spine 实例
+local function AssignSpineInstances()
+    for _, z in ipairs(G.zombies or {}) do
+        -- 跳过有入场延迟的僵尸，分批分配避免同帧大量创建
+        if z.spawnDelay and z.spawnDelay > 0 then goto cont end
+        if not z.spineInst and z.zombieDef and z.zombieDef.spine then
+            z.spineInst = AcquireSpineInstance(z.zombieType, z.zombieDef.spine)
+        end
+        ::cont::
+    end
+end
+
+--- 更新所有丧尸的 Spine 动画（每帧调用）
+local function UpdateSpineAnimations(dt)
+    for _, z in ipairs(G.zombies or {}) do
+        if z.spawnDelay and z.spawnDelay > 0 then goto continue_spine end
+        local inst = z.spineInst
+        if not inst then goto continue_spine end
+
+        -- 死亡动画阶段
+        if z.dying then
+            z.dyingTimer = (z.dyingTimer or 0) + dt
+            inst:Update(dt)
+            -- 死亡动画播放约1秒后标记可移除
+            if z.dyingTimer >= 1.0 then
+                z.deadDone = true
+            end
+            goto continue_spine
+        end
+
+        if z.dead then goto continue_spine end
+
+        -- 动画状态切换
+        local desiredAnim = z.atTrain and "attack" or "run"
+        if z.spineAnim ~= desiredAnim then
+            z.spineAnim = desiredAnim
+            local loop = (desiredAnim == "run")
+            inst:SetAnimation(0, desiredAnim, loop)
+        end
+
+        -- 推进动画时间
+        inst:Update(dt)
+
+        ::continue_spine::
+    end
 end
 
 --- 根据局外选择的角色动态加载图片到 G
@@ -393,15 +541,38 @@ local function LoadActiveCharImages()
 end
 
 --- 从局外进入关卡
-local function StartLevel()
+local function StartLevel(selectedLevel)
     ResetGame()
+    -- 设置关卡参数
+    selectedLevel = selectedLevel or 1
+    G.stage = selectedLevel
+    local levelData = MD.LEVELS[selectedLevel]
+    if levelData then
+        G.maxWaves = levelData.waves or 10
+    end
     MountImageHandles()
+    -- 加载关卡地板贴图
+    if levelData and levelData.floorImg then
+        local path = levelData.floorImg
+        if not floorImgCache[path] then
+            floorImgCache[path] = nvgCreateImage(vg, path, NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY)
+            print("[Game] Loaded floor texture: " .. path .. " handle=" .. floorImgCache[path])
+        end
+        G.bgGroundImg = floorImgCache[path]
+    end
     LoadActiveCharImages()  -- 根据局外选择的角色替换图片
+    -- 将saveData引用存入G，局内HUD直接读取持久化资源
+    G.saveData = Meta.GetSaveData()
     -- 记录当前角色ID（用于技能系统）
     local sd = Meta.GetSaveData()
     G.activeCharId = sd and sd.activeChar or "warrior"
+    -- 根据角色设置技能CD
+    local charSkillCDs = { warrior = 15, lisanguang = 15, auntie = 60, weifenglong = 0 }
+    G.skillCharCDMax = charSkillCDs[G.activeCharId] or 15
     -- 将局外装备的炮台列表传入局内（只有装备了的炮台才能在升级中刷到）
     G.equippedTurrets = sd and sd.turretEquipped or {"arrow", "minigun", "sniper", "rocket"}
+    -- 将局外炮塔等级传入局内（用于强化卡 unlockLevel 门控）
+    G.metaTurretLevels = sd and sd.turretLevels or {}
 
     -- 装备+角色属性带入局内
     local eqStats = MD.CalcEquipStats(sd)
@@ -429,13 +600,38 @@ local function StartLevel()
         eqStats.critRate, eqStats.critDmg, eqStats.atkSpd, eqStats.speed,
         eqStats.rangePct, eqStats.goldBonus))
 
+    -- 天赋加成应用
+    local tStats = MD.CalcTalentStats(sd.talentLevel or 0)
+    G.meleeAtkBonus  = G.meleeAtkBonus  + tStats.atk
+    G.rangedAtkBonus = G.rangedAtkBonus + tStats.atk
+    G.critRate       = G.critRate + tStats.critRate
+    G.critDmg        = G.critDmg + tStats.critDmg
+    G.atkSpdMul      = G.atkSpdMul * (1 + tStats.atkSpd / 100)
+    G.rangeMul       = G.rangeMul  * (1 + tStats.atkRange / 100)
+    G.atkPctMul      = G.atkPctMul * (1 + tStats.atkDmg / 100)
+    G.turretDmgPct   = (G.turretDmgPct or 0) + tStats.turretDmg
+    G.armorPen       = (G.armorPen or 0) + tStats.armorPen
+    G.cooldownMul    = (G.cooldownMul or 1.0) * (1 + tStats.cooldown / 100)
+    G.gatherMul      = (G.gatherMul or 1.0) * (1 + tStats.gather / 100)
+    G.maxCarry       = G.maxCarry + tStats.carry
+    G.weaponDmgMul   = (G.weaponDmgMul or 1.0) * (1 + tStats.weaponDmg / 100)
+    print(string.format("[Game] TalentStats applied (Lv.%d): atk+%d critRate+%d%% critDmg+%d%% atkSpd+%d%% range+%d%% dmg+%d%% turret+%d%% armorPen+%d carry+%d",
+        sd.talentLevel or 0, tStats.atk, tStats.critRate, tStats.critDmg, tStats.atkSpd,
+        tStats.atkRange, tStats.atkDmg, tStats.turretDmg, tStats.armorPen, tStats.carry))
+
     Turret.InitTurrets(G)
+
+    -- 注册丧尸移除回调，回收 Spine 实例
+    G.onZombieRemoved = ReleaseSpineInstance
+
     G.state = "playing"
     G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"
     G.hintTimer = 4.0
     Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
     Drone.Init(G)
     Drone.UnlockDrone(G)  -- 默认解锁1架采集无人机
+    Ent.PreSpawnResources(G)    -- 开局预填充资源
+    Ent.PreSpawnDecorations(G)  -- 开局预填充装饰物
     Ent.CreatePlayer(G)
     print("[Game] Started playing!")
 end
@@ -499,53 +695,9 @@ function Start()
     end
     print("Loaded hero walk frames: " .. #heroWalkHandles)
 
-    -- 加载僵尸序列帧 (idle + 4帧行走: 迈左腿→交叉→迈右腿→交叉)
-    zombieIdleHandle = nvgCreateImage(vg, "image/zombie_idle_20260415091321.png", NVG_IMAGE_NEAREST)
-    local zombieWalkFiles = {
-        "image/zombie_walk_a_20260415092010.png",
-        "image/zombie_walk_b_20260415092054.png",
-        "image/zombie_walk_c_20260415092252.png",
-        "image/zombie_walk_d_20260415092130.png",
-    }
-    zombieWalkHandles = {}
-    for i, path in ipairs(zombieWalkFiles) do
-        zombieWalkHandles[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
-    end
-    print("Loaded zombie1 frames: idle + " .. #zombieWalkHandles .. " walk")
-
-
-
-    -- 加载僵尸2序列帧 (棕色大衣版)
-    zombie2IdleHandle = nvgCreateImage(vg, "image/zombie_idle_20260415074148.png", NVG_IMAGE_NEAREST)
-    local zombie2WalkFiles = {
-        "image/zombie_walk_a_20260415085059.png",
-        "image/zombie_walk_b_20260415085055.png",
-        "image/zombie_walk_c_20260415085121.png",
-        "image/zombie_walk_d_20260415085120.png",
-    }
-    zombie2WalkHandles = {}
-    for i, path in ipairs(zombie2WalkFiles) do
-        zombie2WalkHandles[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
-    end
-    print("Loaded zombie2 frames: idle + " .. #zombie2WalkHandles .. " walk")
-
-    -- 加载爬行僵尸序列帧 (8帧爬行动画，手脚交替运动)
-    crawlerIdleHandle = nvgCreateImage(vg, "image/edited_crawler_topdown_idle_v2_20260424025325.png", NVG_IMAGE_NEAREST)
-    local crawlerWalkFiles = {
-        "image/edited_crawler_td_f1_20260424025443.png",  -- 帧1: 左手前伸抓地，右膝前顶，身体右倾
-        "image/edited_crawler_td_f2_20260424025528.png",  -- 帧2: 左手撑地发力，右手前移过渡
-        "image/edited_crawler_td_f3_20260424031336.png",  -- 帧3: 双手对称撑地，中间过渡帧
-        "image/edited_crawler_td_f4_20260424025700.png",  -- 帧4: 右手开始前伸，左手后收，身体左倾
-        "image/edited_crawler_td_f5_20260424031411.png",  -- 帧5: 右手前伸抓地，左膝前顶，身体左倾
-        "image/edited_crawler_td_f6_20260424025839.png",  -- 帧6: 右手撑地发力，左手前移过渡
-        "image/edited_crawler_td_f7_20260424025920.png",  -- 帧7: 双手撑地，过渡回左手周期
-        "image/edited_crawler_td_f8_20260424030008.png",  -- 帧8: 左手开始前伸，循环回帧1
-    }
-    crawlerWalkHandles = {}
-    for i, path in ipairs(crawlerWalkFiles) do
-        crawlerWalkHandles[i] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
-    end
-    print("Loaded crawler frames: idle + " .. #crawlerWalkHandles .. " walk")
+    -- 初始化 Spine 丧尸实例池（按需延迟加载，此处仅清空池）
+    spineZombiePool = {}
+    print("[Spine] Zombie pool initialized (lazy-load on spawn)")
 
     -- 火车精灵（干净版，无烟雾，烟雾由程序化粒子绘制）
     trainImgHandle = nvgCreateImage(vg, "image/edited_train_clean_edge_20260416031151.png", NVG_IMAGE_NEAREST)
@@ -555,6 +707,11 @@ function Start()
     mountedShootHandle = nvgCreateImage(vg, "image/Layer_0 (11).png", 0)
     for i = 1, 4 do
         muzzleFlashHandles[i] = nvgCreateImage(vg, "image/开火帧" .. i .. ".png", 0)
+    end
+    -- 温压弹火焰帧动画（12帧）
+    burnFlameHandles[1] = nvgCreateImage(vg, "image/火焰燃烧/火焰特效.png", 0)
+    for i = 2, 12 do
+        burnFlameHandles[i] = nvgCreateImage(vg, "image/火焰燃烧/火焰特效 (" .. i .. ").png", 0)
     end
     titleBannerHandle = nvgCreateImage(vg, "image/title_banner_20260422074156.png", 0)
     print("Loaded train sprite: " .. trainImgHandle .. " carriage: " .. trainCarriageHandle .. " front: " .. trainFrontHandle .. " sandbag: " .. trainSandbagHandle)
@@ -673,7 +830,25 @@ function Start()
     skillDismountHandle = nvgCreateImage(vg, "image/下车按钮.png", 0)
     skillFrameHandle = nvgCreateImage(vg, "image/局内技能按钮.png", 0)
     skillBombHandle = nvgCreateImage(vg, "image/局内技能炸弹.png", 0)
+    -- 角色专属技能图标
+    skillIconHandles["lisanguang"] = nvgCreateImage(vg, "image/狂暴.png", 0)
+    skillIconHandles["auntie"] = nvgCreateImage(vg, "image/治疗.png", 0)
+    skillIconHandles["weifenglong"] = nvgCreateImage(vg, "image/威龙喷气.png", 0)
     print("Loaded skill button images: board=" .. skillBoardTrainHandle .. " disabled=" .. skillBoardDisabledHandle .. " dismount=" .. skillDismountHandle .. " frame=" .. skillFrameHandle .. " bomb=" .. skillBombHandle)
+
+    -- 升级品质标签图片（优质/稀有/史诗/传说/至臻，5档）
+    local qualityFiles = { "优质", "稀有", "史诗", "传说", "至臻" }
+    for i, name in ipairs(qualityFiles) do
+        qualityImgHandles[i] = nvgCreateImage(vg, "image/" .. name .. ".png", 0)
+    end
+    print("Loaded quality images: " .. #qualityImgHandles)
+
+    -- 升级面板：刷新/获取全部按钮图片
+    refreshFreeHandle = nvgCreateImage(vg, "image/免费刷新.png", 0)
+    refreshVideoHandle = nvgCreateImage(vg, "image/视频点刷新.png", 0)
+    refreshDiamondHandle = nvgCreateImage(vg, "image/df009fd3-70c1-40a5-8dd2-1cbe98f2d509 (1).png", 0)
+    getAllHandle = nvgCreateImage(vg, "image/Layer_0 (14).png", 0)
+    print("Loaded refresh/getAll btn images: free=" .. refreshFreeHandle .. " diamond=" .. refreshDiamondHandle .. " getAll=" .. getAllHandle)
 
     -- 炸弹 & 爆炸帧动画
     bombImgHandle = nvgCreateImage(vg, "image/炸弹/炸弹.png", 0)
@@ -686,6 +861,9 @@ function Start()
 
     -- 弓箭发射物图片
     arrowProjHandle = nvgCreateImage(vg, "image/arrow_projectile.png", 0)
+
+    -- 上车子弹图片
+    mountedBulletHandle = nvgCreateImage(vg, "image/2b5bc92f-0195-4893-a843-0beca5ec88de.png", 0)
 
     -- 火箭弹图片
     rocketProjHandle = nvgCreateImage(vg, "image/rocket_projectile.png", 0)
@@ -711,6 +889,32 @@ function Start()
     for i = 1, 4 do
         burstFrameHandles[i] = nvgCreateImage(vg, "image/特效/攻击爆点" .. i .. ".png", 0)
     end
+
+    -- 激光特效序列帧：开启4帧 + 持续10帧 + 关闭4帧
+    laserOpenFrames = {}
+    for i = 1, 4 do
+        laserOpenFrames[i] = nvgCreateImage(vg, "image/激光特效/激光开启" .. i .. ".png", 0)
+    end
+    laserLoopFrames = {}
+    for i = 1, 10 do
+        laserLoopFrames[i] = nvgCreateImage(vg, "image/激光特效/激光持续" .. i .. ".png", 0)
+    end
+    laserCloseFrames = {}
+    for i = 1, 4 do
+        laserCloseFrames[i] = nvgCreateImage(vg, "image/激光特效/激光关闭" .. i .. ".png", 0)
+    end
+    laserMuzzleFrames = {}
+    for i = 1, 4 do
+        laserMuzzleFrames[i] = nvgCreateImage(vg, "image/激光特效/激光炮口" .. i .. ".png", 0)
+    end
+    -- 升级符文特效
+    upgradeVfxSymbol = nvgCreateImage(vg, "image/FX_T_Symbol_006A.png", 0)
+    -- 升级光效6帧
+    upgradeVfxGlow = {}
+    for i = 1, 6 do
+        upgradeVfxGlow[i] = nvgCreateImage(vg, "image/升级光效" .. i .. ".png", 0)
+    end
+    print("Loaded upgrade VFX symbol=" .. upgradeVfxSymbol .. " glow frames=6")
 
     print("Loaded map sprites: deadTree=" .. mapDeadTreeHandle .. " pine=" .. mapPineTreeHandle .. " green=" .. mapGreenTreeHandle .. " stone=" .. mapStoneHandle .. " ore=" .. mapOreHandle .. " bush=" .. mapBushHandle .. " pebble=" .. mapPebbleHandle)
 
@@ -752,11 +956,11 @@ function CreateVirtualControls()
     VirtualControls.Initialize(physW, physH)
 
     vc_joystick = VirtualControls.CreateJoystick({
-        position = Vector2(0, -200),
+        position = Vector2(0, -220),
         alignment = {HA_CENTER, VA_BOTTOM},
-        baseRadius = 65,
-        knobRadius = 30,
-        moveRadius = 45,
+        baseRadius = 110,
+        knobRadius = 50,
+        moveRadius = 70,
         deadZone = 0.15,
         opacity = 0.45,
         activeOpacity = 0.85,
@@ -787,8 +991,11 @@ function HandleUpdate(eventType, eventData)
     local dpr = graphics:GetDPR()
     local W = physW / dpr
     local H = physH / dpr
-    CalcShowAllScale(W, H)
-    Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
+    if W ~= G._lastLayoutW or H ~= G._lastLayoutH then
+        CalcShowAllScale(W, H)
+        Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
+        G._lastLayoutW, G._lastLayoutH = W, H
+    end
 
     -- F2 切换 UI 编辑器（仅在 lobby 状态下生效）
     if G.state == "lobby" and input:GetKeyPress(KEY_F2) then
@@ -811,8 +1018,15 @@ function HandleUpdate(eventType, eventData)
         return
     end
 
+    -- 升级符文特效期间：游戏继续运行，只驱动VFX计时
+    if G.state == "upgradeVfx" then
+        RL.UpdateUpgradeAnim(G, dt)
+    end
     if G.state == "upgrade" then
-        -- 升级状态下不更新世界
+        -- 强化火车面板出现后才暂停世界
+        RL.UpdateUpgradeAnim(G, dt)
+        Ent.UpdateFloatTexts(G, dt)
+        Ent.UpdateParticles(G, dt)
         return
     end
 
@@ -853,15 +1067,29 @@ function HandleUpdate(eventType, eventData)
     -- 波次系统更新
     if G.waveActive then
         G.waveTimer = G.waveTimer + dt
+        G.waveProgress = G.waveTimer / G.waveDuration  -- 波次进度 0.0~1.0（用于新丧尸mid-wave出场）
         G.waveCountdown = math.max(0, G.waveDuration - G.waveTimer)
 
-        -- 丧尸生成（间隔随波次递减，越打越多）
-        local spawnInterval = math.max(C.ZOMBIE_SPAWN_INTERVAL_MIN,
-            C.ZOMBIE_SPAWN_INTERVAL - G.currentWave * C.ZOMBIE_SPAWN_INTERVAL_REDUCE)
+        -- 丧尸生成（间隔随波次+关卡递减，每次生成数量随进度递增）
+        local spawnInterval
+        if G.currentWave == 1 and G.stage == 1 then
+            spawnInterval = C.ZOMBIE_SPAWN_INTERVAL * 1.8  -- 第一波间隔放大1.8倍
+        else
+            -- 间隔同时受波次和关卡(stage)影响
+            local waveReduce = G.currentWave * C.ZOMBIE_SPAWN_INTERVAL_REDUCE
+            local stageReduce = (G.stage - 1) * 0.2  -- 每个大关额外减少0.2秒
+            spawnInterval = math.max(C.ZOMBIE_SPAWN_INTERVAL_MIN,
+                C.ZOMBIE_SPAWN_INTERVAL - waveReduce - stageReduce)
+        end
         G.zombieSpawnTimer = G.zombieSpawnTimer + dt
         if G.zombieSpawnTimer >= spawnInterval then
             G.zombieSpawnTimer = G.zombieSpawnTimer - spawnInterval
-            Ent.SpawnZombie(G)
+            -- 每次生成多只僵尸：随关卡进度递增
+            local spawnCount = 1 + math.floor(G.level / 4)  -- 每4级多生成1只
+            spawnCount = math.min(spawnCount, 5)  -- 单次最多5只
+            for i = 1, spawnCount do
+                Ent.SpawnZombie(G)
+            end
         end
 
         -- 波次结束 → 进入间歇期
@@ -875,10 +1103,10 @@ function HandleUpdate(eventType, eventData)
         G.waveCountdown = G.waveCountdown - dt
         if G.waveCountdown <= 0 then
             if G.currentWave >= G.maxWaves then
-                -- 本关所有波次完成 → 进入下一关
-                G.stage = (G.stage or 1) + 1
-                G.currentWave = 1
-                print("[Game] Stage " .. G.stage .. " started!")
+                -- 本关所有波次完成 → 通关胜利！
+                G.gameWin = true
+                G.state = "gameover"
+                print("[Game] Stage " .. (G.stage or 1) .. " cleared! All " .. G.maxWaves .. " waves survived!")
             else
                 G.currentWave = G.currentWave + 1
             end
@@ -887,9 +1115,11 @@ function HandleUpdate(eventType, eventData)
             G.waveCountdown = G.waveDuration
             G.level = (G.stage - 1) * G.maxWaves + G.currentWave  -- 全局难度等级
 
-            -- 波次开始时批量涌现一大群僵尸
-            local hordeCount = math.min(6 + G.level * 2, 30)
-            Ent.SpawnWaveHorde(G, hordeCount)
+            -- 波次开始时批量涌现一大群僵尸（第一关第一波跳过）
+            if not (G.stage == 1 and G.currentWave == 1) then
+                local hordeCount = math.min(6 + G.level * 3 + G.currentWave * 2, 50)
+                Ent.SpawnWaveHorde(G, hordeCount)
+            end
         end
     end
 
@@ -960,6 +1190,9 @@ function HandleUpdate(eventType, eventData)
 
     -- 更新丧尸 (朝列车移动 + 攻击列车)
     Ent.UpdateZombies(G, dt)
+    -- Spine 丧尸：分配实例 + 更新动画
+    AssignSpineInstances()
+    UpdateSpineAnimations(dt)
     Turret.Update(G, dt)
     Drone.Update(G, dt)
 
@@ -993,6 +1226,10 @@ function HandleUpdate(eventType, eventData)
     Ent.UpdatePuffs(G, dt)
     Ent.UpdateBursts(G, dt)
     Ent.UpdateDropItems(G, dt)
+    Ent.UpdateSubmitProcess(G, dt)
+    Ent.UpdateSubmitFlyItems(G, dt)
+    Ent.UpdateGoldFlyItems(G, dt)
+    Ent.UpdateRewardToasts(G, dt)
     Ent.UpdateBloodStains(G, dt)
 
     -- 火车受击闪红递减
@@ -1483,6 +1720,7 @@ local function HandleGameSettingClick(x, y)
             local wave = G.currentWave or 1
             Meta.UploadGameScore(stage, wave)
             G.state = "lobby"
+            Meta.SyncBattleLevel()
             if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
             print("[GameSetting] Exit to lobby, stage:" .. stage .. " wave:" .. wave)
             return true
@@ -1539,7 +1777,7 @@ function HandleClick(x, y)
         -- x, y 已在上游转换为设计坐标，使用设计分辨率
         local result, param = Meta.HandleClick(x, y, DESIGN_W, DESIGN_H)
         if result == "start_level" then
-            StartLevel()
+            StartLevel(param)
             if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
             print("[Game] Starting level " .. tostring(param))
         end
@@ -1590,6 +1828,21 @@ function HandleClick(x, y)
     end
 
     if G.state == "upgrade" then
+        -- 刷新按钮点击检测
+        local refreshBtn = G.upgradeRefreshBtn
+        if refreshBtn and x >= refreshBtn.x and x <= refreshBtn.x + refreshBtn.w
+            and y >= refreshBtn.y and y <= refreshBtn.y + refreshBtn.h then
+            RL.HandleRefreshClick(G)
+            return
+        end
+        -- 获取全部按钮点击检测
+        local getAllBtn = G.upgradeGetAllBtn
+        if getAllBtn and x >= getAllBtn.x and x <= getAllBtn.x + getAllBtn.w
+            and y >= getAllBtn.y and y <= getAllBtn.y + getAllBtn.h then
+            RL.HandleGetAllClick(G)
+            return
+        end
+        -- 卡片点击检测
         for _, cb in ipairs(G.upgradeCardBtns or {}) do
             if x >= cb.x and x <= cb.x + cb.w and y >= cb.y and y <= cb.y + cb.h then
                 RL.ApplyUpgrade(G, cb.index)
@@ -1607,7 +1860,35 @@ function HandleClick(x, y)
             local stage = G.stage or 1
             local wave = G.currentWave or 1
             Meta.UploadGameScore(stage, wave)
+            -- 按波次进度记录星数（无论胜负），解锁对应宝箱
+            local sd = Meta.GetSaveData()
+            if sd then
+                local maxW = G.maxWaves or 10
+                local progress = wave / maxW  -- 0~1
+                local newStars = 0
+                if progress >= 1.0 then
+                    newStars = 3   -- 100% → 3颗星
+                elseif progress >= 0.5 then
+                    newStars = 2   -- 50% → 2颗星
+                elseif progress >= 0.25 then
+                    newStars = 1   -- 25% → 1颗星
+                end
+                local oldStars = sd.levelStars[stage] or 0
+                if newStars > oldStars then
+                    sd.levelStars[stage] = newStars
+                end
+                -- 100%通关解锁下一关
+                if progress >= 1.0 and stage < #MD.LEVELS then
+                    if (sd.maxLevel or 1) <= stage then
+                        sd.maxLevel = stage + 1
+                        print("[Game] 解锁下一关! maxLevel=" .. sd.maxLevel)
+                    end
+                end
+                print("[Game] LevelStars: stage " .. stage .. " progress=" .. string.format("%.0f%%", progress * 100) .. " stars=" .. (sd.levelStars[stage] or 0))
+            end
             G.state = "lobby"
+            -- 返回大厅时同步关卡选择到当前最高解锁关
+            Meta.SyncBattleLevel()
             if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
             print("[Game] Returned to lobby, stage:" .. stage .. " wave:" .. wave)
         end
@@ -1749,6 +2030,8 @@ function HandleRender(eventType, eventData)
     Rend.DrawPuffs(vg, G)
     Rend.DrawBursts(vg, G)
     Rend.DrawDropItems(vg, G)
+    Rend.DrawSubmitFlyItems(vg, G)
+    Rend.DrawGoldFlyItems(vg, G)
     Rend.DrawFloatTexts(vg, G)
 
     -- HUD
@@ -1763,6 +2046,9 @@ function HandleRender(eventType, eventData)
     -- 技能按钮（摇杆左右两侧）
     Rend.DrawSkillButtons(vg, G)
 
+    -- 左侧获得提示
+    Rend.DrawRewardToasts(vg, G)
+
     -- 提示
     Rend.DrawHint(vg, G)
 
@@ -1771,9 +2057,16 @@ function HandleRender(eventType, eventData)
         Rend.DrawMenu(vg, G)
     end
 
+    -- 升级光效特效
+    if G.state == "upgradeVfx" then
+        RL.DrawUpgradeVfx(vg, G)
+    end
+
     -- 升级选卡覆盖
     if G.state == "upgrade" then
         RL.DrawUpgradeUI(vg, G)
+        -- 升级面板有全屏遮罩，重绘HUD使资源栏在遮罩之上
+        Rend.DrawHUD(vg, G)
     end
 
     -- Game Over 覆盖

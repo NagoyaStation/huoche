@@ -8,7 +8,7 @@ local E = {}
 --- @return number dmg 最终伤害
 --- @return boolean isCrit 是否暴击
 function E.CalcDamage(baseDmg, G)
-    local dmg = baseDmg * (G.atkPctMul or 1.0)
+    local dmg = baseDmg * (G.atkPctMul or 1.0) * (G.weaponDmgMul or 1.0)
     local isCrit = false
     local critRate = G.critRate or 0
     if critRate > 0 and math.random(1, 100) <= critRate then
@@ -96,9 +96,36 @@ function E.UpdatePlayer(G, dt, moveX, moveY)
     p.x = p.x + p.vx * dt
     p.y = p.y + p.vy * dt
 
-    -- 朝向
+    -- 喷气冲刺逐帧推进（带轨迹粒子）
+    if G.jetDash then
+        local jd = G.jetDash
+        local moveDist = jd.speed * dt
+        if moveDist > jd.remaining then
+            moveDist = jd.remaining
+        end
+        p.x = p.x + jd.dirX * moveDist
+        p.y = p.y + jd.dirY * moveDist
+        jd.remaining = jd.remaining - moveDist
+
+        -- 轨迹粒子：每移动约15像素喷一次
+        jd.trailTimer = jd.trailTimer + moveDist
+        if jd.trailTimer >= 15 then
+            jd.trailTimer = jd.trailTimer - 15
+            E.SpawnParticles(G, p.x, p.y, {255, 255, 255}, 3)
+        end
+
+        -- 冲刺结束
+        if jd.remaining <= 0 then
+            G.jetDash = nil
+        end
+    end
+
+    -- 朝向 & 记录最后移动Y方向（供喷气技能使用）
     if math.abs(moveX) > 0.2 then
         p.facing = moveX > 0 and 1 or -1
+    end
+    if math.abs(moveY) > 0.2 then
+        G._lastMoveY = moveY
     end
 
     -- 屏幕边界约束
@@ -147,8 +174,7 @@ function E.UpdatePlayer(G, dt, moveX, moveY)
             local last = trail[1]
             local dx = p.x - last.x
             local dy = p.y - last.y
-            local dist = math.sqrt(dx * dx + dy * dy)
-            if dist >= TRAIL_STEP then
+            if dx * dx + dy * dy >= TRAIL_STEP * TRAIL_STEP then
                 -- 在队首插入新点
                 table.insert(trail, 1, { x = p.x, y = p.y })
                 -- 裁剪过长轨迹
@@ -255,7 +281,7 @@ function E.AutoAttack(G, dt)
     if not bestTarget then return end
 
     -- 执行攻击
-    local baseAtk = C.PLAYER_ATK + (G.meleeAtkBonus or 0)
+    local baseAtk = (C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * (G.meleeAtkMul or 1.0)
     local atkPower, _ = E.CalcDamage(baseAtk, G)
     local atkInterval = C.AUTO_ATTACK_INTERVAL / (G.atkSpdMul or 1.0)
     p.atkTimer = atkInterval
@@ -265,7 +291,8 @@ function E.AutoAttack(G, dt)
     if bestTarget.x > p.x then p.facing = 1 else p.facing = -1 end
 
     if bestType == "res" then
-        bestTarget.hp = bestTarget.hp - atkPower
+        local gatherPower = math.floor(atkPower * (G.gatherMul or 1.0))
+        bestTarget.hp = bestTarget.hp - gatherPower
         bestTarget.hitAnim = 0.2   -- 受击闪白
         bestTarget.squashAnim = 1.0 -- 受击压缩动画
 
@@ -288,21 +315,16 @@ function E.AutoAttack(G, dt)
                 amount = amount * 2
             end
 
-            -- 弹出资源动画（先弹出旋转，再吸附飞向玩家）
-            local actual = math.min(amount, G.maxCarry - p.carrying)
-            if actual > 0 then
-                E.SpawnDropItem(G, bestTarget.x, bestTarget.y, bestTarget.rtype, actual)
-                E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 10, "+" .. actual, bestTarget.rtype)
-            else
-                E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 10, "背包满", "damage")
-            end
+            -- 弹出资源动画（无论背包是否满都掉落，满了留在地面等捡）
+            E.SpawnDropItem(G, bestTarget.x, bestTarget.y, bestTarget.rtype, amount)
+            E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 10, "+" .. amount, bestTarget.rtype)
 
             p.collectAnim = 0.3
             E.SpawnPuff(G, bestTarget.x, bestTarget.y)
         end
 
     elseif bestType == "zombie" then
-        local baseZDmg = C.PLAYER_ATK_ZOMBIE + (G.meleeAtkBonus or 0)  -- 近战攻击力
+        local baseZDmg = (C.PLAYER_ATK_ZOMBIE + (G.meleeAtkBonus or 0)) * (G.meleeAtkMul or 1.0)  -- 近战攻击力
         local dmg, isCrit = E.CalcDamage(baseZDmg, G)
         bestTarget.hp = bestTarget.hp - dmg
         bestTarget.hitAnim = 0.2
@@ -313,12 +335,9 @@ function E.AutoAttack(G, dt)
         if bestTarget.hp <= 0 then
             bestTarget.dead = true
             G.killCount = (G.killCount or 0) + 1
-            E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 10, "击杀!", "gold")
             E.SpawnZombieDeath(G, bestTarget.x, bestTarget.y)
-            -- 击杀奖励金币
-            local goldReward = 2 + G.level
-            G.gold = G.gold + goldReward
-            E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 25, "+" .. goldReward, "gold")
+            -- 击杀掉落1枚金币，飞到顶部金币图标
+            E.SpawnGoldFly(G, bestTarget.x, bestTarget.y, 1)
         else
             if isCrit then
                 E.SpawnFloatText(G, bestTarget.x, bestTarget.y - 15, tostring(dmg), "crit")
@@ -335,6 +354,7 @@ end
 function E.TrySubmit(G)
     local p = G.player
     if p.carrying <= 0 then return end
+    if p.submitting then return end  -- 正在提交中，不重复触发
 
     local sx = G.submitBox.x
     local sy = G.submitBox.y
@@ -345,29 +365,373 @@ function E.TrySubmit(G)
     local py = p.y
     if px > sx - sw / 2 - 12 and px < sx + sw / 2 + 12 and
        py > sy - sh / 2 - 12 and py < sy + sh / 2 + 12 then
-
-        local submitted = p.carrying
-        local goldEarned = math.floor(submitted * C.GOLD_PER_SUBMIT * G.goldMul)
-        G.gold = G.gold + goldEarned
-
-        -- 清空背包
-        for rtype, _ in pairs(p.inv) do
-            p.inv[rtype] = 0
-        end
-        p.carrying = 0
-        p.carryQueue = {}
-        p.carrySmooth = {}
-
-        G.levelProgress = G.levelProgress + submitted
-
+        -- 启动逐个提交过程
+        p.submitting = true
+        p.submitTimer = 0
         p.submitAnim = 0.4
-        E.SpawnFloatText(G, sx, sy - 20, "+" .. goldEarned, "gold")
-        E.SpawnParticles(G, sx, sy, {255, 220, 80}, 8)
+    end
+end
 
-        if G.levelProgress >= G.levelTarget then
-            G.pendingLevelUp = true
+------------------------------------------------------------------------
+-- 逐个提交过程（每帧调用）
+------------------------------------------------------------------------
+function E.UpdateSubmitProcess(G, dt)
+    local p = G.player
+    if not p.submitting then return end
+
+    -- 提交间隔：每0.08秒弹出一个资源
+    local SUBMIT_INTERVAL = 0.08
+    p.submitTimer = p.submitTimer + dt
+
+    while p.submitTimer >= SUBMIT_INTERVAL and #p.carryQueue > 0 do
+        p.submitTimer = p.submitTimer - SUBMIT_INTERVAL
+
+        -- 从队尾弹出一个资源
+        local idx = #p.carryQueue
+        local rtype = p.carryQueue[idx]
+
+        -- 获取该资源的视觉位置
+        local startX, startY
+        if p.carrySmooth[idx] then
+            startX = p.carrySmooth[idx].x
+            startY = p.carrySmooth[idx].y
+        else
+            startX = p.x
+            startY = p.y
+        end
+
+        -- 从背包移除
+        p.carryQueue[idx] = nil
+        if p.carrySmooth[idx] then
+            p.carrySmooth[idx] = nil
+        end
+        p.inv[rtype] = math.max(0, (p.inv[rtype] or 1) - 1)
+        p.carrying = math.max(0, p.carrying - 1)
+
+        -- 生成飞行动画项
+        local sx = G.submitBox.x
+        local sy = G.submitBox.y
+        table.insert(G.submitFlyItems, {
+            x = startX,
+            y = startY,
+            startX = startX,
+            startY = startY,
+            targetX = sx,
+            targetY = sy - 10,
+            rtype = rtype,
+            timer = 0,
+            duration = 0.25,
+            rot = 0,
+            rotSpd = (math.random() - 0.5) * 12,
+        })
+    end
+
+    -- 全部弹出完毕，结束提交过程
+    if #p.carryQueue <= 0 then
+        p.submitting = false
+    end
+end
+
+------------------------------------------------------------------------
+-- 提交资源飞行动画更新
+------------------------------------------------------------------------
+function E.UpdateSubmitFlyItems(G, dt)
+    for i = #G.submitFlyItems, 1, -1 do
+        local item = G.submitFlyItems[i]
+        item.timer = item.timer + dt
+        local t = math.min(1, item.timer / item.duration)
+        -- smoothstep 缓动
+        local st = t * t * (3 - 2 * t)
+
+        -- 从起始位置到目标直接插值 + 抛物线弧线（向上弓起）
+        local arcY = -70 * 4 * t * (1 - t)  -- 抛物线，中点最高-70px
+        item.x = item.startX + (item.targetX - item.startX) * st
+        item.y = item.startY + (item.targetY - item.startY) * st + arcY
+
+        item.rot = item.rot + item.rotSpd * dt
+
+        if t >= 1 then
+            -- 到达物资点
+            local sx = G.submitBox.x
+            local sy = G.submitBox.y
+
+            -- 提交时增加资源总量
+            local rtype = item.rtype
+            G.totalRes[rtype] = (G.totalRes[rtype] or 0) + 1
+            -- 同步更新saveData持久化数据（局内外资源一致）
+            local sd = G.saveData
+            if sd then
+                if rtype == "ore" then
+                    sd.diamond = (sd.diamond or 0) + 1
+                elseif rtype == "wood" or rtype == "bush" then
+                    sd.wood = (sd.wood or 0) + 1
+                elseif rtype == "stone" or rtype == "pebble" then
+                    sd.stone = (sd.stone or 0) + 1
+                end
+            end
+
+            -- 资源算升级进度，钻石+2
+            if rtype == "ore" then
+                G.levelProgress = G.levelProgress + 2
+            elseif rtype == "wood" or rtype == "bush" or rtype == "stone" or rtype == "pebble" then
+                G.levelProgress = G.levelProgress + 1
+            end
+
+            -- 钻石提交时左侧显示获得提示
+            if rtype == "ore" then
+                E.SpawnRewardToast(G, "gem", "获得 x1 钻石")
+            end
+
+            -- 白色+黑色描边 "+1" 飘字
+            E.SpawnFloatText(G, sx + (math.random() - 0.5) * 16, sy - 15, "+1", "submit")
+
+            -- 小粒子效果
+            E.SpawnParticles(G, sx, sy, {255, 220, 80}, 2)
+
+            -- 检查关卡升级（升级状态中不重复触发）
+            if G.levelProgress >= G.levelTarget
+               and G.state ~= "upgradeVfx" and G.state ~= "upgrade" then
+                G.pendingLevelUp = true
+            end
+
+            -- 移除
+            swapRemove(G.submitFlyItems, i)
         end
     end
+end
+
+------------------------------------------------------------------------
+-- 击杀僵尸掉落金币飞行
+------------------------------------------------------------------------
+function E.SpawnGoldFly(G, x, y, amount)
+    -- 顶部金币图标目标位置（HUD第一项）
+    local s = G.uiScale or 1
+    local hudH = G.hudH or 40
+    local targetX = 6 * s + 68 * s * 0 + 6 * s + 15 * s / 2
+    local targetY = hudH / 2
+
+    for i = 1, amount do
+        -- 随机爆开方向
+        local angle = math.random() * math.pi * 2
+        local popDist = 25 + math.random() * 20
+        local landX = x + math.cos(angle) * popDist
+        local landY = y + math.sin(angle) * popDist * 0.5  -- 压扁Y轴，俯视感
+        table.insert(G.goldFlyItems, {
+            x = x, y = y,
+            originX = x, originY = y,       -- 爆发原点
+            landX = landX, landY = landY,    -- 弹落地点
+            targetX = targetX, targetY = targetY,
+            timer = 0,
+            delay = (i - 1) * 0.03,
+            phase = 1,          -- 1=爆开弹起  2=飞向HUD
+            popDur = 0.3,       -- 爆开阶段时长
+            flyDur = 0.4,       -- 飞向HUD时长
+            scale = 1.0,
+        })
+    end
+end
+
+function E.UpdateGoldFlyItems(G, dt)
+    for i = #G.goldFlyItems, 1, -1 do
+        local item = G.goldFlyItems[i]
+        -- 延迟阶段
+        if item.delay > 0 then
+            item.delay = item.delay - dt
+            goto continue_gold
+        end
+
+        item.timer = item.timer + dt
+
+        if item.phase == 1 then
+            -- 阶段1: 爆开弹起（抛物线从原点飞到落地点）
+            local t = math.min(1, item.timer / item.popDur)
+            local st = t * t * (3 - 2 * t)
+            item.x = item.originX + (item.landX - item.originX) * st
+            item.y = item.originY + (item.landY - item.originY) * st + (-60 * 4 * t * (1 - t))
+            item.scale = 1.0
+
+            if t >= 1 then
+                -- 进入阶段2
+                item.phase = 2
+                item.timer = 0
+                item.startX = item.landX
+                item.startY = item.landY
+            end
+        elseif item.phase == 2 then
+            -- 阶段2: 从落地点飞向HUD金币图标
+            local t = math.min(1, item.timer / item.flyDur)
+            local st = t * t * (3 - 2 * t)
+            local arcY = -40 * 4 * t * (1 - t)
+            item.x = item.startX + (item.targetX - item.startX) * st
+            item.y = item.startY + (item.targetY - item.startY) * st + arcY
+            item.scale = 1.0 - t * 0.5
+
+            if t >= 1 then
+                G.gold = G.gold + 1
+                -- 同步更新saveData金币
+                local sd = G.saveData
+                if sd then sd.gold = (sd.gold or 0) + 1 end
+                swapRemove(G.goldFlyItems, i)
+            end
+        end
+
+        ::continue_gold::
+    end
+end
+
+------------------------------------------------------------------------
+-- 左侧获得提示 (带图标的 toast)
+------------------------------------------------------------------------
+function E.SpawnRewardToast(G, icon, text)
+    if not G.rewardToasts then G.rewardToasts = {} end
+    table.insert(G.rewardToasts, {
+        icon = icon,      -- "gem" / "wood" / "stone" / "gold"
+        text = text,
+        timer = 0,
+        life = 2.0,       -- 总显示时长
+    })
+end
+
+function E.UpdateRewardToasts(G, dt)
+    if not G.rewardToasts then return end
+    for i = #G.rewardToasts, 1, -1 do
+        local t = G.rewardToasts[i]
+        t.timer = t.timer + dt
+        if t.timer >= t.life then
+            swapRemove(G.rewardToasts, i)
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- 开局预生成资源：填满可见区域
+------------------------------------------------------------------------
+function E.PreSpawnResources(G)
+    local W = G.screenW
+    local H = G.screenH
+    local hudH = G.hudH or 48
+    -- 从列车底部下方开始，到屏幕底部+一点缓冲
+    local startY = (G.cartBottomY or (hudH + 260)) + 60
+    local endY = H + 40
+    -- 按行扫描生成，每行间距约 SPAWN_INTERVAL 对应的滚动距离
+    local rowGap = 80  -- 每行间距
+    local y = startY
+    while y < endY do
+        -- 每行生成 1~2 个资源
+        local count = math.random(C.RES_PER_SPAWN_MIN, C.RES_PER_SPAWN_MAX)
+        for ci = 1, count do
+            -- 资源类型选择（复用 SpawnResources 的频率逻辑）
+            local roll = math.random()
+            local oreFreq = C.RES.ore.freq * (G.oreLuckMul or 1)
+            local totalFreq = C.RES.wood.freq + C.RES.stone.freq + oreFreq + C.RES.bush.freq + C.RES.pebble.freq
+            local woodThresh = C.RES.wood.freq / totalFreq
+            local stoneThresh = (C.RES.wood.freq + C.RES.stone.freq) / totalFreq
+            local oreThresh = (C.RES.wood.freq + C.RES.stone.freq + oreFreq) / totalFreq
+            local bushThresh = (C.RES.wood.freq + C.RES.stone.freq + oreFreq + C.RES.bush.freq) / totalFreq
+
+            local rtype
+            if roll < woodThresh then
+                rtype = "wood"
+            elseif roll < stoneThresh then
+                rtype = "stone"
+            elseif roll < oreThresh then
+                rtype = "ore"
+            elseif roll < bushThresh then
+                rtype = "bush"
+            else
+                rtype = "pebble"
+            end
+
+            local pathL, pathR = E.GetPathBounds(W, y)
+            local side = (ci % 2 == 1) and 1 or 2
+            local rx
+            local margin = 20
+            local resHalf = C.RES_SIZE / 2
+            if side == 1 then
+                local minX = margin + resHalf
+                local maxX = math.max(minX + 1, math.floor(pathL - resHalf - 5))
+                rx = math.random(math.floor(minX), math.floor(maxX))
+            else
+                local minX = math.min(math.floor(pathR + resHalf + 5), W - margin - resHalf)
+                local maxX = W - margin - resHalf
+                rx = math.random(math.floor(minX), math.floor(math.max(minX + 1, maxX)))
+            end
+
+            local ry = y + math.random(-10, 10)
+
+            -- 重叠检测
+            local RES_MIN_DIST = 40
+            local overlap = false
+            for _, r in ipairs(G.resources) do
+                local ddx = r.x - rx
+                local ddy = r.y - ry
+                if ddx * ddx + ddy * ddy < RES_MIN_DIST * RES_MIN_DIST then
+                    overlap = true
+                    break
+                end
+            end
+
+            if not overlap then
+                local resInfo = C.RES[rtype]
+                table.insert(G.resources, {
+                    x = rx, y = ry,
+                    rtype = rtype,
+                    hp = resInfo.hp,
+                    maxHp = resInfo.hp,
+                    displayHp = resInfo.hp,
+                    dead = false,
+                    hitAnim = 0,
+                    squashAnim = 0,
+                    bobPhase = math.random() * math.pi * 2,
+                    scale = 0.85 + math.random() * 0.3,
+                })
+            end
+        end
+        y = y + rowGap
+    end
+end
+
+------------------------------------------------------------------------
+-- 开局预生成装饰物：填满可见区域
+------------------------------------------------------------------------
+function E.PreSpawnDecorations(G)
+    local W = G.screenW
+    local H = G.screenH
+    local imgs = G.decoImgs
+    if not imgs then return end
+
+    local allImgs = {}
+    for _, img in ipairs(imgs.poles  or {}) do if img ~= 0 then table.insert(allImgs, {img = img, cat = "pole"}) end end
+    for _, img in ipairs(imgs.houses or {}) do if img ~= 0 then table.insert(allImgs, {img = img, cat = "house"}) end end
+    for _, img in ipairs(imgs.small  or {}) do if img ~= 0 then table.insert(allImgs, {img = img, cat = "small"}) end end
+    if #allImgs == 0 then return end
+
+    local DECO_GAP_SAME_SIDE = 160
+    local startY = (G.cartBottomY or 300) + 40
+    local endY = H + 40
+    local y = startY
+    local lastSide = 0
+    while y < endY do
+        local pick = allImgs[math.random(#allImgs)]
+        local side = (lastSide == 1) and 2 or 1
+        local dx
+        if pick.cat == "house" then
+            if side == 1 then dx = math.random(-25, -5) else dx = W + math.random(5, 25) end
+        elseif pick.cat == "small" then
+            if side == 1 then dx = math.random(-5, 12) else dx = W - math.random(-5, 12) end
+        else
+            if side == 1 then dx = math.random(5, 22) else dx = W - math.random(5, 22) end
+        end
+        table.insert(G.decorations, {
+            x = dx, y = y + math.random(-10, 10),
+            img = pick.img, cat = pick.cat,
+            flip = (math.random(2) == 1),
+            side = side,
+        })
+        lastSide = side
+        y = y + DECO_GAP_SAME_SIDE + math.random(0, 40)
+    end
+    G.lastDecoSide = lastSide
 end
 
 ------------------------------------------------------------------------
@@ -635,6 +999,21 @@ function E.UpdateScroll(G, dt)
         end
     end
 
+    -- 提交飞行资源：起始点跟随世界滚动（目标点submitBox是固定屏幕位置不滚动）
+    for _, si in ipairs(G.submitFlyItems) do
+        si.startY = si.startY - scrollDelta
+    end
+
+    -- 金币飞行：世界坐标点跟随滚动（目标点HUD是固定屏幕位置不滚动）
+    for _, gi in ipairs(G.goldFlyItems) do
+        if gi.phase == 1 then
+            gi.originY = gi.originY - scrollDelta
+            gi.landY = gi.landY - scrollDelta
+        else
+            gi.startY = gi.startY - scrollDelta
+        end
+    end
+
     -- 无人机跟随世界滚动
     if G.drones then
         for _, d in ipairs(G.drones) do
@@ -654,6 +1033,11 @@ function E.SpawnFloatText(G, x, y, text, rtype)
         local side = (math.random(1, 2) == 1) and -1 or 1
         vx = side * (90 + math.random() * 40)
         vy = -20 - math.random() * 20
+        life = 0.7
+    -- 提交+1：向上飘，略有左右散开
+    elseif rtype == "submit" then
+        vx = (math.random() - 0.5) * 30
+        vy = -60 - math.random() * 20
         life = 0.7
     -- 伤害/暴击数字：随机弹射方向，快速消失
     elseif rtype == "damage" or rtype == "crit" then
@@ -831,16 +1215,25 @@ function E.UpdateDropItems(G, dt)
                 d.squash = 0.15
             end
         elseif d.phase == "land" then
-            -- 落地停留阶段：短暂停留后飞向玩家
+            -- 落地停留阶段
             d.landTimer = d.landTimer + dt
             -- 着地压扁恢复
             if d.squash and d.squash > 0 then
                 d.squash = d.squash - dt * 0.8
                 if d.squash < 0 then d.squash = 0 end
             end
-            if d.landTimer >= 0.3 then
-                d.phase = "fly"
-                d.flyTimer = 0
+            if d.landTimer >= 0.15 then
+                -- 背包有空位才飞向玩家，否则留在地面等待
+                if p.carrying < G.maxCarry then
+                    -- 检查与玩家距离，靠近时才吸附
+                    local dx2 = d.x - p.x
+                    local dy2 = d.y - p.y
+                    local pickDist = 90  -- 拾取距离
+                    if dx2 * dx2 + dy2 * dy2 < pickDist * pickDist then
+                        d.phase = "fly"
+                        d.flyTimer = 0
+                    end
+                end
             end
         else
             -- 飞向玩家阶段
@@ -853,15 +1246,19 @@ function E.UpdateDropItems(G, dt)
             d.rot = d.rot * (1 - t * 0.1)
             d.scale = 1.0 - t * 0.3  -- 飞向玩家时略微缩小
             if d.flyTimer >= 0.35 then
-                -- 到达玩家：加入携带队列
+                -- 到达玩家：背包有空位才拾取，否则退回地面
                 if p.carrying < G.maxCarry then
                     p.inv[d.rtype] = p.inv[d.rtype] + 1
                     p.carrying = p.carrying + 1
-                    G.totalRes[d.rtype] = G.totalRes[d.rtype] + 1
                     p.carryQueue[#p.carryQueue + 1] = d.rtype
+                    swapRemove(G.dropItems, i)
+                    goto cont_drop
+                else
+                    -- 背包满了，退回地面
+                    d.phase = "land"
+                    d.landTimer = 0.3
+                    d.scale = 1.0
                 end
-                swapRemove(G.dropItems, i)
-                goto cont_drop
             end
         end
         ::cont_drop::
@@ -940,35 +1337,22 @@ end
 function E.SpawnWaveHorde(G, count)
     local W = G.screenW
     local H = G.screenH
+    -- 波次开始时 waveProgress=0，仅使用 midWave=false 的丧尸
+    local pool = C.GetZombiePool(G.stage, 0)
+    if #pool == 0 then return end
+
     for i = 1, count do
-        -- 散布在屏幕上方外侧，分成多排涌入
-        local row = math.ceil(i / 6)  -- 每排约6个
+        local row = math.ceil(i / 6)
         local zx = math.random(30, math.floor(W - 30))
-        local zy = H + 20 + (row - 1) * 25 + math.random(0, 15)
+        -- 生成在屏幕下方足够远处，避免 Spine 图形露出屏幕底部产生闪烁
+        local zy = H + 80 + (row - 1) * 35 + math.random(0, 20)
 
-        local zType
-        if G.level >= C.CRAWLER_SPAWN_LEVEL and math.random() < C.CRAWLER_CHANCE then
-            zType = 3
-        else
-            zType = math.random(1, 2)
-        end
+        local zt = pool[math.random(1, #pool)]
+        local zSpeed = C.GetZombieSpeed(zt.speed, G.level)
+        local zHP = C.GetZombieHP(zt.hp, G.level)
 
-        local zSpeed
-        if zType == 3 then
-            zSpeed = C.CRAWLER_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
-        else
-            zSpeed = C.ZOMBIE_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
-        end
-
-        local baseHp
-        if zType == 1 then
-            baseHp = 80
-        elseif zType == 2 then
-            baseHp = 100
-        else
-            baseHp = C.CRAWLER_HP_BASE
-        end
-        local hp = baseHp + math.floor(G.level / 3) * 5
+        -- 分批入场延迟：每行延迟0.15秒，避免大量僵尸同帧分配Spine导致闪烁
+        local spawnDelay = (row - 1) * 0.15
 
         table.insert(G.zombies, {
             x = zx, y = zy,
@@ -980,9 +1364,15 @@ function E.SpawnWaveHorde(G, count)
             walkAnim = 0,
             atkTimer = 0,
             atTrain = false,
-            zombieType = zType,
-            hp = hp,
-            maxHp = hp,
+            zombieType = zt.id,
+            zombieDef = zt,
+            hp = zHP,
+            maxHp = zHP,
+            damage = zt.damage,
+            drawScale = zt.drawScale,
+            spineAnim = "run",
+            spineTime = 0,
+            spawnDelay = spawnDelay,  -- 入场延迟（秒）
         })
     end
 end
@@ -1002,20 +1392,14 @@ function E.SpawnZombie(G)
     end
     local zy = math.floor(G.screenH) + 20 + math.random(0, 30)
 
-    -- 决定僵尸类型: 3级后有概率生成爬行僵尸(type 3)
-    local zType
-    if G.level >= C.CRAWLER_SPAWN_LEVEL and math.random() < C.CRAWLER_CHANCE then
-        zType = 3  -- 爬行僵尸
-    else
-        zType = math.random(1, 2)  -- 1=白T恤僵尸, 2=棕外套僵尸
-    end
+    -- 使用新的关卡池系统选择丧尸类型
+    local waveProgress = G.waveProgress or 0
+    local pool = C.GetZombiePool(G.stage, waveProgress)
+    if #pool == 0 then return end
 
-    local zSpeed
-    if zType == 3 then
-        zSpeed = C.CRAWLER_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
-    else
-        zSpeed = C.ZOMBIE_SPEED + G.level * C.ZOMBIE_SPEED_PER_LEVEL
-    end
+    local zt = pool[math.random(1, #pool)]
+    local zSpeed = C.GetZombieSpeed(zt.speed, G.level)
+    local zHP = C.GetZombieHP(zt.hp, G.level)
 
     table.insert(zombies, {
         x = zx,
@@ -1025,22 +1409,18 @@ function E.SpawnZombie(G)
         speed = zSpeed,
         dead = false,
         hitAnim = 0,
-        walkAnim = 0,        -- 行走动画计数器
-        atkTimer = 0,        -- 攻击列车冷却
-        atTrain = false,     -- 是否已到达列车
-        zombieType = zType,
+        walkAnim = 0,
+        atkTimer = 0,
+        atTrain = false,
+        zombieType = zt.id,
+        zombieDef = zt,
+        hp = zHP,
+        maxHp = zHP,
+        damage = zt.damage,
+        drawScale = zt.drawScale,
+        spineAnim = "run",       -- 默认播放 run 动画
+        spineTime = 0,
     })
-    local z = zombies[#zombies]
-    local baseHp
-    if zType == 1 then
-        baseHp = 80
-    elseif zType == 2 then
-        baseHp = 100
-    else -- 爬行僵尸: 脆皮快速
-        baseHp = C.CRAWLER_HP_BASE
-    end
-    z.hp = baseHp + math.floor(G.level / 3) * 5  -- 每3级+5HP
-    z.maxHp = z.hp
 end
 
 ------------------------------------------------------------------------
@@ -1061,8 +1441,33 @@ function E.UpdateZombies(G, dt)
 
     for i = #G.zombies, 1, -1 do
         local z = G.zombies[i]
-        if z.dead then
+        -- 入场延迟：倒计时期间不移动不渲染
+        if z.spawnDelay and z.spawnDelay > 0 then
+            z.spawnDelay = z.spawnDelay - dt
+            goto continue_z
+        end
+        -- 死亡动画播完后才移除
+        if z.deadDone then
+            if G.onZombieRemoved then G.onZombieRemoved(z) end
             swapRemove(G.zombies, i)
+            goto continue_z
+        end
+        -- 正在播死亡动画：只随世界滚动，不做其他逻辑
+        if z.dying then
+            z.y = z.y - scrollDelta
+            goto continue_z
+        end
+        -- 刚被标记死亡：启动死亡动画
+        if z.dead and not z.dying then
+            z.dying = true
+            z.dyingTimer = 0
+            -- 播放随机死亡动画
+            local deadAnims = { "dead_1", "dead_2", "dead_3" }
+            local deadAnim = deadAnims[math.random(1, 3)]
+            if z.spineInst then
+                z.spineInst:SetAnimation(0, deadAnim, false)
+            end
+            z.spineAnim = deadAnim
             goto continue_z
         end
 
@@ -1079,7 +1484,7 @@ function E.UpdateZombies(G, dt)
         local dy = targetY - z.y
         local dist = math.sqrt(dx * dx + dy * dy)
 
-        if dist > 25 then
+        if not z.atTrain and dist > 25 then
             -- 向列车移动
             local spd = z.speed * dt
             z.x = z.x + (dx / dist) * spd
@@ -1087,16 +1492,18 @@ function E.UpdateZombies(G, dt)
             z.facing = dx > 0 and 1 or -1
             z.walkAnim = (z.walkAnim or 0) + dt * 8
             z.isWalking = true
-            z.atTrain = false
-        else
+        elseif not z.atTrain and dist <= 25 then
             -- 到达列车，开始攻击
             z.isWalking = false
             z.atTrain = true
+        end
+
+        if z.atTrain then
             z.atkTimer = z.atkTimer + dt
             if z.atkTimer >= C.ZOMBIE_ATK_INTERVAL then
                 z.atkTimer = z.atkTimer - C.ZOMBIE_ATK_INTERVAL
-                -- 对列车造成伤害（防御减伤）
-                local actualDmg = E.CalcTrainDmgTaken(C.ZOMBIE_DAMAGE, G)
+                -- 对列车造成伤害（防御减伤，每种丧尸伤害不同）
+                local actualDmg = E.CalcTrainDmgTaken(z.damage or C.ZOMBIE_DAMAGE, G)
                 G.trainHP = G.trainHP - actualDmg
                 -- 火车伤害数字从火车中部飞出，与僵尸伤害区分
                 local trainMidY = (G.cartTopY or 0) + (G.cartH or 100) * 0.45
@@ -1112,7 +1519,7 @@ function E.UpdateZombies(G, dt)
             end
         end
 
-        -- 僵尸也不能进入火车碰撞体积（与玩家逻辑一致，只推向两侧或下方）
+        -- 僵尸不能进入火车碰撞体积（推向两侧或下方）
         if z.x > tLeft and z.x < tRight and z.y > tTop and z.y < tBottom then
             local pushLeft = z.x - tLeft
             local pushRight = tRight - z.x
@@ -1131,6 +1538,7 @@ function E.UpdateZombies(G, dt)
 
         -- 屏幕外清除 (上方移出)
         if z.y < G.hudH - 40 then
+            if G.onZombieRemoved then G.onZombieRemoved(z) end
             swapRemove(G.zombies, i)
             goto continue_z
         end
@@ -1196,8 +1604,8 @@ function E.UpdateMounted(G, dt, moveX, moveY)
     p.bobAnim = p.bobAnim + dt * 3
     p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4)
 
-    -- 攻击冷却
-    local atkInterval = C.AUTO_ATTACK_INTERVAL / (G.atkSpdMul or 1.0)
+    -- 上车攻击冷却（比步行更快）
+    local atkInterval = 0.55 / (G.atkSpdMul or 1.0)
     p.atkTimer = math.max(0, p.atkTimer - dt)
 
     if p.atkTimer <= 0 then
@@ -1260,8 +1668,8 @@ end
 function E.FireMountedBullet(G, angle, target)
     local p = G.player
     local spd = 350
-    local baseMDmg = C.PLAYER_ATK_ZOMBIE + (G.rangedAtkBonus or 0)  -- 射击攻击力（列车射击）
-    local dmg, _ = E.CalcDamage(baseMDmg, G)
+    local baseDmg = (30 + (G.rangedAtkBonus or 0)) * (G.rangedAtkMul or 1.0)  -- 初始30 + 远程加成（含倍率）
+    local dmg, isCrit = E.CalcDamage(baseDmg, G)
 
     if not G.turretProjectiles then G.turretProjectiles = {} end
 
@@ -1324,17 +1732,14 @@ function E.ActivateCharSkill(G)
         print("[Skill] Warrior placed bomb at (" .. math.floor(p.x) .. "," .. math.floor(p.y) .. ")")
 
     elseif charId == "auntie" then
-        -- 鼓舞士气：8秒近战+射击攻击力各+20%
-        G.skillCharActive = true
-        G.skillCharDurationMax = 8
-        G.skillCharDuration = 8
-        local meleeBoost = math.floor(C.PLAYER_ATK * 0.2)
-        local rangedBoost = math.floor(C.PLAYER_ATK * 0.2)
-        G.meleeAtkBonus  = (G.meleeAtkBonus or 0)  + meleeBoost
-        G.rangedAtkBonus = (G.rangedAtkBonus or 0) + rangedBoost
-        G._auntieMeleeBoost  = meleeBoost   -- 记录加成量，结束时回退
-        G._auntieRangedBoost = rangedBoost
-        print("[Skill] Auntie morale boost! MeleeAtk/RangedAtk +20% for 8s")
+        -- 治疗：立即回复列车20%最大生命值
+        local healAmount = math.floor((G.trainMaxHP or 1000) * 0.2)
+        G.trainHP = math.min((G.trainHP or 0) + healAmount, G.trainMaxHP or 1000)
+        -- 瞬发技能，无持续时间
+        G.skillCharActive = false
+        G.skillCharDuration = 0
+        E.SpawnFloatText(G, G.screenW / 2, (G.hudH or 60) + 30, "+" .. healAmount, "heal")
+        print("[Skill] Auntie heal! Train HP +" .. healAmount .. " => " .. G.trainHP)
 
     elseif charId == "lisanguang" then
         -- 战斗狂怒：7秒内攻速+100%
@@ -1345,38 +1750,31 @@ function E.ActivateCharSkill(G)
         print("[Skill] Lisanguang fury activated! AtkSpd x2 for 7s")
 
     elseif charId == "weifenglong" then
-        -- 龙息吐焰：对前方扇形内所有丧尸造成150%近战攻击力伤害 + 3秒灼烧
-        G.skillCharActive = true
-        G.skillCharDurationMax = 3
-        G.skillCharDuration = 3
-        local baseDragonDmg = math.floor((C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * 1.5)
-        local atkPower, _ = E.CalcDamage(baseDragonDmg, G)
+        -- 喷气：向最后移动方向快速位移，带移动轨迹
         local p = G.player
-        for _, z in ipairs(G.zombies or {}) do
-            if not z.dead then
-                local dx = z.x - p.x
-                local dy = z.y - p.y
-                local dist = math.sqrt(dx * dx + dy * dy)
-                -- 前方120度扇形，范围120px
-                if dist < 120 then
-                    local inFront = (p.facing > 0 and dx > -20) or (p.facing < 0 and dx < 20)
-                    if inFront then
-                        z.hp = z.hp - atkPower
-                        z.hitAnim = 0.3
-                        z.burnTimer = 3.0    -- 灼烧3秒
-                        z.burnDps = math.floor(atkPower * 0.15)  -- 每秒15%伤害
-                        E.SpawnParticles(G, z.x, z.y, { 255, 100, 20 }, 5)
-                        E.SpawnFloatText(G, z.x, z.y - 10, tostring(atkPower), "damage")
-                        if z.hp <= 0 then
-                            z.dead = true
-                            G.killCount = (G.killCount or 0) + 1
-                            E.SpawnZombieDeath(G, z.x, z.y)
-                        end
-                    end
-                end
-            end
+        -- 计算位移方向
+        local dx = p.facing or 1
+        local dy = 0
+        if G._lastMoveY and math.abs(G._lastMoveY) > 0.3 then
+            dy = G._lastMoveY > 0 and 1 or -1
         end
-        print("[Skill] Dragon breath!")
+        local len = math.sqrt(dx * dx + dy * dy)
+        if len > 0 then
+            dx = dx / len
+            dy = dy / len
+        end
+        -- 设置冲刺状态（在 UpdatePlayer 中逐帧推进）
+        G.jetDash = {
+            dirX = dx,
+            dirY = dy,
+            speed = 800,            -- 冲刺速度（像素/秒）
+            remaining = 150,        -- 剩余位移距离（像素）
+            trailTimer = 0,         -- 轨迹粒子计时
+        }
+        G.skillCharActive = true
+        G.skillCharDurationMax = 0.3
+        G.skillCharDuration = 0.3
+        print("[Skill] Dragon jet dash start! dir=(" .. dx .. "," .. dy .. ")")
     end
 
     G.skillCharCD = G.skillCharCDMax
@@ -1392,13 +1790,11 @@ function E.EndCharSkill(G)
         G.atkSpdMul = math.max(1.0, (G.atkSpdMul or 2.0) / 2.0)
         print("[Skill] Lisanguang fury ended")
     elseif charId == "auntie" then
-        G.meleeAtkBonus  = math.max(0, (G.meleeAtkBonus or 0)  - (G._auntieMeleeBoost or 0))
-        G.rangedAtkBonus = math.max(0, (G.rangedAtkBonus or 0) - (G._auntieRangedBoost or 0))
-        G._auntieMeleeBoost  = nil
-        G._auntieRangedBoost = nil
-        print("[Skill] Auntie morale ended")
+        -- 治疗是瞬发技能，无持续效果需要清理
+        print("[Skill] Auntie heal ended (no-op)")
     elseif charId == "weifenglong" then
-        print("[Skill] Dragon breath ended")
+        -- 喷气是瞬发技能，无持续效果需要清理
+        print("[Skill] Dragon jet ended (no-op)")
     end
     G.skillCharActive = false
     G.skillCharDuration = 0
@@ -1410,7 +1806,7 @@ end
 
 --- 炸弹爆炸：对范围内敌人和资源造成伤害
 function E.ExplodeBomb(G, bomb)
-    local baseDmg = math.floor((C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * bomb.dmgMul)
+    local baseDmg = math.floor((C.PLAYER_ATK + (G.meleeAtkBonus or 0)) * (G.meleeAtkMul or 1.0) * bomb.dmgMul)
     local atkPower, _ = E.CalcDamage(baseDmg, G)
     local r2 = bomb.radius * bomb.radius
     local hits = 0

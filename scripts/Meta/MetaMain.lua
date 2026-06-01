@@ -1,6 +1,7 @@
 -- Meta/MetaMain.lua - 局外系统主模块
 -- NanoVG 渲染的完整局外 UI：顶栏 + 底部Tab + 5个面板
 -- 与游戏内 NanoVG 管线一致，通过 main.lua 状态切换
+---@diagnostic disable: undefined-global
 
 local MD = require("Meta.MetaData")
 local Def = require("Editor.UIElementDef")
@@ -110,7 +111,24 @@ local gachaState = {
     timer = 0,          -- 动画计时器
     rewards = {},       -- 抽奖结果列表
     count = 0,          -- 抽了几次(1或10)
-    animDuration = 1.8, -- 开箱动画时长(秒)
+    animDuration = 15, -- Spine动画兜底超时(秒)，正常靠IsAnimationComplete结束
+    spineInst = nil,    -- Spine动画实例
+    spineLoaded = false,-- Spine是否已加载
+}
+
+-- 充值获取钻石结果弹窗状态
+local rechargeState = {
+    phase = "idle",     -- "idle" / "anim" / "show"
+    timer = 0,
+    results = {},       -- 抽取结果 { {amount, label}, ... }
+    totalDiamond = 0,   -- 总获得钻石
+    count = 0,          -- 抽了几次(1或10)
+    animDuration = 5,   -- 动画兜底超时(秒)
+    -- 3套Spine抽奖光效
+    spineQczx = nil,    -- 全场注视（全屏光效）
+    spineKpbk = nil,    -- 卡牌背面
+    spineKpxuhx = nil,  -- 卡牌旋转虚幻效果
+    spineLoaded = false,
 }
 
 -- 布局缓存
@@ -121,12 +139,61 @@ local L = {}
 ------------------------------------------------------------------------
 function M.Init(vg)
     saveData = MD.NewSaveData()
+    -- 初始化关卡选择为玩家当前最高解锁关
+    battleSelectedLevel = math.min(saveData.maxLevel or 1, #MD.LEVELS)
     -- 初始化 Tab 动画
     for _, tab in ipairs(MD.TABS) do
         tabAnimT[tab.id] = 0
     end
     -- 预加载图片
     M.PreloadImages(vg)
+
+    -- 初始化 Spine 抽卡动画
+    local spInst = nvgSpineCreate(vg)
+    if spInst then
+        local ok = spInst:Load("spine/女神抽卡/Gacha.skel")
+        if ok then
+            spInst:SetPremultipliedAlpha(true)
+            spInst:SetDefaultMix(0.1)
+            gachaState.spineInst = spInst
+            gachaState.spineLoaded = true
+            -- 获取动画列表用于调试
+            local anims = spInst:GetAnimationNames()
+            if anims then
+                print("[Gacha Spine] Animations: " .. table.concat(anims, ", "))
+            end
+        else
+            print("[Gacha Spine] Failed to load Gacha.skel")
+        end
+    end
+
+    -- 初始化充值抽奖光效 Spine（3套）
+    local rechargeSpinePaths = {
+        { field = "spineQczx",  path = "spine/抽奖光效 spine 3套/zm_sp_qczx/zm_sp_qczx.json" },
+        { field = "spineKpbk",  path = "spine/抽奖光效 spine 3套/zm_sp_kpbk/zm_sp_kpbk.json" },
+        { field = "spineKpxuhx", path = "spine/抽奖光效 spine 3套/zm_sp_kpxuhx/zm_sp_kpxuhx.json" },
+    }
+    local allLoaded = true
+    for _, cfg in ipairs(rechargeSpinePaths) do
+        local inst = nvgSpineCreate(vg)
+        if inst then
+            local ok2 = inst:Load(cfg.path)
+            if ok2 then
+                inst:SetPremultipliedAlpha(true)
+                inst:SetDefaultMix(0.1)
+                rechargeState[cfg.field] = inst
+                local anims = inst:GetAnimationNames()
+                print("[RechargeSpine] " .. cfg.field .. " loaded, anims: " .. (anims and table.concat(anims, ", ") or "none"))
+            else
+                print("[RechargeSpine] Failed to load: " .. cfg.path)
+                allLoaded = false
+            end
+        else
+            allLoaded = false
+        end
+    end
+    rechargeState.spineLoaded = allLoaded
+    print("[RechargeSpine] All loaded: " .. tostring(allLoaded))
 
     -- 获取真实账号信息
     ---@diagnostic disable-next-line: undefined-global
@@ -174,19 +241,21 @@ function M.PreloadImages(vg)
     for k, path in pairs(MD.CHEST_ICONS_OPENED) do
         imgCache[path] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
     end
-    -- 天赋图标
-    for _, t in ipairs(MD.TALENTS) do
-        imgCache[t.icon] = nvgCreateImage(vg, t.icon, NVG_IMAGE_NEAREST)
+    -- 天赋图标（按 type 去重加载）
+    for tType, path in pairs(MD.TALENT_ICONS) do
+        imgCache["talent_icon_" .. tType] = nvgCreateImage(vg, path, NVG_IMAGE_NEAREST)
     end
     -- 天赋面板背景
-    imgCache["talent_bg"] = nvgCreateImage(vg, "image/talent_bg_clean_20260421083616.png", 0)
     imgCache["talent_bg_bottom"] = nvgCreateImage(vg, "image/天赋背景_底部.png", 0)
-    imgCache["talent_bg_repeat"] = nvgCreateImage(vg, "image/c17b7a22-be1e-4031-935b-ef0b68fb2717.png", 0)
     -- 开始战斗按钮
     imgCache["start_battle_btn"] = nvgCreateImage(vg, "image/开始战斗按钮.png", 0)
     imgCache["common_bg"] = nvgCreateImage(vg, "image/通用背景.png", 0)
-    -- 关卡场景图片
-    imgCache["level_scene"] = nvgCreateImage(vg, "image/图层_13.png", 0)
+    -- 关卡场景图片（每关卡独立地图）
+    for _, lv in ipairs(MD.LEVELS) do
+        if lv.mapImg then
+            imgCache["level_map_" .. lv.id] = nvgCreateImage(vg, lv.mapImg, 0)
+        end
+    end
     -- 关卡切换箭头
     imgCache["arrow_right"] = nvgCreateImage(vg, "image/图层_2 (2).png", 0)
     -- 头像框
@@ -207,7 +276,8 @@ function M.PreloadImages(vg)
     end
     -- 商城界面素材
     imgCache["shop_title"]       = nvgCreateImage(vg, "image/商城界面/商城.png", 0)
-    imgCache["shop_gacha_bg"]    = nvgCreateImage(vg, "image/商城界面/抽奖底.png", 0)
+    imgCache["shop_gacha_bg"]    = nvgCreateImage(vg, "image/商城界面/抽奖背景宽.png", 0)
+    imgCache["shop_gacha_title"] = nvgCreateImage(vg, "image/商城界面/钻石抽奖字体.png", 0)
     imgCache["shop_single_btn"]  = nvgCreateImage(vg, "image/商城界面/单抽框2.png", 0)
     imgCache["shop_ten_btn"]     = nvgCreateImage(vg, "image/商城界面/十连抽框2.png", 0)
     imgCache["shop_item_frame"]  = nvgCreateImage(vg, "image/商城界面/商城界面商品底框.png", 0)
@@ -215,6 +285,9 @@ function M.PreloadImages(vg)
     imgCache["shop_diamond_icon"] = nvgCreateImage(vg, "image/图层_4 (1).png", 0)
     imgCache["shop_free_btn"]    = nvgCreateImage(vg, "image/商城界面/免费框.png", 0)
     imgCache["shop_daily_title"] = nvgCreateImage(vg, "image/商城界面/每日商品.png", 0)
+    imgCache["shop_video_refresh"] = nvgCreateImage(vg, "image/Layer_0 (15).png", 0)
+    imgCache["shop_progress_bar"] = nvgCreateImage(vg, "image/进度条.png", 0)
+    imgCache["shop_question"]     = nvgCreateImage(vg, "image/问号.png", 0)
     -- 战斗面板按钮图标
     imgCache["btn_settings"]     = nvgCreateImage(vg, "image/设置.png", 0)
     imgCache["btn_announce"]     = nvgCreateImage(vg, "image/公告.png", 0)
@@ -274,8 +347,24 @@ function M.CountTable(t)
     return n
 end
 
+--- 格式化金币数字（万/亿缩写）
+function M.FormatGold(num)
+    if num >= 100000000 then
+        return string.format("%.1f亿", num / 100000000)
+    elseif num >= 10000 then
+        return string.format("%.1f万", num / 10000)
+    else
+        return tostring(num)
+    end
+end
+
 function M.GetSaveData()
     return saveData
+end
+
+--- 返回大厅时调用，自动定位到玩家当前最高解锁关卡
+function M.SyncBattleLevel()
+    battleSelectedLevel = math.min(saveData.maxLevel or 1, #MD.LEVELS)
 end
 
 ------------------------------------------------------------------------
@@ -386,12 +475,55 @@ function M.Update(dt)
     -- 抽奖动画计时器
     if gachaState.phase == "anim" then
         gachaState.timer = gachaState.timer + dt
+        -- 更新 Spine 动画
+        if gachaState.spineInst and gachaState.spineLoaded then
+            gachaState.spineInst:Update(dt)
+            -- Spine 动画播完自动切到结果（至少等2秒避免误判）
+            if gachaState.spineInst:IsAnimationComplete(0) and gachaState.timer > 2.0 then
+                gachaState.phase = "results"
+                gachaState.timer = 0
+            end
+        end
+        -- 兜底：超时也切到结果（给足够长的时间）
         if gachaState.timer >= gachaState.animDuration then
             gachaState.phase = "results"
             gachaState.timer = 0
         end
     elseif gachaState.phase == "results" then
         gachaState.timer = gachaState.timer + dt
+    end
+    -- 充值抽奖动画 + 结果弹窗计时器
+    if rechargeState.phase == "anim" then
+        rechargeState.timer = rechargeState.timer + dt
+        if rechargeState.spineLoaded then
+            if rechargeState.count > 1 then
+                -- 十连：更新全部3套
+                if rechargeState.spineQczx then rechargeState.spineQczx:Update(dt) end
+                if rechargeState.spineKpbk then rechargeState.spineKpbk:Update(dt) end
+                if rechargeState.spineKpxuhx then rechargeState.spineKpxuhx:Update(dt) end
+                -- 全场注视动画播完且至少 1.5 秒后切到结果
+                if rechargeState.spineQczx and rechargeState.spineQczx:IsAnimationComplete(0) and rechargeState.timer > 1.5 then
+                    rechargeState.phase = "show"
+                    rechargeState.timer = 0
+                end
+            else
+                -- 单抽：更新卡牌背面
+                if rechargeState.spineKpbk then rechargeState.spineKpbk:Update(dt) end
+                -- 动画播完且至少 1.0 秒后切到结果（单抽更快）
+                if rechargeState.spineKpbk and rechargeState.spineKpbk:IsAnimationComplete(0) and rechargeState.timer > 1.0 then
+                    rechargeState.phase = "show"
+                    rechargeState.timer = 0
+                end
+            end
+        end
+        -- 兜底超时（单抽3秒，十连5秒）
+        local timeout = rechargeState.count > 1 and rechargeState.animDuration or 3
+        if rechargeState.timer >= timeout then
+            rechargeState.phase = "show"
+            rechargeState.timer = 0
+        end
+    elseif rechargeState.phase == "show" then
+        rechargeState.timer = rechargeState.timer + dt
     end
     -- 签到弹窗动画
     if signInPopup.show then
@@ -509,6 +641,59 @@ function M.Draw(vg, W, H)
     -- 钻石抽奖弹窗（最高优先级）
     if gachaState.phase ~= "idle" then
         M.DrawGachaPopup(vg, W, H)
+    end
+
+    -- 问号帮助弹窗（商城抽奖区）
+    if L.gachaHelpShow then
+        -- 半透明遮罩
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
+        nvgFill(vg)
+
+        -- 弹窗气泡
+        local popW = math.min(W * 0.75, 280)
+        local popH = 100
+        local popX = (W - popW) / 2
+        local popY = (H - popH) / 2
+
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, popX, popY, popW, popH, 12)
+        nvgFillColor(vg, nvgRGBA(40, 35, 55, 240))
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(200, 170, 80, 180))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+
+        -- 标题
+        nvgFontSize(vg, 17)
+        nvgFontFace(vg, "sans")
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(240, 200, 80, 255))
+        nvgText(vg, popX + popW / 2, popY + 20, "提示")
+
+        -- 分隔线
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, popX + 20, popY + 36)
+        nvgLineTo(vg, popX + popW - 20, popY + 36)
+        nvgStrokeColor(vg, nvgRGBA(200, 170, 80, 80))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- 内容文字
+        nvgFontSize(vg, 15)
+        nvgFillColor(vg, nvgRGBA(255, 240, 200, 255))
+        nvgText(vg, popX + popW / 2, popY + popH / 2 + 4, "等级越高，获得高级奖励的概率越大")
+
+        -- 底部提示
+        nvgFontSize(vg, 12)
+        nvgFillColor(vg, nvgRGBA(180, 170, 150, 180))
+        nvgText(vg, popX + popW / 2, popY + popH - 12, "点击任意位置关闭")
+    end
+
+    -- 充值获取钻石结果弹窗
+    if rechargeState.phase ~= "idle" then
+        M.DrawRechargePopup(vg, W, H)
     end
 end
 
@@ -963,7 +1148,7 @@ function M.DrawBattlePanel(vg, W)
     nvgFill(vg)
 
     -- 场景卡片（关卡场景图片）
-    local sceneImg = imgCache["level_scene"]
+    local sceneImg = imgCache["level_map_" .. battleSelectedLevel] or imgCache["level_scene"]
     nvgBeginPath(vg)
     nvgRoundedRect(vg, sceneCX - sceneW / 2, sceneCY - sceneH / 2, sceneW, sceneH, 14)
     if sceneImg and sceneImg ~= 0 then
@@ -1010,17 +1195,27 @@ function M.DrawBattlePanel(vg, W)
     nvgFillColor(vg, nvgRGBA(220, 220, 230, 240))
     nvgText(vg, sceneCX, wavesY, "总波数: " .. level.waves)
 
-    -- 锁定遮罩
+    -- 锁定遮罩（置灰+锁图标+提示文字）
     if not unlocked then
+        -- 灰色半透明遮罩让场景图变暗
         nvgBeginPath(vg)
         nvgRoundedRect(vg, sceneCX - sceneW / 2, sceneCY - sceneH / 2, sceneW, sceneH, 14)
-        nvgFillColor(vg, nvgRGBA(0, 0, 0, 120))
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 160))
         nvgFill(vg)
 
-        nvgFontSize(vg, 36)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 200))
-        nvgText(vg, sceneCX, sceneCY, "🔒")
+        -- 锁图标（使用通用锁图片）
+        local lockImg = imgCache["common_lock"]
+        local lockSize = 48
+        if lockImg and lockImg ~= 0 then
+            M.DrawImageFit(vg, lockImg, sceneCX - lockSize / 2, sceneCY - lockSize / 2 - 12, lockSize, lockSize)
+        end
+
+        -- 提示文字
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 14)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+        nvgFillColor(vg, nvgRGBA(255, 200, 100, 230))
+        nvgText(vg, sceneCX, sceneCY + lockSize / 2 - 6, "通关第" .. (battleSelectedLevel - 1) .. "关解锁")
     end
 
     -- ================================================================
@@ -1054,8 +1249,8 @@ function M.DrawBattlePanel(vg, W)
             end
         end
 
-        -- 右箭头（原始方向）
-        if battleSelectedLevel < saveData.maxLevel then
+        -- 右箭头（原始方向）— 允许浏览所有关卡（锁定的也能看）
+        if battleSelectedLevel < #MD.LEVELS then
             local raX = sceneCX + sceneW / 2 + 8
             local raY = arrowY
             raX, raY = Def.Apply("battle.arrow_right", raX, raY)
@@ -1243,24 +1438,94 @@ function M.DrawShopPanel(vg, W)
     M.DrawImage(vg, titleImg, titleX, titleY, titleW, titleH)
     y = y + titleH + 10
 
-    -- ========== 2. 抽奖区域（抽奖底.png 作背景） ==========
+    -- ========== 2. 抽奖区域（抽奖背景宽.png 作背景） ==========
     local gachaBgImg = imgCache["shop_gacha_bg"]
     local gachaW = innerW
-    -- 抽奖底.png 原始尺寸 1529x786，比例 0.514
-    local gachaH = math.floor(gachaW * 0.514)
+    -- 抽奖背景宽.png 原始尺寸 1672x941，比例 0.563
+    local gachaH = math.floor(gachaW * 0.563)
     local gachaX, gachaY = Def.Apply("shop.gacha_card", padX, y)
     Def.Register("shop.gacha_card", gachaX, gachaY, gachaW, gachaH, "抽卡卡片")
 
     -- 背景图
     M.DrawImage(vg, gachaBgImg, gachaX, gachaY, gachaW, gachaH)
 
-    -- 两个抽奖按钮（底部并排，缩小一圈）
+    -- 钻石抽奖标题图片（左上角叠加，缩小）
+    do
+        local titleImg2 = imgCache["shop_gacha_title"]
+        -- 钻石抽奖字体.png 原始尺寸 457x161，比例 0.352
+        local tH = math.floor(gachaH * 0.20)
+        local tW = math.floor(tH * (457 / 161))
+        local tX = gachaX + math.floor(gachaW * 0.07)
+        local tY = gachaY + math.floor(gachaH * 0.10)
+        M.DrawImage(vg, titleImg2, tX, tY, tW, tH)
+    end
+
+    -- 问号图标（右侧，与进度条同行）
+    do
+        local qImg = imgCache["shop_question"]
+        if qImg and qImg ~= 0 then
+            local qSize = math.floor(gachaH * 0.13)
+            local qX = gachaX + gachaW - qSize - math.floor(gachaW * 0.05)
+            local qY = gachaY + math.floor(gachaH * 0.50)
+            M.DrawImage(vg, qImg, qX, qY, qSize, qSize)
+            L.shopQuestionBtn = { x = qX, y = qY, w = qSize, h = qSize }
+        end
+    end
+
+    -- 等级进度条（banner 中部）
+    do
+        local progressImg = imgCache["shop_progress_bar"]
+
+        -- 进度条：保持原始比例，78%宽度靠左偏右
+        local pIw, pIh = nvgImageSize(vg, progressImg)
+        local barW = math.floor((gachaW - 16) * 0.80)
+        local barH = barW
+        if pIw > 0 and pIh > 0 then
+            barH = math.floor(barW * (pIh / pIw))
+        end
+
+        local barX = gachaX + math.floor(gachaW * 0.07)
+        local barY = gachaY + math.floor(gachaH * 0.50)
+        -- 绘制进度条背景图（保持比例）
+        M.DrawImage(vg, progressImg, barX, barY, barW, barH)
+
+        -- 进度条文字：左侧 "Lv.X"，中间 "当前/目标"
+        local level = math.min(saveData.gachaLevel or 1, 20)
+        local exp = saveData.gachaExp or 0
+        local maxExp = MD.GetGachaMaxExp(level)
+        local isMaxLevel = (level >= 20)
+        -- 左侧 Lv 区域
+        local lvAreaW = math.floor(barW * 0.20)
+        local fontSize = math.max(10, math.floor(barH * 0.65))
+        nvgFontSize(vg, fontSize)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 220, 120, 255))
+        nvgText(vg, barX + lvAreaW / 2, barY + barH / 2, "Lv." .. level)
+        -- 中间进度数值
+        local progStr = isMaxLevel and "MAX" or (exp .. "/" .. maxExp)
+        nvgFontSize(vg, math.max(9, math.floor(barH * 0.55)))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(230, 220, 180, 240))
+        nvgText(vg, barX + lvAreaW + (barW - lvAreaW) / 2, barY + barH / 2, progStr)
+        -- 进度条填充
+        local fillRatio = isMaxLevel and 1.0 or math.min(exp / maxExp, 1.0)
+        local fillX = barX + lvAreaW + 4
+        local fillW = (barW - lvAreaW - 8) * fillRatio
+        local fillH = math.floor(barH * 0.35)
+        local fillY = barY + barH / 2 - fillH / 2
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, fillX, fillY, fillW, fillH, 2)
+        nvgFillColor(vg, nvgRGBA(240, 200, 60, 220))
+        nvgFill(vg)
+    end
+
+    -- 两个抽奖按钮（底部并排）
     -- 单抽框2.png / 十连抽框2.png 747x276，比例 0.369
-    local btnGap = 8
-    local btnW = math.floor((gachaW * 0.82 - btnGap) / 2)
+    local btnGap = 6
+    local btnW = math.floor((gachaW * 0.78 - btnGap) / 2)
     local btnH = math.floor(btnW * 0.369)
     local btnOffX = math.floor((gachaW - btnW * 2 - btnGap) / 2)
-    local btnY2 = gachaY + math.floor((gachaH - btnH) * 0.88)
+    local btnY2 = gachaY + math.floor((gachaH - btnH) * 0.90)
 
     -- 钻石图标素材（用于按钮上叠加价格）
     local dIconImg = imgCache["shop_diamond_icon"]
@@ -1308,6 +1573,213 @@ function M.DrawShopPanel(vg, W)
     end
 
     y = gachaY + gachaH + 12
+
+    -- ========== 2.5 获取钻石区域（免费充值） ==========
+    do
+        local rechargeConf = MD.SHOP_RECHARGE
+        local pool = rechargeConf.pool
+        local cardH = 72   -- 卡片高度（增大以容纳钻石图片）
+        local secH = 30 + cardH + 8 + 18 + 8 + 24 + 10  -- 标题+卡片+间距+状态+间距+按钮+底部
+        local secX, secY = padX, y
+
+        -- 深色半透明背景
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, secX, secY, innerW, secH, 6)
+        nvgFillColor(vg, nvgRGBA(20, 18, 25, 200))
+        nvgFill(vg)
+        -- 边框
+        nvgStrokeColor(vg, nvgRGBA(120, 90, 200, 100))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- 标题 "获取钻石"（带钻石图标）
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 16)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(220, 180, 255, 255))
+        local rcTitleY = secY + 14
+        -- 钻石小图标
+        local titleIcon = imgCache["shop_diamond_icon"]
+        if titleIcon then
+            M.DrawImage(vg, titleIcon, secX + 10, rcTitleY - 8, 16, 16)
+        end
+        nvgText(vg, secX + 30, rcTitleY, "获取钻石")
+        -- 标题下划线装饰
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, secX + 10, secY + 26)
+        nvgLineTo(vg, secX + 110, secY + 26)
+        nvgStrokeColor(vg, nvgRGBA(160, 120, 220, 120))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- ====== 钻石数量卡片（4列） ======
+        local cardY = secY + 30
+        local cardGap = 6
+        local cardW = math.floor((innerW - 20 - cardGap * 3) / 4)
+        -- 品质颜色: N=灰绿, R=蓝, SR=紫, SSR=金
+        local rarityColors = {
+            N   = { bg = {40, 60, 50, 230},  border = {80, 160, 100, 200},  text = {140, 200, 150, 255} },
+            R   = { bg = {30, 45, 75, 230},  border = {60, 120, 210, 200},  text = {120, 180, 255, 255} },
+            SR  = { bg = {50, 30, 70, 230},  border = {140, 70, 210, 200},  text = {200, 140, 255, 255} },
+            SSR = { bg = {60, 50, 20, 230},  border = {210, 170, 40, 200},  text = {255, 220, 80, 255} },
+        }
+
+        local diamondImg = imgCache["shop_diamond_icon"]
+
+        for idx, entry in ipairs(pool) do
+            local cx = secX + 10 + (idx - 1) * (cardW + cardGap)
+            local rc = rarityColors[entry.label] or rarityColors["N"]
+
+            -- 卡片背景
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, cx, cardY, cardW, cardH, 6)
+            nvgFillColor(vg, nvgRGBA(rc.bg[1], rc.bg[2], rc.bg[3], rc.bg[4]))
+            nvgFill(vg)
+            nvgStrokeColor(vg, nvgRGBA(rc.border[1], rc.border[2], rc.border[3], rc.border[4]))
+            nvgStrokeWidth(vg, 1.5)
+            nvgStroke(vg)
+
+            -- 钻石图片（居中偏上）
+            local imgSize = 28
+            local imgX = cx + (cardW - imgSize) / 2
+            local imgY2 = cardY + 8
+            M.DrawImage(vg, diamondImg, imgX, imgY2, imgSize, imgSize)
+
+            -- "xx枚钻石" 文字（图片下方）
+            nvgFontSize(vg, 11)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+            nvgText(vg, cx + cardW / 2, imgY2 + imgSize + 4, entry.amount .. "枚")
+
+            -- 品质标签（右上角小圆圈）
+            local badgeR = 8
+            local badgeX = cx + cardW - badgeR - 3
+            local badgeY = cardY + badgeR + 3
+            nvgBeginPath(vg)
+            nvgCircle(vg, badgeX, badgeY, badgeR)
+            nvgFillColor(vg, nvgRGBA(rc.border[1], rc.border[2], rc.border[3], 220))
+            nvgFill(vg)
+            nvgFontSize(vg, 8)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+            nvgText(vg, badgeX, badgeY, entry.label)
+        end
+
+        -- 倒计时状态
+        local now = os.time()
+        local onceCD = (saveData.rechargeOnceTime or 0) + rechargeConf.cooldown_once - now
+        local tenCD  = (saveData.rechargeTenTime or 0) + rechargeConf.cooldown_ten - now
+        local onceReady = onceCD <= 0
+        local tenReady  = tenCD <= 0
+
+        -- 状态文字行
+        local statusY = cardY + cardH + 8
+        nvgFontSize(vg, 11)
+
+        -- 左侧：充值一次状态
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        if onceReady then
+            nvgFillColor(vg, nvgRGBA(100, 220, 100, 255))
+            nvgText(vg, secX + 10, statusY + 9, "● 免费抽取已准备")
+        else
+            nvgFillColor(vg, nvgRGBA(200, 180, 140, 200))
+            local cdStr = string.format("● %d秒后可用", math.ceil(onceCD))
+            nvgText(vg, secX + 10, statusY + 9, cdStr)
+        end
+
+        -- 右侧：充值十次状态
+        nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+        if tenReady then
+            nvgFillColor(vg, nvgRGBA(100, 220, 100, 255))
+            nvgText(vg, secX + innerW - 10, statusY + 9, "免费十连已准备 ●")
+        else
+            nvgFillColor(vg, nvgRGBA(200, 180, 140, 200))
+            local th = math.floor(tenCD / 3600)
+            local tm = math.floor((tenCD % 3600) / 60)
+            local ts = math.ceil(tenCD % 60)
+            local cdStr = string.format("%d小时%d分%d秒后免费十连 ●", th, tm, ts)
+            nvgText(vg, secX + innerW - 10, statusY + 9, cdStr)
+        end
+
+        -- 按钮行（充值一次 | 充值十次）
+        local rcBtnGap = 6
+        local btnW2 = math.floor((innerW - 20 - rcBtnGap) / 2)
+        local btnH2 = 24
+        local btnY3 = statusY + 18 + 8
+        local btnX1 = secX + 10
+        local btnX2 = btnX1 + btnW2 + rcBtnGap
+
+        -- "充值一次" 按钮
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, btnX1, btnY3, btnW2, btnH2, 4)
+        if onceReady then
+            nvgFillColor(vg, nvgRGBA(60, 60, 80, 230))
+        else
+            nvgFillColor(vg, nvgRGBA(40, 40, 50, 180))
+        end
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(160, 140, 200, onceReady and 200 or 80))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        nvgFontSize(vg, 13)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, onceReady and nvgRGBA(255, 255, 255, 255) or nvgRGBA(150, 150, 150, 180))
+        nvgText(vg, btnX1 + btnW2 / 2, btnY3 + btnH2 / 2, "充值一次")
+
+        -- "充值十次" 按钮（冷却中时前方显示广告图标）
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, btnX2, btnY3, btnW2, btnH2, 4)
+        if tenReady then
+            nvgFillColor(vg, nvgRGBA(40, 70, 140, 230))
+        else
+            nvgFillColor(vg, nvgRGBA(30, 50, 100, 220))
+        end
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(80, 140, 240, tenReady and 200 or 150))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        nvgFontSize(vg, 13)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+        if not tenReady then
+            -- 冷却中：在文字前方绘制广告图标
+            local videoImg = imgCache["shop_video_refresh"]
+            local iconSize = 16
+            local textStr = "充值十次"
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+            local tw = nvgTextBounds(vg, 0, 0, textStr)
+            local totalW = iconSize + 4 + tw
+            local startX = btnX2 + (btnW2 - totalW) / 2
+            local cy = btnY3 + btnH2 / 2
+            -- 绘制广告图标
+            if videoImg and videoImg ~= 0 then
+                local iw, ih = nvgImageSize(vg, videoImg)
+                if iw > 0 and ih > 0 then
+                    local imgScale = math.min(iconSize / iw, iconSize / ih)
+                    local dw = iw * imgScale
+                    local dh = ih * imgScale
+                    local dx = startX
+                    local dy = cy - dh / 2
+                    local paint = nvgImagePattern(vg, dx, dy, dw, dh, 0, videoImg, 1.0)
+                    nvgBeginPath(vg)
+                    nvgRoundedRect(vg, dx, dy, dw, dh, 2)
+                    nvgFillPaint(vg, paint)
+                    nvgFill(vg)
+                end
+            end
+            -- 绘制文字
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+            nvgText(vg, startX + iconSize + 4, cy, textStr)
+        else
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgText(vg, btnX2 + btnW2 / 2, btnY3 + btnH2 / 2, "充值十次")
+        end
+
+        -- 缓存按钮位置
+        L.shopRechargeOnceBtn = { x = btnX1, y = btnY3, w = btnW2, h = btnH2 }
+        L.shopRechargeTenBtn  = { x = btnX2, y = btnY3, w = btnW2, h = btnH2 }
+
+        y = secY + secH + 12
+    end
 
     -- ========== 3. 每日商品标题（图片） + 刷新倒计时 ==========
     -- 每日商品.png 原始尺寸 210x53，比例 210/53 = 3.96
@@ -3169,52 +3641,81 @@ function M.DrawTurretDetailPopup(vg, W, tId)
         nvgText(vg, px + innerPad, affixTitleY + affixTitleH / 2, "已满级 LV." .. lv)
     end
 
-    -- ====== 词条列表 ======
+    -- ====== 词条列表（卡牌解锁展示） ======
     local affixListY = affixTitleY + affixTitleH + 4
-    local affixRowH = math.floor(popH * 0.06)
-    local affixFont = math.floor(affixRowH * 0.45)
+    local affixRowH = math.floor(popH * 0.068)
+    local affixFont = math.floor(affixRowH * 0.40)
+    local badgeR = math.floor(affixRowH * 0.22)
 
     for i, aff in ipairs(affixes) do
-        local ay = affixListY + (i - 1) * (affixRowH + 2)
+        local ay = affixListY + (i - 1) * (affixRowH + 3)
+        local isUnlocked = (aff.lv <= lv)
+        local qc = MD.QUALITY_COLORS[aff.quality] or {220, 220, 200}
+        local qName = MD.QUALITY_NAMES[aff.quality] or "普通"
 
         -- 词条行背景
         nvgBeginPath(vg)
-        nvgRoundedRect(vg, px + innerPad, ay, popW - innerPad * 2, affixRowH, 4)
-        if aff.lv <= lv then
-            -- 已解锁词条
-            nvgFillColor(vg, nvgRGBA(40, 45, 55, 180))
+        nvgRoundedRect(vg, px + innerPad, ay, popW - innerPad * 2, affixRowH, 5)
+        if isUnlocked then
+            nvgFillColor(vg, nvgRGBA(40, 45, 55, 200))
         else
-            -- 未解锁词条（灰暗）
-            nvgFillColor(vg, nvgRGBA(28, 30, 38, 180))
+            nvgFillColor(vg, nvgRGBA(25, 27, 35, 180))
         end
         nvgFill(vg)
 
-        -- 等级标签
+        -- 品质圆形徽章
+        local badgeCx = px + innerPad + 8 + badgeR
+        local badgeCy = ay + affixRowH / 2
+        nvgBeginPath(vg)
+        nvgCircle(vg, badgeCx, badgeCy, badgeR)
+        if isUnlocked then
+            nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 240))
+        else
+            nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 80))
+        end
+        nvgFill(vg)
+
+        -- 徽章内等级文字
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, math.floor(badgeR * 1.3))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, isUnlocked and 240 or 100))
+        nvgText(vg, badgeCx, badgeCy, tostring(aff.lv))
+
+        -- 卡牌名称（品质颜色）
+        local nameX = badgeCx + badgeR + 10
         nvgFontFace(vg, "sans")
         nvgFontSize(vg, affixFont)
         nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
-        if aff.lv <= lv then
-            nvgFillColor(vg, nvgRGBA(200, 180, 100, 255))
+        if isUnlocked then
+            nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 255))
         else
-            nvgFillColor(vg, nvgRGBA(100, 95, 85, 180))
+            nvgFillColor(vg, nvgRGBA(qc[1], qc[2], qc[3], 120))
         end
-        nvgText(vg, px + innerPad + 8, ay + affixRowH / 2, "Lv." .. aff.lv)
+        local displayName = aff.name .. " [" .. qName .. "]"
+        nvgText(vg, nameX, ay + affixRowH * 0.38, displayName)
 
-        -- 词条描述
-        local descX = px + innerPad + math.floor(popW * 0.16)
-        if aff.lv <= lv then
-            local ac = aff.color or {220, 220, 200}
-            nvgFillColor(vg, nvgRGBA(ac[1], ac[2], ac[3], 240))
+        -- 卡牌描述
+        nvgFontSize(vg, math.floor(affixFont * 0.82))
+        if isUnlocked then
+            nvgFillColor(vg, nvgRGBA(200, 195, 180, 200))
         else
-            nvgFillColor(vg, nvgRGBA(90, 88, 80, 160))
+            nvgFillColor(vg, nvgRGBA(100, 95, 85, 140))
         end
-        nvgText(vg, descX, ay + affixRowH / 2, aff.desc)
+        local descText = isUnlocked and aff.desc or ("Lv." .. aff.lv .. "解锁: " .. aff.desc)
+        nvgText(vg, nameX, ay + affixRowH * 0.68, descText)
 
-        -- 已解锁的勾
-        if aff.lv <= lv then
+        -- 已解锁标记
+        if isUnlocked then
             nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, affixFont)
             nvgFillColor(vg, nvgRGBA(100, 200, 120, 220))
             nvgText(vg, px + popW - innerPad - 8, ay + affixRowH / 2, "✓")
+        else
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, math.floor(affixFont * 0.8))
+            nvgFillColor(vg, nvgRGBA(140, 135, 120, 120))
+            nvgText(vg, px + popW - innerPad - 8, ay + affixRowH / 2, "🔒")
         end
     end
 
@@ -3304,69 +3805,44 @@ local function hexPath(vg, cx, cy, r)
     nvgClosePath(vg)
 end
 
--- 天赋面板布局常量（供点击判定复用）
-local TALENT_HEX_R    = 32          -- 六边形外接半径
-local TALENT_SPACING  = 95          -- 节点间距（中心到中心）
-local TALENT_START_Y_OFFSET = 40    -- 顶部留白
-local TALENT_CENTERX_RATIO = 0.35   -- 主轴 X 占比
-
--- 预生成雪花数据（避免每帧 randomseed）
-local snowParticles = {}
-do
-    math.randomseed(314)
-    for s = 1, 40 do
-        snowParticles[s] = {
-            x0    = math.random() * 1.2 - 0.1,  -- 归一化 X（-0.1 ~ 1.1）
-            speed = 0.3 + math.random() * 0.6,   -- 下落速度因子
-            size  = 1.0 + math.random() * 2.5,
-            drift = (math.random() - 0.5) * 0.4, -- 水平漂移
-            phase = math.random() * 6.28,         -- 初始相位
-            alpha = 80 + math.floor(math.random() * 120),
-        }
-    end
-    -- 用 os.date 恢复随机种子（os.time在WASM中可能不可靠）
-    local _dt = os.date("*t")
-    local _timeSeed = ((_dt.year or 2026) * 366 + (_dt.yday or 1)) * 86400
-                    + (_dt.hour or 0) * 3600 + (_dt.min or 0) * 60 + (_dt.sec or 0)
-    math.randomseed(_timeSeed)
-end
-
--- 判断天赋 i 是否可解锁（前一个已激活 or 第一个天赋）
-local function canUnlockTalent(i)
-    if i == 1 then return true end  -- 第一个天赋无条件可解锁
-    local prevTalent = MD.TALENTS[i - 1]
-    local prevLv = (saveData.talents[prevTalent.id] or 0)
-    return prevLv >= 1  -- 前一个已激活
-end
+-- 天赋面板布局常量（50级线性列表）
+local TALENT_ROW_H     = 62         -- 每行高度
+local TALENT_ICON_S    = 38         -- 图标尺寸
+local TALENT_PAD_X     = 14         -- 左右内边距
+local TALENT_HEADER_H  = 90         -- 顶部信息栏高度
 
 function M.DrawTalentPanel(vg, W)
     local c = MD.CLR
-    local n = #MD.TALENTS
+    local n = MD.TALENT_MAX_LV
+    local curLv = saveData.talentLevel or 0
     local baseY = L.contentY + L.pad
-    local hexR = TALENT_HEX_R
-    local spacing = TALENT_SPACING
-    local centerX = W * 0.5  -- 节点居中
-    local totalH_content = n * spacing + TALENT_START_Y_OFFSET + 60
-    local startY = baseY + TALENT_START_Y_OFFSET
-    local t = elapsedTime  -- 动画时间
+    local rowH = TALENT_ROW_H
+    local iconS = TALENT_ICON_S
+    local padX = TALENT_PAD_X
+    local headerH = TALENT_HEADER_H
+    local t = elapsedTime
+
+    -- 总内容高度
+    local totalH_content = headerH + n * rowH + 30
 
     -- ================================================================
-    -- 1. 背景图：底部山景 + 上方极光重复平铺（水平交替翻转）
+    -- 1. 背景：深色 + 底部山景
     -- ================================================================
-    local bgBottom = imgCache["talent_bg_bottom"]
-    local bgRepeat = imgCache["talent_bg_repeat"]
-
-    -- 背景图：固定不动（补偿 scrollY 偏移），cover-fit 铺满可视区域
-    local visY = L.contentY + scrollY  -- 补偿滚动，固定在屏幕位置
+    local visY = L.contentY + scrollY
     local visH = L.contentH
+    local bgBottom = imgCache["talent_bg_bottom"]
     if bgBottom and bgBottom ~= 0 then
         local imgW, imgH = nvgImageSize(vg, bgBottom)
         local scale = math.max(W / imgW, visH / imgH)
         local drawW = imgW * scale
         local drawH = imgH * scale
         local ox = (W - drawW) / 2
-        local oy = visY + visH - drawH  -- 贴底对齐，山景在底部
-        local paint = nvgImagePattern(vg, ox, oy, drawW, drawH, 0, bgBottom, 1.0)
+        local oy = visY + visH - drawH
+        local paint = nvgImagePattern(vg, ox, oy, drawW, drawH, 0, bgBottom, 0.4)
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, visY, W, visH)
+        nvgFillColor(vg, nvgRGBA(12, 14, 22, 255))
+        nvgFill(vg)
         nvgBeginPath(vg)
         nvgRect(vg, 0, visY, W, visH)
         nvgFillPaint(vg, paint)
@@ -3374,218 +3850,206 @@ function M.DrawTalentPanel(vg, W)
     else
         nvgBeginPath(vg)
         nvgRect(vg, 0, visY, W, visH)
-        nvgFillColor(vg, nvgRGBA(8, 12, 24, 255))
+        nvgFillColor(vg, nvgRGBA(12, 14, 22, 255))
         nvgFill(vg)
     end
 
-    -- 轻微暗化叠层（让节点更突出，固定不动）
+    -- ================================================================
+    -- 2. 顶部信息栏：当前等级 + 进度条
+    -- ================================================================
+    local hdrY = baseY + 8
+    -- 标题
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 18)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+    nvgFillColor(vg, nvgRGBA(240, 245, 255, 255))
+    nvgText(vg, W / 2, hdrY, "天赋等级")
+
+    -- 等级数字
+    nvgFontSize(vg, 28)
+    nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+    nvgText(vg, W / 2, hdrY + 22, tostring(curLv) .. " / " .. tostring(n))
+
+    -- 进度条
+    local barW = W - padX * 4
+    local barH = 8
+    local barX = padX * 2
+    local barY = hdrY + 58
+    local progress = curLv / n
+
     nvgBeginPath(vg)
-    nvgRect(vg, 0, visY, W, visH)
-    nvgFillColor(vg, nvgRGBA(0, 0, 0, 40))
+    nvgRoundedRect(vg, barX, barY, barW, barH, 4)
+    nvgFillColor(vg, nvgRGBA(35, 38, 50, 255))
     nvgFill(vg)
 
-    -- 动态飘雪（保留动感）
-    for s = 1, #snowParticles do
-        local p = snowParticles[s]
-        local sx = (p.x0 + math.sin(t * 0.8 + p.phase) * p.drift) * W
-        local sy = baseY + ((t * p.speed * 50 + p.phase * 100) % totalH_content)
+    if progress > 0 then
         nvgBeginPath(vg)
-        nvgCircle(vg, sx, sy, p.size)
-        nvgFillColor(vg, nvgRGBA(220, 235, 255, p.alpha))
+        nvgRoundedRect(vg, barX, barY, barW * progress, barH, 4)
+        local barGrad = nvgLinearGradient(vg, barX, barY, barX + barW * progress, barY,
+            nvgRGBA(80, 200, 120, 255), nvgRGBA(50, 180, 220, 255))
+        nvgFillPaint(vg, barGrad)
         nvgFill(vg)
     end
 
-    -- ================================================================
-    -- ================================================================
-    -- 3. 中轴连接线（参考图二：激活区间绿色，锁定区间灰色）
-    -- ================================================================
-    local lineW = 6  -- 连接线宽度
+    -- 进度文字
+    nvgFontSize(vg, 11)
+    nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_TOP)
+    nvgFillColor(vg, nvgRGBA(150, 155, 170, 200))
+    nvgText(vg, barX + barW, barY + barH + 3, math.floor(progress * 100) .. "%")
 
-    -- 逐段绘制连接线（从底部 i=1 到顶部 i=n）
-    for i = 1, n - 1 do
-        local slotBot = n - i       -- 下方节点 slot
-        local slotTop = n - (i + 1) -- 上方节点 slot
-        local botCY = startY + slotBot * spacing + hexR
-        local topCY = startY + slotTop * spacing + hexR
+    -- ================================================================
+    -- 3. 天赋列表（每行一级）
+    -- ================================================================
+    local listY = baseY + headerH
 
-        local lvBot = (saveData.talents[MD.TALENTS[i].id] or 0)
-        local lvTop = (saveData.talents[MD.TALENTS[i + 1].id] or 0)
-        local botActive = (lvBot >= 1)
-        local topActive = (lvTop >= 1)
+    for i = 1, n do
+        local talent = MD.TALENTS[i]
+        if not talent then break end
 
+        local ry = listY + (i - 1) * rowH
+        local activated = (i <= curLv)
+        local isNext = (i == curLv + 1)
+
+        -- 行背景（交替色 + 高亮当前）
         nvgBeginPath(vg)
-        nvgMoveTo(vg, centerX, botCY - hexR)
-        nvgLineTo(vg, centerX, topCY + hexR)
-        if botActive and topActive then
-            -- 两端都激活：绿色
-            nvgStrokeColor(vg, nvgRGBA(80, 210, 120, 255))
-        elseif botActive then
-            -- 下方激活，上方未激活：绿色（可解锁段）
-            nvgStrokeColor(vg, nvgRGBA(80, 210, 120, 200))
+        nvgRoundedRect(vg, padX, ry + 2, W - padX * 2, rowH - 4, 8)
+        if isNext then
+            -- 当前可升级行：微亮高亮
+            local pulseA = math.floor(18 + 8 * math.sin(t * 2.5))
+            nvgFillColor(vg, nvgRGBA(40, 80, 60, 180 + pulseA))
+        elseif activated then
+            nvgFillColor(vg, nvgRGBA(28, 35, 48, 200))
         else
-            -- 都未激活：灰色
-            nvgStrokeColor(vg, nvgRGBA(70, 75, 90, 180))
-        end
-        nvgStrokeWidth(vg, lineW)
-        nvgStroke(vg)
-    end
-
-    -- ================================================================
-    -- 4. 绘制节点（反转：i=1 在底部，i=n 在顶部）
-    --    状态：已激活(lit) / 可激活(next) / 锁定(locked)
-    -- ================================================================
-    for i, talent in ipairs(MD.TALENTS) do
-        local lv = (saveData.talents[talent.id] or 0)
-        local activated = (lv >= 1)
-        local unlockable = (not activated) and canUnlockTalent(i)
-
-        -- 反转 Y：i=1 在底部 (slot = n-1), i=n 在顶部 (slot = 0)
-        local slot = n - i
-        local cy = startY + slot * spacing + hexR
-        local cx = centerX
-        local nodeId = "talent.node_" .. i
-        cx, cy = Def.Apply(nodeId, cx, cy)
-        Def.Register(nodeId, cx - hexR, cy - hexR, hexR * 2, hexR * 2 + 18, "天赋:" .. talent.name)
-
-        -- 微动呼吸动画（已激活节点）
-        local breathe = 0
-        if activated then
-            breathe = math.sin(t * 2.0 + i * 0.8) * 1.5
-        end
-        local drawR = hexR + breathe
-
-        -- 六边形外发光（已激活）
-        if activated then
-            local glowA = math.floor(30 + 20 * math.sin(t * 1.5 + i))
-            hexPath(vg, cx, cy, drawR + 6)
-            nvgFillColor(vg, nvgRGBA(255, 200, 50, glowA))
-            nvgFill(vg)
-        elseif unlockable then
-            -- 可激活的下一个节点：脉冲提示
-            local pulseA = math.floor(15 + 12 * math.sin(t * 3.0))
-            hexPath(vg, cx, cy, hexR + 5)
-            nvgFillColor(vg, nvgRGBA(80, 220, 120, pulseA))
-            nvgFill(vg)
-        end
-
-        -- 六边形阴影
-        hexPath(vg, cx + 2, cy + 3, drawR + 1)
-        nvgFillColor(vg, nvgRGBA(0, 0, 0, 50))
-        nvgFill(vg)
-
-        -- 六边形底色
-        hexPath(vg, cx, cy, drawR)
-        if activated then
-            -- 已激活：金色
-            local grd = nvgLinearGradient(vg, cx, cy - drawR, cx, cy + drawR,
-                nvgRGBA(200, 170, 50, 255), nvgRGBA(150, 120, 25, 255))
-            nvgFillPaint(vg, grd)
-        elseif unlockable then
-            -- 可激活：深蓝（稍亮）
-            local grd = nvgLinearGradient(vg, cx, cy - drawR, cx, cy + drawR,
-                nvgRGBA(50, 100, 160, 255), nvgRGBA(35, 70, 120, 255))
-            nvgFillPaint(vg, grd)
-        else
-            -- 锁定：灰暗
-            local grd = nvgLinearGradient(vg, cx, cy - drawR, cx, cy + drawR,
-                nvgRGBA(45, 48, 58, 255), nvgRGBA(32, 35, 42, 255))
-            nvgFillPaint(vg, grd)
+            nvgFillColor(vg, nvgRGBA(22, 25, 35, 160))
         end
         nvgFill(vg)
 
-        -- 六边形边框
-        hexPath(vg, cx, cy, drawR)
+        -- 左侧：等级标号
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 12)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        local lvCX = padX + 18
+        local rowCY = ry + rowH / 2
         if activated then
-            nvgStrokeColor(vg, nvgRGBA(255, 220, 80, 230))
-            nvgStrokeWidth(vg, 3)
-        elseif unlockable then
-            nvgStrokeColor(vg, nvgRGBA(100, 200, 140, 200))
-            nvgStrokeWidth(vg, 2.5)
+            nvgFillColor(vg, nvgRGBA(255, 220, 80, 230))
+        elseif isNext then
+            nvgFillColor(vg, nvgRGBA(100, 220, 140, 255))
         else
-            nvgStrokeColor(vg, nvgRGBA(55, 58, 68, 180))
-            nvgStrokeWidth(vg, 2)
+            nvgFillColor(vg, nvgRGBA(80, 85, 100, 180))
         end
-        nvgStroke(vg)
+        nvgText(vg, lvCX, rowCY, tostring(i))
 
-        -- 图标（锁定状态半透明）
-        local img = imgCache[talent.icon]
+        -- 图标
+        local icoX = padX + 36
+        local icoY = rowCY - iconS / 2
+        local img = imgCache["talent_icon_" .. talent.type]
         if img and img ~= 0 then
-            local icoS = drawR * 1.1
-            if not activated and not unlockable then
-                nvgGlobalAlpha(vg, 0.35)
+            if not activated and not isNext then
+                nvgGlobalAlpha(vg, 0.4)
             end
-            M.DrawImage(vg, img, cx - icoS / 2, cy - icoS / 2, icoS, icoS)
+            M.DrawImage(vg, img, icoX, icoY, iconS, iconS)
             nvgGlobalAlpha(vg, 1.0)
         end
 
-        -- 节点下方：天赋名称（简短标识）
-        nvgFontFace(vg, "sans")
-        nvgFontSize(vg, 11)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+        -- 天赋名称
+        local textX = icoX + iconS + 10
+        nvgFontSize(vg, 14)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
         if activated then
-            nvgFillColor(vg, nvgRGBA(255, 220, 80, 220))
-        elseif unlockable then
-            nvgFillColor(vg, nvgRGBA(200, 220, 240, 200))
+            nvgFillColor(vg, nvgRGBA(240, 230, 200, 240))
+        elseif isNext then
+            nvgFillColor(vg, nvgRGBA(220, 240, 230, 255))
         else
-            nvgFillColor(vg, nvgRGBA(100, 105, 115, 150))
+            nvgFillColor(vg, nvgRGBA(120, 125, 140, 180))
         end
-        nvgText(vg, cx, cy + drawR + 4, talent.name)
+        nvgText(vg, textX, rowCY - 6, talent.name)
 
-        -- 锁定节点：显示锁图标（保持宽高比）
-        if not activated and not unlockable then
-            local lkImg = imgCache["common_lock"]
-            if lkImg and lkImg ~= 0 then
-                local lkS = math.floor(drawR * 0.7)
-                M.DrawImageFit(vg, lkImg, cx - lkS / 2, cy - lkS / 2, lkS, lkS)
-            end
-        end
-
-        -- 已激活节点：勾号
+        -- 费用 / 状态
+        nvgFontSize(vg, 11)
         if activated then
+            nvgFillColor(vg, nvgRGBA(255, 220, 80, 180))
+            nvgText(vg, textX, rowCY + 10, "✓ 已解锁")
+        elseif isNext then
+            local canAfford = (saveData.gold >= talent.cost)
+            if canAfford then
+                nvgFillColor(vg, nvgRGBA(100, 220, 130, 220))
+            else
+                nvgFillColor(vg, nvgRGBA(220, 100, 80, 220))
+            end
+            nvgText(vg, textX, rowCY + 10, "💰 " .. M.FormatGold(talent.cost))
+        else
+            nvgFillColor(vg, nvgRGBA(80, 85, 100, 150))
+            nvgText(vg, textX, rowCY + 10, "🔒 Lv." .. i)
+        end
+
+        -- 右侧状态指示
+        local rightX = W - padX - 20
+        if activated then
+            -- 金色勾
+            nvgFontSize(vg, 16)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 210, 60, 220))
+            nvgText(vg, rightX, rowCY, "✓")
+        elseif isNext then
+            -- 升级箭头脉冲
+            local arrowA = math.floor(180 + 60 * math.sin(t * 3.0))
+            nvgFontSize(vg, 18)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(80, 220, 130, arrowA))
+            nvgText(vg, rightX, rowCY, "▲")
+        else
+            -- 锁
             nvgFontSize(vg, 14)
             nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, 200))
-            nvgText(vg, cx + drawR * 0.55, cy - drawR * 0.55, "✓")
+            nvgFillColor(vg, nvgRGBA(60, 65, 75, 140))
+            nvgText(vg, rightX, rowCY, "🔒")
+        end
+
+        -- 行间分割线
+        if i < n then
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, padX + 36, ry + rowH - 1)
+            nvgLineTo(vg, W - padX - 10, ry + rowH - 1)
+            nvgStrokeColor(vg, nvgRGBA(40, 44, 58, 100))
+            nvgStrokeWidth(vg, 0.5)
+            nvgStroke(vg)
         end
     end
-
-    -- ================================================================
-    -- 5. 弹窗（在滚动之外层绘制，需要特殊处理）
-    --    实际在 Draw 主入口 restore 之后绘制，见 DrawTalentPopup
-    -- ================================================================
 
     return math.max(0, totalH_content - L.contentH + 20)
 end
 
 ------------------------------------------------------------------------
--- 天赋弹窗（覆盖层，不受滚动影响）
+-- 天赋弹窗（确认升级弹窗）
 ------------------------------------------------------------------------
 function M.DrawTalentPopup(vg, W, H)
     if not talentPopup.show then return end
-    local idx = talentPopup.idx
-    if idx < 1 or idx > #MD.TALENTS then
+    local curLv = saveData.talentLevel or 0
+    local nextLv = curLv + 1
+    if nextLv > MD.TALENT_MAX_LV then
         talentPopup.show = false
         return
     end
 
-    local talent = MD.TALENTS[idx]
-    local lv = (saveData.talents[talent.id] or 0)
-    local activated = (lv >= 1)
-    local unlockable = (not activated) and canUnlockTalent(idx)
-    local cost = talent.costBase  -- 单次激活，固定费用
+    local talent = MD.TALENTS[nextLv]
+    if not talent then
+        talentPopup.show = false
+        return
+    end
+
+    local cost = talent.cost
     local canAfford = (saveData.gold >= cost)
     local c = MD.CLR
-    local t = elapsedTime
 
     -- 半透明遮罩
     nvgBeginPath(vg)
     nvgRect(vg, 0, 0, W, H)
-    nvgFillColor(vg, nvgRGBA(0, 0, 0, 160))
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, 170))
     nvgFill(vg)
 
     -- 弹窗卡片
-    local popW = math.min(W * 0.75, 260)
-    local popH = 260
+    local popW = math.min(W * 0.78, 280)
+    local popH = 240
     local popX = (W - popW) / 2
     local popY = (H - popH) / 2
 
@@ -3604,14 +4068,10 @@ function M.DrawTalentPopup(vg, W, H)
     nvgFill(vg)
 
     -- 卡片边框
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, popX, popY, popW, popH, 14)
     nvgStrokeWidth(vg, 1.5)
-    if activated then
-        nvgStrokeColor(vg, nvgRGBA(255, 210, 60, 180))
-    elseif unlockable then
-        nvgStrokeColor(vg, nvgRGBA(80, 200, 140, 180))
-    else
-        nvgStrokeColor(vg, nvgRGBA(60, 65, 80, 180))
-    end
+    nvgStrokeColor(vg, nvgRGBA(80, 200, 140, 180))
     nvgStroke(vg)
 
     -- 关闭按钮（右上角 X）
@@ -3628,95 +4088,44 @@ function M.DrawTalentPopup(vg, W, H)
     nvgFillColor(vg, nvgRGBA(200, 205, 215, 220))
     nvgText(vg, closeX, closeY, "✕")
 
-    -- 天赋图标（顶部居中，带六边形框）
-    local iconCX = popX + popW / 2
-    local iconCY = popY + 52
-    local iconR = 30
-
-    -- 六边形底色
-    hexPath(vg, iconCX, iconCY, iconR)
-    if activated then
-        local grd = nvgLinearGradient(vg, iconCX, iconCY - iconR, iconCX, iconCY + iconR,
-            nvgRGBA(200, 170, 50, 255), nvgRGBA(150, 120, 25, 255))
-        nvgFillPaint(vg, grd)
-    elseif unlockable then
-        local grd = nvgLinearGradient(vg, iconCX, iconCY - iconR, iconCX, iconCY + iconR,
-            nvgRGBA(50, 100, 160, 255), nvgRGBA(35, 70, 120, 255))
-        nvgFillPaint(vg, grd)
-    else
-        nvgFillColor(vg, nvgRGBA(50, 55, 65, 255))
-    end
-    nvgFill(vg)
-
-    hexPath(vg, iconCX, iconCY, iconR)
-    if activated then
-        nvgStrokeColor(vg, nvgRGBA(255, 220, 80, 230))
-    elseif unlockable then
-        nvgStrokeColor(vg, nvgRGBA(100, 200, 140, 200))
-    else
-        nvgStrokeColor(vg, nvgRGBA(70, 75, 85, 180))
-    end
-    nvgStrokeWidth(vg, 2)
-    nvgStroke(vg)
-
     -- 图标
-    local img = imgCache[talent.icon]
+    local iconCX = popX + popW / 2
+    local iconCY = popY + 50
+    local iconS = 48
+    local img = imgCache["talent_icon_" .. talent.type]
     if img and img ~= 0 then
-        local icoS = iconR * 1.2
-        M.DrawImage(vg, img, iconCX - icoS / 2, iconCY - icoS / 2, icoS, icoS)
+        M.DrawImage(vg, img, iconCX - iconS / 2, iconCY - iconS / 2, iconS, iconS)
     end
 
-    -- 天赋名称
+    -- 升级标题
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, 18)
+    nvgFontSize(vg, 16)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
     nvgFillColor(vg, nvgRGBA(240, 245, 255, 255))
-    nvgText(vg, popX + popW / 2, iconCY + iconR + 10, talent.name)
-
-    -- 分割线
-    local divY = iconCY + iconR + 34
-    nvgBeginPath(vg)
-    nvgMoveTo(vg, popX + 20, divY)
-    nvgLineTo(vg, popX + popW - 20, divY)
-    nvgStrokeColor(vg, nvgRGBA(60, 65, 80, 150))
-    nvgStrokeWidth(vg, 1)
-    nvgStroke(vg)
+    nvgText(vg, popX + popW / 2, iconCY + iconS / 2 + 8, "升级到 Lv." .. nextLv)
 
     -- 效果描述
     nvgFontSize(vg, 14)
-    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
-    nvgFillColor(vg, nvgRGBA(180, 220, 255, 230))
-    nvgText(vg, popX + popW / 2, divY + 12, talent.desc)
+    nvgFillColor(vg, nvgRGBA(100, 220, 180, 240))
+    nvgText(vg, popX + popW / 2, iconCY + iconS / 2 + 30, talent.desc)
 
-    -- 状态标签
-    local statusY = divY + 38
+    -- 费用
     nvgFontSize(vg, 12)
-    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
-    if activated then
-        nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
-        nvgText(vg, popX + popW / 2, statusY, "已激活 ✓")
-    elseif not unlockable then
-        nvgFillColor(vg, nvgRGBA(130, 135, 150, 200))
-        nvgText(vg, popX + popW / 2, statusY, "需先激活前置天赋")
+    nvgFillColor(vg, nvgRGBA(c.text_gray[1], c.text_gray[2], c.text_gray[3], 255))
+    nvgText(vg, popX + popW / 2, iconCY + iconS / 2 + 54, "需要金币")
+
+    nvgFontSize(vg, 22)
+    nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+    nvgText(vg, popX + popW / 2, iconCY + iconS / 2 + 70, "💰 " .. M.FormatGold(cost))
+
+    -- 余额提示
+    nvgFontSize(vg, 11)
+    if canAfford then
+        nvgFillColor(vg, nvgRGBA(100, 220, 130, 200))
     else
-        -- 费用显示
-        nvgFillColor(vg, nvgRGBA(c.text_gray[1], c.text_gray[2], c.text_gray[3], 255))
-        nvgText(vg, popX + popW / 2, statusY, "激活费用")
-
-        -- 金币数字
-        nvgFontSize(vg, 20)
-        nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
-        nvgText(vg, popX + popW / 2, statusY + 18, "💰 " .. cost)
-
-        -- 当前余额 / 费用
-        nvgFontSize(vg, 11)
-        if canAfford then
-            nvgFillColor(vg, nvgRGBA(100, 220, 130, 200))
-        else
-            nvgFillColor(vg, nvgRGBA(220, 80, 60, 200))
-        end
-        nvgText(vg, popX + popW / 2, statusY + 44, "拥有: " .. saveData.gold .. " / 需要: " .. cost)
+        nvgFillColor(vg, nvgRGBA(220, 80, 60, 200))
     end
+    nvgText(vg, popX + popW / 2, iconCY + iconS / 2 + 96, "拥有: " .. M.FormatGold(saveData.gold))
 
     -- 底部按钮
     local btnW = popW - 40
@@ -3724,43 +4133,20 @@ function M.DrawTalentPopup(vg, W, H)
     local btnX = popX + 20
     local btnY = popY + popH - btnH - 16
 
-    if activated then
-        -- 已激活：灰色"已激活"按钮
-        nvgBeginPath(vg)
-        nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 8)
-        nvgFillColor(vg, nvgRGBA(50, 55, 65, 200))
-        nvgFill(vg)
-        nvgFontSize(vg, 15)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(130, 135, 145, 200))
-        nvgText(vg, btnX + btnW / 2, btnY + btnH / 2, "已激活")
-    elseif unlockable then
-        -- 可激活：绿色"激活"按钮
-        nvgBeginPath(vg)
-        nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 8)
-        if canAfford then
-            local bg = nvgLinearGradient(vg, btnX, btnY, btnX, btnY + btnH,
-                nvgRGBA(55, 170, 95, 255), nvgRGBA(35, 130, 65, 255))
-            nvgFillPaint(vg, bg)
-        else
-            nvgFillColor(vg, nvgRGBA(50, 55, 65, 200))
-        end
-        nvgFill(vg)
-        nvgFontSize(vg, 16)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, canAfford and 255 or 100))
-        nvgText(vg, btnX + btnW / 2, btnY + btnH / 2, "激活")
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 8)
+    if canAfford then
+        local bg = nvgLinearGradient(vg, btnX, btnY, btnX, btnY + btnH,
+            nvgRGBA(55, 170, 95, 255), nvgRGBA(35, 130, 65, 255))
+        nvgFillPaint(vg, bg)
     else
-        -- 锁定：灰色按钮
-        nvgBeginPath(vg)
-        nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 8)
-        nvgFillColor(vg, nvgRGBA(40, 43, 52, 200))
-        nvgFill(vg)
-        nvgFontSize(vg, 14)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(100, 105, 115, 160))
-        nvgText(vg, btnX + btnW / 2, btnY + btnH / 2, "🔒 未解锁")
+        nvgFillColor(vg, nvgRGBA(50, 55, 65, 200))
     end
+    nvgFill(vg)
+    nvgFontSize(vg, 16)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, canAfford and 255 or 100))
+    nvgText(vg, btnX + btnW / 2, btnY + btnH / 2, canAfford and "确认升级" or "金币不足")
 end
 
 ------------------------------------------------------------------------
@@ -4867,114 +5253,64 @@ function M.DrawGachaPopup(vg, W, H)
     local t = gachaState.timer
     local phase = gachaState.phase
 
-    -- 半透明黑色遮罩
-    nvgBeginPath(vg)
-    nvgRect(vg, 0, 0, W, H)
-    nvgFillColor(vg, nvgRGBA(0, 0, 0, 180))
-    nvgFill(vg)
-
     nvgFontFace(vg, "sans")
 
     if phase == "anim" then
-        -- ====== 开箱动画阶段 ======
-        local progress = math.min(t / gachaState.animDuration, 1.0)
-
-        -- 宝箱居中
-        local centerX = W / 2
-        local centerY = H / 2 - 20
-
-        -- 光芒效果（从中心向外辐射）
-        local rayCount = 12
-        local rayMaxLen = math.min(W, H) * 0.45
-        local rayAlpha = math.floor(math.min(progress * 2, 1.0) * 200)
-        for i = 1, rayCount do
-            local angle = (i / rayCount) * math.pi * 2 + t * 1.5
-            local len = rayMaxLen * (0.5 + 0.5 * math.sin(t * 3 + i)) * progress
-            local width = 3 + 4 * progress
-
-            nvgSave(vg)
-            nvgTranslate(vg, centerX, centerY)
-            nvgRotate(vg, angle)
-
+        -- ====== Spine 抽卡动画阶段（tab栏上方区域）======
+        local animH = H - L.tabBarH  -- 动画区域高度（tab栏上方）
+        -- 用NanoVG裁剪到tab栏上方区域
+        nvgSave(vg)
+        nvgScissor(vg, 0, 0, W, animH)
+        if gachaState.spineInst and gachaState.spineLoaded then
+            -- Spine 动画居中于tab栏上方区域
+            local centerX = W / 2
+            local centerY = animH / 2
+            gachaState.spineInst:SetPosition(centerX, centerY)
+            -- 自适应缩放：按屏幕宽度铺满，Y取负翻转（Spine Y-up → 屏幕 Y-down）
+            local scale = W / 1080
+            gachaState.spineInst:SetScale(scale, -scale)
+            nvgSpineRender(vg, gachaState.spineInst)
+        else
+            -- 降级：Spine 加载失败时显示简单文字
             nvgBeginPath(vg)
-            nvgMoveTo(vg, 0, 0)
-            nvgLineTo(vg, len, -width / 2)
-            nvgLineTo(vg, len, width / 2)
-            nvgClosePath(vg)
-
-            -- 金色渐变光芒
-            local paint = nvgLinearGradient(vg, 0, 0, len, 0,
-                nvgRGBA(255, 220, 80, rayAlpha),
-                nvgRGBA(255, 180, 40, 0))
-            nvgFillPaint(vg, paint)
+            nvgRect(vg, 0, 0, W, animH)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 180))
             nvgFill(vg)
-
-            nvgRestore(vg)
+            local centerX = W / 2
+            local centerY = animH / 2
+            nvgFontSize(vg, 22)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+            local label = gachaState.count > 1 and "十连抽奖中..." or "抽奖中..."
+            nvgText(vg, centerX, centerY, label)
         end
-
-        -- 中心发光圆
-        local glowR = 30 + 50 * progress
-        local glowAlpha = math.floor(math.min(progress * 3, 1.0) * 180)
-        local glow = nvgRadialGradient(vg, centerX, centerY, 0, glowR,
-            nvgRGBA(255, 230, 100, glowAlpha),
-            nvgRGBA(255, 200, 50, 0))
-        nvgBeginPath(vg)
-        nvgCircle(vg, centerX, centerY, glowR)
-        nvgFillPaint(vg, glow)
-        nvgFill(vg)
-
-        -- 宝箱图标（金宝箱打开图）
-        local chestImg = imgCache[MD.CHEST_ICONS_OPENED["gold"]]
-        if chestImg and chestImg ~= 0 then
-            -- 宝箱缩放弹跳效果
-            local scale = 1.0
-            if progress < 0.3 then
-                scale = 0.5 + progress / 0.3 * 0.5  -- 0.5 -> 1.0
-            elseif progress < 0.5 then
-                local bounce = (progress - 0.3) / 0.2
-                scale = 1.0 + math.sin(bounce * math.pi) * 0.2  -- 弹跳
-            end
-            local imgS = 72 * scale
-            M.DrawImageFit(vg, chestImg, centerX - imgS / 2, centerY - imgS / 2, imgS, imgS)
-        end
-
-        -- 闪烁粒子
-        if progress > 0.3 then
-            local sparkCount = 8
-            for i = 1, sparkCount do
-                local angle = (i / sparkCount) * math.pi * 2 + t * 2
-                local dist = 40 + 60 * progress + math.sin(t * 5 + i * 0.7) * 15
-                local sx = centerX + math.cos(angle) * dist
-                local sy = centerY + math.sin(angle) * dist
-                local sparkAlpha = math.floor((0.5 + 0.5 * math.sin(t * 8 + i)) * 200 * (1 - progress * 0.3))
-                local sparkR = 2 + math.sin(t * 6 + i * 1.3) * 1.5
-
-                nvgBeginPath(vg)
-                nvgCircle(vg, sx, sy, sparkR)
-                nvgFillColor(vg, nvgRGBA(255, 230, 120, sparkAlpha))
-                nvgFill(vg)
-            end
-        end
-
-        -- 文字提示
-        local textAlpha = math.floor(math.min(progress * 2, 1.0) * 255)
-        nvgFontSize(vg, 22)
-        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        nvgFillColor(vg, nvgRGBA(255, 220, 80, textAlpha))
-        local label = gachaState.count > 1 and "十连抽奖中..." or "抽奖中..."
-        nvgText(vg, centerX, centerY + 65, label)
+        nvgRestore(vg)
 
     elseif phase == "results" then
+        -- 结果阶段加半透明黑色遮罩
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 180))
+        nvgFill(vg)
         -- ====== 结果展示阶段 ======
         local rewards = gachaState.rewards
         local count = #rewards
 
-        -- 弹窗尺寸（统一使用4列网格布局）
-        local popW = math.min(W * 0.9, 340)
-        local cols = 4
-
-        local cellPad = 6
-        local cellSize = math.floor((popW - cellPad * (cols + 1)) / cols)
+        -- 弹窗尺寸
+        local popW, cols, cellPad, cellSize
+        if count == 1 then
+            -- 单抽：紧凑居中布局，参考充值结果
+            popW = math.min(W * 0.7, 260)
+            cols = 1
+            cellPad = 8
+            cellSize = math.floor(popW * 0.35)  -- 卡片占弹窗宽度35%
+        else
+            -- 十连抽：4列网格
+            popW = math.min(W * 0.9, 340)
+            cols = 4
+            cellPad = 6
+            cellSize = math.floor((popW - cellPad * (cols + 1)) / cols)
+        end
         local rows = math.ceil(count / cols)
         local gridW = cols * (cellSize + cellPad) + cellPad
         local gridH = rows * (cellSize + cellPad) + cellPad
@@ -5124,7 +5460,7 @@ end
 function M.HandleGachaClick(x, y, W, H)
     if gachaState.phase == "idle" then return false end
 
-    -- 动画阶段：点击跳过动画
+    -- 动画阶段：点击跳过动画，直接显示结果
     if gachaState.phase == "anim" then
         gachaState.phase = "results"
         gachaState.timer = 0
@@ -5164,10 +5500,299 @@ function M.HandleGachaClick(x, y, W, H)
     return true  -- 拦截所有点击
 end
 
+------------------------------------------------------------------------
+-- 充值获取钻石结果弹窗
+------------------------------------------------------------------------
+function M.DrawRechargePopup(vg, W, H)
+    -- ====== 动画阶段：3套Spine抽奖光效 ======
+    if rechargeState.phase == "anim" then
+        local t = rechargeState.timer
+        local fadeAlpha = math.min(t / 0.3, 1.0)
+        local centerX = W / 2
+        local centerY = H / 2
+        local scale = W / 720
+
+        -- 半透明遮罩
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, math.floor(220 * fadeAlpha)))
+        nvgFill(vg)
+
+        if rechargeState.spineLoaded then
+            if rechargeState.count > 1 then
+                -- 十连：全套3层光效
+                if rechargeState.spineQczx then
+                    rechargeState.spineQczx:SetPosition(centerX, centerY)
+                    rechargeState.spineQczx:SetScale(scale, scale)
+                    nvgSpineRender(vg, rechargeState.spineQczx)
+                end
+                if rechargeState.spineKpbk then
+                    rechargeState.spineKpbk:SetPosition(centerX, centerY)
+                    rechargeState.spineKpbk:SetScale(scale, scale)
+                    nvgSpineRender(vg, rechargeState.spineKpbk)
+                end
+                if rechargeState.spineKpxuhx then
+                    rechargeState.spineKpxuhx:SetPosition(centerX, centerY)
+                    rechargeState.spineKpxuhx:SetScale(scale, scale)
+                    nvgSpineRender(vg, rechargeState.spineKpxuhx)
+                end
+            else
+                -- 单抽：卡牌背面光效
+                if rechargeState.spineKpbk then
+                    rechargeState.spineKpbk:SetPosition(centerX, centerY)
+                    rechargeState.spineKpbk:SetScale(scale, scale)
+                    nvgSpineRender(vg, rechargeState.spineKpbk)
+                end
+            end
+        else
+            -- Spine 未加载时的备用 NanoVG 光效
+            local rayCount = 12
+            local rayLen = math.min(W, H) * 0.4
+            local rot = t * 60
+            nvgSave(vg)
+            nvgTranslate(vg, centerX, centerY)
+            nvgRotate(vg, math.rad(rot))
+            for i = 1, rayCount do
+                local angle = (i - 1) * (360 / rayCount)
+                local alpha = math.floor(40 + 30 * math.sin(t * 3 + i))
+                nvgSave(vg)
+                nvgRotate(vg, math.rad(angle))
+                nvgBeginPath(vg)
+                nvgMoveTo(vg, 0, 0)
+                nvgLineTo(vg, -12, -rayLen)
+                nvgLineTo(vg, 12, -rayLen)
+                nvgClosePath(vg)
+                nvgFillColor(vg, nvgRGBA(255, 215, 0, alpha))
+                nvgFill(vg)
+                nvgRestore(vg)
+            end
+            nvgRestore(vg)
+        end
+
+        -- 提示文字（底部）
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 16)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+        nvgFillColor(vg, nvgRGBA(255, 220, 100, math.floor(200 * fadeAlpha)))
+        local label = rechargeState.count > 1 and "十连抽取中..." or "抽取中..."
+        nvgText(vg, centerX, H - 40, label)
+        -- 点击跳过提示
+        if t > 1.0 then
+            nvgFontSize(vg, 12)
+            nvgFillColor(vg, nvgRGBA(180, 180, 180, math.floor(120 * math.min((t - 1.0) / 0.5, 1.0))))
+            nvgText(vg, centerX, H - 18, "点击屏幕跳过")
+        end
+        return
+    end
+
+    if rechargeState.phase ~= "show" then return end
+
+    local t = rechargeState.timer
+    local results = rechargeState.results
+    local count = #results
+    local totalDiamond = rechargeState.totalDiamond
+
+    -- 品质颜色
+    local rarityColors = {
+        N   = { bg = {40, 60, 50},  border = {80, 160, 100},  text = {140, 200, 150} },
+        R   = { bg = {30, 45, 75},  border = {60, 120, 210},  text = {120, 180, 255} },
+        SR  = { bg = {50, 30, 70},  border = {140, 70, 210},  text = {200, 140, 255} },
+        SSR = { bg = {60, 50, 20},  border = {210, 170, 40},  text = {255, 220, 80} },
+    }
+
+    -- 半透明遮罩
+    local fadeAlpha = math.min(t / 0.2, 1.0)
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, W, H)
+    nvgFillColor(vg, nvgRGBA(0, 0, 0, math.floor(180 * fadeAlpha)))
+    nvgFill(vg)
+
+    -- 弹窗尺寸
+    local popW = math.min(W * 0.85, 300)
+    local cellPad = 8
+    local cols = math.min(count, 5)
+    local cellSize = math.floor((popW - cellPad * (cols + 1)) / cols)
+    local rows = math.ceil(count / cols)
+    local gridH = rows * (cellSize + cellPad) + cellPad
+    local headerH = 44
+    local totalH2 = 36  -- 总计区域高度
+    local footerH = 44
+    local popH = headerH + gridH + totalH2 + footerH
+    local popX = (W - popW) / 2
+    local popY = (H - popH) / 2
+
+    -- 入场动画：缩放
+    local popScale = 0.8 + 0.2 * math.min(t / 0.15, 1.0)
+    nvgSave(vg)
+    nvgTranslate(vg, W / 2, H / 2)
+    nvgScale(vg, popScale, popScale)
+    nvgTranslate(vg, -W / 2, -H / 2)
+
+    -- 弹窗背景
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, popX, popY, popW, popH, 12)
+    nvgFillColor(vg, nvgRGBA(20, 22, 32, 248))
+    nvgFill(vg)
+    -- 金色边框
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, popX, popY, popW, popH, 12)
+    nvgStrokeColor(vg, nvgRGBA(180, 150, 50, 160))
+    nvgStrokeWidth(vg, 1.5)
+    nvgStroke(vg)
+
+    nvgFontFace(vg, "sans")
+
+    -- 标题
+    nvgFontSize(vg, 18)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+    local title = rechargeState.count > 1 and "充值十次结果" or "充值结果"
+    nvgText(vg, W / 2, popY + headerH / 2, title)
+
+    -- 分割线
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, popX + 14, popY + headerH - 2)
+    nvgLineTo(vg, popX + popW - 14, popY + headerH - 2)
+    nvgStrokeColor(vg, nvgRGBA(60, 65, 80, 180))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    -- 结果网格
+    local gridStartY = popY + headerH
+    local gridOffsetX = (popW - (cols * (cellSize + cellPad) + cellPad)) / 2
+    for i, entry in ipairs(results) do
+        local row = math.ceil(i / cols) - 1
+        local col = (i - 1) % cols
+        local cx = popX + gridOffsetX + cellPad + col * (cellSize + cellPad)
+        local cy = gridStartY + cellPad + row * (cellSize + cellPad)
+
+        -- 入场动画：逐个淡入
+        local delay = (i - 1) * 0.05
+        local itemT = math.max(0, t - 0.15 - delay)
+        local itemAlpha = math.min(itemT / 0.15, 1.0)
+        if itemAlpha <= 0 then goto continue_recharge end
+
+        local rc = rarityColors[entry.label] or rarityColors["N"]
+        local alpha = math.floor(230 * itemAlpha)
+
+        -- 卡片背景
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, cellSize, cellSize, 6)
+        nvgFillColor(vg, nvgRGBA(rc.bg[1], rc.bg[2], rc.bg[3], alpha))
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(rc.border[1], rc.border[2], rc.border[3], math.floor(200 * itemAlpha)))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- 钻石图片（居中偏上）
+        local dImgSize = math.floor(cellSize * 0.5)
+        local dImgX = cx + (cellSize - dImgSize) / 2
+        local dImgY = cy + 6
+        nvgGlobalAlpha(vg, itemAlpha)
+        M.DrawImage(vg, imgCache["shop_diamond_icon"], dImgX, dImgY, dImgSize, dImgSize)
+        nvgGlobalAlpha(vg, 1.0)
+
+        -- 数量文字
+        nvgFontSize(vg, 11)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, math.floor(240 * itemAlpha)))
+        nvgText(vg, cx + cellSize / 2, dImgY + dImgSize + 2, entry.amount .. "枚")
+
+        -- 品质角标（右上角）
+        local bR2 = 7
+        local bX2 = cx + cellSize - bR2 - 2
+        local bY2 = cy + bR2 + 2
+        nvgBeginPath(vg)
+        nvgCircle(vg, bX2, bY2, bR2)
+        nvgFillColor(vg, nvgRGBA(rc.border[1], rc.border[2], rc.border[3], math.floor(220 * itemAlpha)))
+        nvgFill(vg)
+        nvgFontSize(vg, 7)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, math.floor(255 * itemAlpha)))
+        nvgText(vg, bX2, bY2, entry.label)
+
+        ::continue_recharge::
+    end
+
+    -- 总计区域
+    local totalY = gridStartY + gridH + 4
+    local totalCY = totalY + totalH2 / 2
+    -- 钻石小图标 + 文字
+    local totalText = " " .. totalDiamond .. " 枚钻石"
+    local prefixText = "共获得"
+    nvgFontSize(vg, 15)
+    local prefixW = nvgTextBounds(vg, 0, 0, prefixText)
+    local totalW = nvgTextBounds(vg, 0, 0, totalText)
+    local tIconS = 16
+    local fullW = prefixW + tIconS + totalW
+    local startX = (W - fullW) / 2
+    -- "共获得"
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 240, 180, 255))
+    nvgText(vg, startX, totalCY, prefixText)
+    -- 钻石图标
+    M.DrawImage(vg, imgCache["shop_diamond_icon"], startX + prefixW + 1, totalCY - tIconS / 2, tIconS, tIconS)
+    -- "xxx 枚钻石"
+    nvgFillColor(vg, nvgRGBA(255, 240, 180, 255))
+    nvgText(vg, startX + prefixW + tIconS + 1, totalCY, totalText)
+
+    -- 确认按钮
+    local btnW2 = 100
+    local btnH2 = 30
+    local btnX = (W - btnW2) / 2
+    local btnY2 = popY + popH - footerH + (footerH - btnH2) / 2
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnX, btnY2, btnW2, btnH2, 6)
+    nvgFillColor(vg, nvgRGBA(60, 80, 140, 240))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(100, 150, 240, 180))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 14)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+    nvgText(vg, btnX + btnW2 / 2, btnY2 + btnH2 / 2, "确认")
+
+    -- 缓存确认按钮位置
+    L.rechargeConfirmBtn = { x = btnX, y = btnY2, w = btnW2, h = btnH2 }
+    L.rechargePopupRect = { x = popX, y = popY, w = popW, h = popH }
+
+    nvgRestore(vg)
+end
+
+-- 充值结果弹窗点击处理
+function M.HandleRechargeClick(x, y, W, H)
+    -- 动画播放中：点击跳过动画，直接显示结果
+    if rechargeState.phase == "anim" then
+        rechargeState.phase = "show"
+        rechargeState.timer = 0
+        return true
+    end
+
+    if rechargeState.phase ~= "show" then return false end
+
+    -- 确认按钮
+    local btn = L.rechargeConfirmBtn
+    if btn and x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+        rechargeState.phase = "idle"
+        return true
+    end
+
+    -- 点击弹窗外关闭
+    local pop = L.rechargePopupRect
+    if pop and (x < pop.x or x > pop.x + pop.w or y < pop.y or y > pop.y + pop.h) then
+        rechargeState.phase = "idle"
+        return true
+    end
+
+    return true  -- 拦截所有点击
+end
+
 -- 启动抽奖（count: 1=单抽, 10=十连）
 function M.StartGacha(count)
-    -- 抽取奖励
-    local rewards = MD.RollGacha(count)
+    -- 抽取奖励（传入当前抽卡等级影响掉率）
+    local gachaLv = saveData.gachaLevel or 1
+    local rewards = MD.RollGacha(count, gachaLv)
 
     -- 发放奖励到存档
     for _, reward in ipairs(rewards) do
@@ -5201,11 +5826,36 @@ function M.StartGacha(count)
         end
     end
 
+    -- 根据抽取物品品质增加抽卡经验
+    local totalExp = 0
+    for _, reward in ipairs(rewards) do
+        local q = reward.quality or 1
+        totalExp = totalExp + (MD.GACHA_EXP_PER_QUALITY[q] or 10)
+    end
+    if totalExp > 0 then
+        MD.AddGachaExp(saveData, totalExp)
+        print("[Gacha] 获得经验: +" .. totalExp .. " (Lv." .. saveData.gachaLevel .. " " .. saveData.gachaExp .. "/" .. MD.GetGachaMaxExp(saveData.gachaLevel) .. ")")
+    end
+
     -- 启动动画
     gachaState.phase = "anim"
     gachaState.timer = 0
     gachaState.rewards = rewards
     gachaState.count = count
+
+    -- 根据最高品质选择 Spine 动画颜色
+    if gachaState.spineInst and gachaState.spineLoaded then
+        local maxQ = 1
+        for _, r in ipairs(rewards) do
+            if (r.quality or 1) > maxQ then maxQ = r.quality end
+        end
+        local color = "Blue"
+        if maxQ >= 5 then color = "Gold"
+        elseif maxQ >= 4 then color = "Purple" end
+        local animName = count > 1 and ("GACHAx10_" .. color) or ("GACHAx1_" .. color)
+        gachaState.spineInst:SetAnimation(0, animName, false)
+        print("[Gacha Spine] Playing: " .. animName)
+    end
 end
 
 function M.DrawBtn(vg, x, y, w, h, text, clr, subText)
@@ -5242,6 +5892,11 @@ function M.HandleClick(x, y, W, H)
     -- 钻石抽奖弹窗优先拦截（最最高优先级）
     if gachaState.phase ~= "idle" then
         return M.HandleGachaClick(x, y, W, H)
+    end
+
+    -- 充值结果弹窗优先拦截
+    if rechargeState.phase ~= "idle" then
+        return M.HandleRechargeClick(x, y, W, H)
     end
 
     -- 签到弹窗优先拦截
@@ -5436,6 +6091,10 @@ function M.HandleClick(x, y, W, H)
                 equipGridScrollY = 0
                 panelAlpha = 0.3
                 panelFadeTarget = 1.0
+                -- 切换到战斗tab时，自动跳回玩家当前最高解锁关卡
+                if newTab == "battle" then
+                    battleSelectedLevel = math.min(saveData.maxLevel or 1, #MD.LEVELS)
+                end
                 print("[Meta] Tab switched to: " .. activeTab)
             end
         end
@@ -5530,8 +6189,8 @@ function M.HandleBattleClick(x, y, W)
             end
         end
 
-        -- 右箭头
-        if battleSelectedLevel < saveData.maxLevel then
+        -- 右箭头（允许浏览所有关卡）
+        if battleSelectedLevel < #MD.LEVELS then
             local raX = sceneCX + sceneW / 2 + 8
             if x >= raX and x <= raX + arrowW and y >= arrowY and y <= arrowY + arrowH then
                 battleSelectedLevel = battleSelectedLevel + 1
@@ -5547,15 +6206,21 @@ end
 -- 天赋弹窗点击处理（在屏幕坐标，不含滚动偏移）
 function M.HandleTalentPopupClick(x, y, W, H)
     if not talentPopup.show then return false end
-    local idx = talentPopup.idx
-    local talent = MD.TALENTS[idx]
+
+    local curLv = saveData.talentLevel or 0
+    local nextLv = curLv + 1
+    if nextLv > MD.TALENT_MAX_LV then
+        talentPopup.show = false
+        return true
+    end
+    local talent = MD.TALENTS[nextLv]
     if not talent then
         talentPopup.show = false
         return true
     end
 
-    local popW = math.min(W * 0.75, 260)
-    local popH = 260
+    local popW = math.min(W * 0.78, 280)
+    local popH = 240
     local popX = (W - popW) / 2
     local popY = (H - popH) / 2
 
@@ -5571,25 +6236,21 @@ function M.HandleTalentPopupClick(x, y, W, H)
         return true
     end
 
-    -- 底部按钮检测（激活按钮）
+    -- 底部按钮检测（确认升级按钮）
     local btnW = popW - 40
     local btnH = 38
     local btnX = popX + 20
     local btnY = popY + popH - btnH - 16
 
     if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-        local lv = (saveData.talents[talent.id] or 0)
-        local activated = (lv >= 1)
-        local unlockable = (not activated) and canUnlockTalent(idx)
-        local cost = talent.costBase
-
-        if unlockable and saveData.gold >= cost then
+        local cost = talent.cost
+        if saveData.gold >= cost then
             saveData.gold = saveData.gold - cost
-            saveData.talents[talent.id] = 1
-            print("[Meta] Talent " .. talent.name .. " activated!")
+            saveData.talentLevel = nextLv
+            print("[Meta] 天赋升级到 Lv." .. nextLv .. " (" .. talent.name .. ")")
             talentPopup.show = false
-        elseif unlockable then
-            print("[Meta] Not enough gold for " .. talent.name)
+        else
+            print("[Meta] 金币不足，需要 " .. cost .. "，拥有 " .. saveData.gold)
         end
         return true
     end
@@ -5604,30 +6265,27 @@ function M.HandleTalentPopupClick(x, y, W, H)
     return true  -- 弹窗内其他区域消费点击
 end
 
--- 天赋面板点击（打开弹窗）
+-- 天赋面板点击（打开升级弹窗）
 function M.HandleTalentClick(x, y, W)
-    local n = #MD.TALENTS
-    local centerX = W * 0.5
-    local hexR = TALENT_HEX_R
-    local spacing = TALENT_SPACING
-    local startY = L.contentY + L.pad + TALENT_START_Y_OFFSET
+    local curLv = saveData.talentLevel or 0
+    local nextLv = curLv + 1
+    if nextLv > MD.TALENT_MAX_LV then return true end
 
-    for i, talent in ipairs(MD.TALENTS) do
-        -- 反转 Y：与绘制逻辑一致
-        local slot = n - i
-        local cy = startY + slot * spacing + hexR
-        local cx = centerX
+    local padX = TALENT_PAD_X
+    local rowH = TALENT_ROW_H
+    local headerH = TALENT_HEADER_H
+    local baseY = L.contentY + L.pad
+    local listY = baseY + headerH
 
-        -- 点击六边形节点 → 打开弹窗
-        local dx = x - cx
-        local dy2 = y - cy
-        if dx * dx + dy2 * dy2 <= (hexR + 5) * (hexR + 5) then
-            talentPopup.show = true
-            talentPopup.idx = i
-            print("[Meta] Open talent popup: " .. talent.name)
-            return true
-        end
+    -- 检测点击是否在"下一级"行范围内
+    local ry = listY + (nextLv - 1) * rowH
+    if y >= ry + 2 and y <= ry + rowH - 2 and x >= padX and x <= W - padX then
+        talentPopup.show = true
+        talentPopup.idx = nextLv
+        print("[Meta] Open talent popup: Lv." .. nextLv)
+        return true
     end
+
     return true
 end
 
@@ -5728,8 +6386,120 @@ function M.HandleTrainClick(x, y, W)
     return true
 end
 
+-- 充值抽取钻石（按概率表roll）
+local function rollRecharge(times)
+    local pool = MD.SHOP_RECHARGE.pool
+    local totalWeight = 0
+    for _, entry in ipairs(pool) do totalWeight = totalWeight + entry.weight end
+
+    local totalDiamond = 0
+    local results = {}
+    for _ = 1, times do
+        local roll = math.random(1, totalWeight)
+        local cumul = 0
+        for _, entry in ipairs(pool) do
+            cumul = cumul + entry.weight
+            if roll <= cumul then
+                totalDiamond = totalDiamond + entry.amount
+                table.insert(results, entry)
+                break
+            end
+        end
+    end
+    saveData.diamond = saveData.diamond + totalDiamond
+    print(string.format("[Meta] 充值抽取 x%d，获得 💎%d", times, totalDiamond))
+
+    -- 触发抽奖动画（Spine加载成功时播动画，否则直接显示结果）
+    rechargeState.results = results
+    rechargeState.totalDiamond = totalDiamond
+    rechargeState.count = times
+    rechargeState.timer = 0
+    rechargeState.phase = "anim"
+
+    -- 播放 Spine 抽奖光效动画（单抽仅播卡牌旋转，十连播全套3层）
+    if rechargeState.spineLoaded then
+        if times > 1 then
+            -- 十连：全套3层光效
+            if rechargeState.spineQczx then
+                local anims = rechargeState.spineQczx:GetAnimationNames()
+                if anims and #anims > 0 then
+                    rechargeState.spineQczx:SetAnimation(0, anims[1], false)
+                end
+            end
+            if rechargeState.spineKpbk then
+                local anims = rechargeState.spineKpbk:GetAnimationNames()
+                if anims and #anims > 0 then
+                    rechargeState.spineKpbk:SetAnimation(0, anims[1], false)
+                end
+            end
+            if rechargeState.spineKpxuhx then
+                local anims = rechargeState.spineKpxuhx:GetAnimationNames()
+                if anims and #anims > 0 then
+                    rechargeState.spineKpxuhx:SetAnimation(0, anims[1], false)
+                end
+            end
+        else
+            -- 单抽：卡牌背面光效
+            if rechargeState.spineKpbk then
+                local anims = rechargeState.spineKpbk:GetAnimationNames()
+                if anims and #anims > 0 then
+                    rechargeState.spineKpbk:SetAnimation(0, anims[1], false)
+                end
+            end
+        end
+        print("[Recharge] Playing Spine animation, count=" .. times .. (times > 1 and " (full)" or " (single)"))
+    else
+        print("[Recharge] Spine not loaded, playing fallback animation, count=" .. times)
+    end
+
+    return totalDiamond, results
+end
+
 -- 商城面板点击
 function M.HandleShopClick(x, y, W)
+    -- 问号帮助弹窗：点击任意位置关闭
+    if L.gachaHelpShow then
+        L.gachaHelpShow = false
+        return true
+    end
+
+    -- 检测问号按钮
+    local qb = L.shopQuestionBtn
+    if qb and x >= qb.x and x <= qb.x + qb.w and y >= qb.y and y <= qb.y + qb.h then
+        L.gachaHelpShow = true
+        return true
+    end
+
+    -- 检测充值一次按钮
+    local rb1 = L.shopRechargeOnceBtn
+    if rb1 and x >= rb1.x and x <= rb1.x + rb1.w and y >= rb1.y and y <= rb1.y + rb1.h then
+        local now = os.time()
+        local cd = (saveData.rechargeOnceTime or 0) + MD.SHOP_RECHARGE.cooldown_once - now
+        if cd <= 0 then
+            saveData.rechargeOnceTime = now
+            rollRecharge(1)
+        else
+            print("[Meta] 充值一次冷却中，剩余 " .. math.ceil(cd) .. "秒")
+        end
+        return true
+    end
+
+    -- 检测充值十次按钮
+    local rb10 = L.shopRechargeTenBtn
+    if rb10 and x >= rb10.x and x <= rb10.x + rb10.w and y >= rb10.y and y <= rb10.y + rb10.h then
+        local now = os.time()
+        local cd = (saveData.rechargeTenTime or 0) + MD.SHOP_RECHARGE.cooldown_ten - now
+        if cd <= 0 then
+            saveData.rechargeTenTime = now
+            rollRecharge(10)
+        else
+            -- 冷却中：看广告直接获取十连（不消耗冷却）
+            rollRecharge(10)
+            print("[Meta] 看广告获取十连抽")
+        end
+        return true
+    end
+
     -- 检测单抽按钮
     local sb = L.shopSingleBtn
     if sb and x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then

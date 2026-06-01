@@ -95,7 +95,7 @@ MD.CHARACTERS = {
       mountedImg = "image/王阿姨上车.png",
       desc = "治愈辅助，全队增益", baseStats = {hp = 140},
       passive = "全队生命恢复+5/秒",
-      skill = { name = "鼓舞士气", desc = "为全体队员提升20%攻击力持续8秒" },
+      skill = { name = "治疗", desc = "立即回复列车20%血量，冷却60秒", icon = "image/治疗.png", cd = 60 },
       attackFrames = {
           "image/角色素材/艾达攻击动画1.png",
           "image/角色素材/艾达攻击动画2.png.png",
@@ -134,7 +134,7 @@ MD.CHARACTERS = {
       mountedImg = "image/李三光上车.png",
       desc = "远程输出，精准打击", baseStats = {hp = 100},
       passive = "暴击率+8%",
-      skill = { name = "战斗狂怒", desc = "在7秒内攻速与冷却速度+100%" },
+      skill = { name = "狂暴", desc = "7秒内攻速与冷却速度+100%", icon = "image/狂暴.png", cd = 15 },
       attackFrames = {
           "image/角色素材/李三光/李三光攻击1.png",
           "image/角色素材/李三光/李三光攻击2.png",
@@ -174,7 +174,7 @@ MD.CHARACTERS = {
       mountedImg = "image/威龙上车.png",
       desc = "龙族后裔，近战霸主", baseStats = {hp = 130},
       passive = "受伤减免+10%",
-      skill = { name = "龙息吐焰", desc = "喷射龙焰灼烧前方敌人，造成150%攻击力伤害并附带3秒灼烧" },
+      skill = { name = "喷气", desc = "向最后移动方向快速位移，无冷却", icon = "image/威龙喷气.png", cd = 0 },
       attackFrames = {
           "image/角色素材/威风的龙/威风的龙攻击1.png",
           "image/角色素材/威风的龙/威风的龙攻击2.png",
@@ -540,31 +540,39 @@ end
 -- 关卡系统
 ------------------------------------------------------------------------
 MD.LEVELS = {
-    { id = 1,  name = "保卫村庄",   waves = 15, reward_gold = 50,   chest = "bronze", unlocked = true },
-    { id = 2,  name = "冰封隧道",   waves = 7,  reward_gold = 80,   chest = "bronze", unlocked = false },
-    { id = 3,  name = "暴风雪谷",   waves = 8,  reward_gold = 100,  chest = "bronze", unlocked = false },
-    { id = 4,  name = "死寂车站",   waves = 10, reward_gold = 150,  chest = "silver", unlocked = false },
-    { id = 5,  name = "钢铁废墟",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false },
-    { id = 6,  name = "末日核心",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false },
-    { id = 7,  name = "荒野据点",   waves = 8,  reward_gold = 120,  chest = "bronze", unlocked = false },
-    { id = 8,  name = "毒雾沼泽",   waves = 10, reward_gold = 160,  chest = "bronze", unlocked = false },
-    { id = 9,  name = "断桥峡谷",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false },
-    { id = 10, name = "地下矿井",   waves = 14, reward_gold = 250,  chest = "silver", unlocked = false },
-    { id = 11, name = "烈焰熔炉",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false },
-    { id = 12, name = "幽暗森林",   waves = 10, reward_gold = 180,  chest = "bronze", unlocked = false },
-    { id = 13, name = "冻土荒原",   waves = 12, reward_gold = 220,  chest = "silver", unlocked = false },
-    { id = 14, name = "铁锈港口",   waves = 14, reward_gold = 280,  chest = "silver", unlocked = false },
-    { id = 15, name = "风暴要塞",   waves = 16, reward_gold = 350,  chest = "gold",   unlocked = false },
-    { id = 16, name = "枯骨墓地",   waves = 12, reward_gold = 240,  chest = "bronze", unlocked = false },
-    { id = 17, name = "酸雨废都",   waves = 14, reward_gold = 300,  chest = "silver", unlocked = false },
-    { id = 18, name = "雷鸣山脉",   waves = 16, reward_gold = 360,  chest = "silver", unlocked = false },
-    { id = 19, name = "深渊裂缝",   waves = 18, reward_gold = 420,  chest = "gold",   unlocked = false },
-    { id = 20, name = "机械蜂巢",   waves = 15, reward_gold = 350,  chest = "silver", unlocked = false },
-    { id = 21, name = "血月祭坛",   waves = 18, reward_gold = 450,  chest = "gold",   unlocked = false },
-    { id = 22, name = "永冻冰窟",   waves = 16, reward_gold = 400,  chest = "silver", unlocked = false },
-    { id = 23, name = "炼狱火山",   waves = 20, reward_gold = 500,  chest = "gold",   unlocked = false },
-    { id = 24, name = "虚空裂隙",   waves = 22, reward_gold = 600,  chest = "gold",   unlocked = false },
-    { id = 25, name = "终焉之战",   waves = 25, reward_gold = 800,  chest = "gold",   unlocked = false },
+    -- 雪地 (关卡1-4)
+    { id = 1,  name = "起始之地",   waves = 15, reward_gold = 50,   chest = "bronze", unlocked = true,  mapImg = "image/图层_13.png",           floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 2,  name = "雪原哨站",   waves = 7,  reward_gold = 80,   chest = "bronze", unlocked = false, mapImg = "image/地图/雪地1.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 3,  name = "暴雪矿道",   waves = 8,  reward_gold = 100,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2 (2).png",   floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 4,  name = "风雪断哨",   waves = 10, reward_gold = 150,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地3.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
+    -- 雪地2 (关卡5-7)
+    { id = 5,  name = "白霜补给站", waves = 12, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地2-1.png",      floorImg = "image/地图/雪地.png" },
+    { id = 6,  name = "积雪林线",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/雪地2-2.png",      floorImg = "image/地图/雪地.png" },
+    { id = 7,  name = "寒夜前哨",   waves = 8,  reward_gold = 120,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2-3.png",      floorImg = "image/地图/雪地.png" },
+    -- 冻原 (关卡8-10)
+    { id = 8,  name = "冻土驿路",   waves = 10, reward_gold = 160,  chest = "bronze", unlocked = false, mapImg = "image/地图/冻原1.png",        floorImg = "image/地图/冻原.png" },
+    { id = 9,  name = "永冻废墟",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原2.png",        floorImg = "image/地图/冻原.png" },
+    { id = 10, name = "裂谷补给点", waves = 14, reward_gold = 250,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原3.png",        floorImg = "image/地图/冻原.png" },
+    -- 冰原 (关卡11-13)
+    { id = 11, name = "冰原孤灯",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/冰原1.png",        floorImg = "image/地图/冰原.png" },
+    { id = 12, name = "冰河信标",   waves = 10, reward_gold = 180,  chest = "bronze", unlocked = false, mapImg = "image/地图/冰原2.png",        floorImg = "image/地图/冰原.png" },
+    { id = 13, name = "极寒终点站", waves = 12, reward_gold = 220,  chest = "silver", unlocked = false, mapImg = "image/地图/冰原3.png",        floorImg = "image/地图/冰原.png" },
+    -- 城市 (关卡14-16)
+    { id = 14, name = "废城外环",   waves = 14, reward_gold = 280,  chest = "silver", unlocked = false, mapImg = "image/地图/城市1.png",        floorImg = "image/地图/城市.png" },
+    { id = 15, name = "黑烟街区",   waves = 16, reward_gold = 350,  chest = "gold",   unlocked = false, mapImg = "image/地图/城市2.png",        floorImg = "image/地图/城市.png" },
+    { id = 16, name = "中央避难所", waves = 12, reward_gold = 240,  chest = "bronze", unlocked = false, mapImg = "image/地图/城市3.png",        floorImg = "image/地图/城市.png" },
+    -- 森林 (关卡17-19)
+    { id = 17, name = "枯林哨塔",   waves = 14, reward_gold = 300,  chest = "silver", unlocked = false, mapImg = "image/地图/森林1.png",        floorImg = "image/地图/森林.png" },
+    { id = 18, name = "雪松营地",   waves = 16, reward_gold = 360,  chest = "silver", unlocked = false, mapImg = "image/地图/森林2.png",        floorImg = "image/地图/森林.png" },
+    { id = 19, name = "迷雾林站",   waves = 18, reward_gold = 420,  chest = "gold",   unlocked = false, mapImg = "image/地图/森林3.png",        floorImg = "image/地图/森林.png" },
+    -- 沙漠 (关卡20-22)
+    { id = 20, name = "黄沙旧轨",   waves = 15, reward_gold = 350,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠1.png",        floorImg = "image/地图/沙漠.png" },
+    { id = 21, name = "风蚀驿站",   waves = 18, reward_gold = 450,  chest = "gold",   unlocked = false, mapImg = "image/地图/沙漠2.png",        floorImg = "image/地图/沙漠.png" },
+    { id = 22, name = "烈日补给线", waves = 16, reward_gold = 400,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠3.png",        floorImg = "image/地图/沙漠.png" },
+    -- 熔岩 (关卡23-25)
+    { id = 23, name = "焦土裂隙",   waves = 20, reward_gold = 500,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩1.png",        floorImg = "image/地图/熔岩.png" },
+    { id = 24, name = "熔岩矿坑",   waves = 22, reward_gold = 600,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩2.png",        floorImg = "image/地图/熔岩.png" },
+    { id = 25, name = "火山终点站", waves = 25, reward_gold = 800,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩3.png",        floorImg = "image/地图/熔岩.png" },
 }
 
 MD.CHEST_ICONS = {
@@ -600,18 +608,125 @@ MD.CHEST_REWARDS = {
 }
 
 ------------------------------------------------------------------------
--- 天赋系统（阶梯式，每个天赋可升多级）
+-- 天赋系统（50级线性解锁，依次激活）
 ------------------------------------------------------------------------
-MD.TALENTS = {
-    { id = "hp",     name = "生命强化", desc = "列车最大HP+10",     maxLv = 10, costBase = 50,  costGrow = 1.3, icon = "image/talent_hp_20260421065056.png" },
-    { id = "atk",    name = "力量提升", desc = "攻击力+1",          maxLv = 10, costBase = 60,  costGrow = 1.3, icon = "image/talent_atk_20260421065251.png" },
-    { id = "atkspd", name = "疾速打击", desc = "攻击速度+5%",       maxLv = 8,  costBase = 80,  costGrow = 1.4, icon = "image/talent_atkspd_20260421065058.png" },
-    { id = "def",    name = "铁壁防御", desc = "减少列车受伤-5%",   maxLv = 8,  costBase = 70,  costGrow = 1.3, icon = "image/talent_def_20260421065053.png" },
-    { id = "speed",  name = "轻身术",   desc = "移动速度+8%",       maxLv = 6,  costBase = 60,  costGrow = 1.4, icon = "image/talent_speed_20260421065223.png" },
-    { id = "gold",   name = "聚财术",   desc = "金币收益+10%",      maxLv = 8,  costBase = 100, costGrow = 1.5, icon = "image/talent_gold_20260421065059.png" },
-    { id = "carry",  name = "负重训练", desc = "携带上限+2",         maxLv = 5,  costBase = 80,  costGrow = 1.4, icon = "image/talent_carry_20260421065057.png" },
-    { id = "unlock", name = "求生本能", desc = "解锁新技能",        maxLv = 3,  costBase = 200, costGrow = 2.0, icon = "image/talent_unlock_20260421065109.png" },
+-- 天赋类型图标映射（同类型共享图标）
+MD.TALENT_ICONS = {
+    atk       = "image/talent_atk_20260601020310.png",         -- 攻击力
+    crit_rate = "image/talent_crit_rate_20260601020320.png",   -- 暴击率
+    crit_dmg  = "image/talent_crit_dmg_20260601020308.png",    -- 暴击伤害
+    atk_spd   = "image/talent_atk_spd_20260601020311.png",    -- 攻击速度
+    atk_range = "image/talent_atk_range_20260601020313.png",   -- 攻击范围
+    atk_dmg   = "image/talent_atk_dmg_20260601020325.png",    -- 攻击伤害%
+    turret_dmg= "image/talent_turret_dmg_20260601020310.png",  -- 炮塔伤害
+    armor_pen = "image/talent_armor_pen_20260601020309.png",   -- 护甲穿透
+    cooldown  = "image/talent_cooldown_20260601020312.png",    -- 冷却速度
+    gather    = "image/talent_gather_20260601020333.png",      -- 采集速度/时运
+    carry     = "image/talent_carry_20260601020505.png",       -- 携带上限
+    weapon_dmg= "image/talent_weapon_dmg_20260601020505.png",  -- 武器伤害
 }
+
+MD.TALENTS = {
+    { lv=1,  type="atk",       name="攻击力+10",      desc="攻击力+10",         cost=500 },
+    { lv=2,  type="crit_rate", name="暴击率+2%",      desc="暴击率+2%",         cost=1000 },
+    { lv=3,  type="crit_dmg",  name="暴击伤害+5%",    desc="暴击伤害+5%",       cost=2000 },
+    { lv=4,  type="atk_spd",   name="攻击速度+5%",    desc="攻击速度+5%",       cost=4000 },
+    { lv=5,  type="atk_range", name="攻击范围+5%",    desc="攻击范围+5%",       cost=8000 },
+    { lv=6,  type="atk_dmg",   name="攻击伤害+10%",   desc="攻击伤害+10%",      cost=12000 },
+    { lv=7,  type="turret_dmg",name="炮塔伤害+5%",    desc="炮塔伤害+5%",       cost=16000 },
+    { lv=8,  type="armor_pen", name="护甲穿透+2",     desc="护甲穿透+2",        cost=20000 },
+    { lv=9,  type="cooldown",  name="炮塔冷却速度+3%",desc="炮塔冷却速度+3%",   cost=24000 },
+    { lv=10, type="atk",       name="攻击力+20",      desc="攻击力+20",         cost=28000 },
+    { lv=11, type="crit_rate", name="暴击率+2%",      desc="暴击率+2%",         cost=35000 },
+    { lv=12, type="crit_dmg",  name="暴击伤害+5%",    desc="暴击伤害+5%",       cost=40000 },
+    { lv=13, type="gather",    name="采集速度+5%",    desc="采集速度+5%",       cost=45000 },
+    { lv=14, type="carry",     name="携带上限+2",     desc="携带上限+2",        cost=50000 },
+    { lv=15, type="atk_dmg",   name="伤害加成+3%",    desc="伤害加成+3%",       cost=55000 },
+    { lv=16, type="atk",       name="攻击力+30",      desc="攻击力+30",         cost=70000 },
+    { lv=17, type="crit_rate", name="暴击率+2%",      desc="暴击率+2%",         cost=80000 },
+    { lv=18, type="crit_dmg",  name="暴击伤害+5%",    desc="暴击伤害+5%",       cost=90000 },
+    { lv=19, type="atk_dmg",   name="攻击伤害+10%",   desc="攻击伤害+10%",      cost=100000 },
+    { lv=20, type="weapon_dmg",name="武器伤害+5%",    desc="武器伤害+5%",       cost=110000 },
+    { lv=21, type="atk",       name="攻击力+40",      desc="攻击力+40",         cost=125000 },
+    { lv=22, type="gather",    name="采集时运",       desc="采集时运",          cost=140000 },
+    { lv=23, type="crit_dmg",  name="暴击伤害+6%",    desc="暴击伤害+6%",       cost=155000 },
+    { lv=24, type="cooldown",  name="冷却速度+3%",    desc="冷却速度+3%",       cost=170000 },
+    { lv=25, type="carry",     name="携带上限+3",     desc="携带上限+3",        cost=185000 },
+    { lv=26, type="atk",       name="攻击力+50",      desc="攻击力+50",         cost=205000 },
+    { lv=27, type="atk_spd",   name="攻击速度+5%",    desc="攻击速度+5%",       cost=225000 },
+    { lv=28, type="armor_pen", name="护甲穿透+4",     desc="护甲穿透+4",        cost=245000 },
+    { lv=29, type="atk_dmg",   name="攻击伤害+12%",   desc="攻击伤害+12%",      cost=265000 },
+    { lv=30, type="weapon_dmg",name="武器伤害+6%",    desc="武器伤害+6%",       cost=285000 },
+    { lv=31, type="atk",       name="攻击力+60",      desc="攻击力+60",         cost=310000 },
+    { lv=32, type="crit_rate", name="暴击率+3%",      desc="暴击率+3%",         cost=335000 },
+    { lv=33, type="cooldown",  name="冷却速度+3%",    desc="冷却速度+3%",       cost=360000 },
+    { lv=34, type="crit_dmg",  name="暴击伤害+6%",    desc="暴击伤害+6%",       cost=385000 },
+    { lv=35, type="carry",     name="携带上限+5",     desc="携带上限+5",        cost=410000 },
+    { lv=36, type="atk",       name="攻击力+70",      desc="攻击力+70",         cost=440000 },
+    { lv=37, type="atk_spd",   name="攻击速度+5%",    desc="攻击速度+5%",       cost=470000 },
+    { lv=38, type="armor_pen", name="护甲穿透+4",     desc="护甲穿透+4",        cost=500000 },
+    { lv=39, type="atk_dmg",   name="攻击伤害+12%",   desc="攻击伤害+12%",      cost=530000 },
+    { lv=40, type="weapon_dmg",name="武器伤害+6%",    desc="武器伤害+6%",       cost=560000 },
+    { lv=41, type="atk",       name="攻击力+80",      desc="攻击力+80",         cost=595000 },
+    { lv=42, type="crit_rate", name="暴击率+3%",      desc="暴击率+3%",         cost=630000 },
+    { lv=43, type="cooldown",  name="冷却速度+3%",    desc="冷却速度+3%",       cost=665000 },
+    { lv=44, type="crit_dmg",  name="暴击伤害+6%",    desc="暴击伤害+6%",       cost=700000 },
+    { lv=45, type="carry",     name="携带上限+5",     desc="携带上限+5",        cost=735000 },
+    { lv=46, type="atk",       name="攻击力+90",      desc="攻击力+90",         cost=775000 },
+    { lv=47, type="atk_spd",   name="攻击速度+5%",    desc="攻击速度+5%",       cost=815000 },
+    { lv=48, type="armor_pen", name="护甲穿透+4",     desc="护甲穿透+4",        cost=855000 },
+    { lv=49, type="atk_dmg",   name="攻击伤害+12%",   desc="攻击伤害+12%",      cost=895000 },
+    { lv=50, type="weapon_dmg",name="武器伤害+6%",    desc="武器伤害+6%",       cost=935000 },
+}
+MD.TALENT_MAX_LV = 50
+
+--- 计算天赋累计加成（根据当前已解锁等级）
+--- @param talentLevel number 当前天赋等级（0~50）
+--- @return table 累计属性加成
+function MD.CalcTalentStats(talentLevel)
+    local stats = {
+        atk = 0,           -- 攻击力（固定值加成）
+        critRate = 0,      -- 暴击率%
+        critDmg = 0,       -- 暴击伤害%
+        atkSpd = 0,        -- 攻击速度%
+        atkRange = 0,      -- 攻击范围%
+        atkDmg = 0,        -- 攻击伤害%（通用伤害加成）
+        turretDmg = 0,     -- 炮塔伤害%
+        armorPen = 0,      -- 护甲穿透（固定值）
+        cooldown = 0,      -- 炮塔冷却速度%
+        gather = 0,        -- 采集速度%（含时运次数）
+        carry = 0,         -- 携带上限（固定值加成）
+        weaponDmg = 0,     -- 武器伤害%
+    }
+    if not talentLevel or talentLevel <= 0 then return stats end
+    local maxLv = math.min(talentLevel, MD.TALENT_MAX_LV)
+    for i = 1, maxLv do
+        local t = MD.TALENTS[i]
+        if not t then break end
+        local tp = t.type
+        -- 从 name 中提取数值
+        local num = tonumber(string.match(t.name, "%+(%d+)"))
+        if num then
+            if     tp == "atk"        then stats.atk = stats.atk + num
+            elseif tp == "crit_rate"  then stats.critRate = stats.critRate + num
+            elseif tp == "crit_dmg"   then stats.critDmg = stats.critDmg + num
+            elseif tp == "atk_spd"    then stats.atkSpd = stats.atkSpd + num
+            elseif tp == "atk_range"  then stats.atkRange = stats.atkRange + num
+            elseif tp == "atk_dmg"    then stats.atkDmg = stats.atkDmg + num
+            elseif tp == "turret_dmg" then stats.turretDmg = stats.turretDmg + num
+            elseif tp == "armor_pen"  then stats.armorPen = stats.armorPen + num
+            elseif tp == "cooldown"   then stats.cooldown = stats.cooldown + num
+            elseif tp == "gather"     then stats.gather = stats.gather + num
+            elseif tp == "carry"      then stats.carry = stats.carry + num
+            elseif tp == "weapon_dmg" then stats.weaponDmg = stats.weaponDmg + num
+            end
+        else
+            -- 特殊天赋无数值（如"采集时运"），给固定加成
+            if tp == "gather" then stats.gather = stats.gather + 10 end
+        end
+    end
+    return stats
+end
 
 ------------------------------------------------------------------------
 -- 商城系统
@@ -645,8 +760,21 @@ MD.SHOP_FIXED = {
 MD.SHOP_GACHA = {
     name = "钻石抽奖",
     desc = "获得稀有装备与碎片",
-    cost_single = 200,
-    cost_ten = 2000,
+    cost_single = 30,
+    cost_ten = 300,
+}
+
+-- 充值获取钻石（免费定时抽取）
+MD.SHOP_RECHARGE = {
+    -- 概率表：{钻石数量, 概率权重, 品质标签}
+    pool = {
+        { amount = 30,  weight = 50, label = "N" },
+        { amount = 98,  weight = 30, label = "R" },
+        { amount = 198, weight = 15, label = "SR" },
+        { amount = 648, weight = 5,  label = "SSR" },
+    },
+    cooldown_once = 60,       -- 充值一次冷却：60秒
+    cooldown_ten  = 28800,    -- 充值十次冷却：8小时(28800秒)
 }
 
 -- ===== 7日签到奖励 =====
@@ -800,20 +928,89 @@ MD.GACHA_POOL = {
     { type = "turret_frag", turretId = "rocket",  amount = 1, weight = 6,  name = "火箭塔碎片", icon = "image/turret_rocket_v3_20260420035019.png" },
 }
 
--- 抽奖：按权重随机抽取 count 个物品
-function MD.RollGacha(count)
-    -- 计算总权重
+------------------------------------------------------------------------
+-- 钻石抽奖等级系统
+------------------------------------------------------------------------
+-- 每品质获得的经验值
+MD.GACHA_EXP_PER_QUALITY = {
+    [1] = 10,   -- 白色(普通)
+    [2] = 15,   -- 绿色(优质)
+    [3] = 20,   -- 蓝色(稀有)
+    [4] = 50,   -- 紫色(史诗)
+    [5] = 100,  -- 金色(传说)
+    [6] = 200,  -- 红色(至臻)
+}
+
+-- 每级所需经验 = level * 800
+function MD.GetGachaMaxExp(level)
+    return level * 800
+end
+
+-- 等级提升高品质权重加成（百分比）
+-- 每级对品质3+的装备weight乘以 (1 + level * bonus)
+MD.GACHA_LEVEL_BONUS = {
+    [1] = 0,        -- 品质1(白) 无加成
+    [2] = 0,        -- 品质2(绿) 无加成
+    [3] = 0.03,     -- 品质3(蓝) 每级+3%
+    [4] = 0.05,     -- 品质4(紫) 每级+5%
+    [5] = 0.08,     -- 品质5(金) 每级+8%
+    [6] = 0.12,     -- 品质6(红) 每级+12%
+}
+
+-- 增加抽卡经验，自动升级
+function MD.AddGachaExp(saveData, expGain)
+    if saveData.gachaLevel >= 20 then return end  -- 满级不加
+    saveData.gachaExp = (saveData.gachaExp or 0) + expGain
+    -- 循环升级
+    while saveData.gachaLevel < 20 do
+        local maxExp = MD.GetGachaMaxExp(saveData.gachaLevel)
+        if saveData.gachaExp >= maxExp then
+            saveData.gachaExp = saveData.gachaExp - maxExp
+            saveData.gachaLevel = saveData.gachaLevel + 1
+            print("[Gacha] 抽奖等级提升! Lv." .. saveData.gachaLevel)
+        else
+            break
+        end
+    end
+    -- 满级时经验锁定为0
+    if saveData.gachaLevel >= 20 then
+        saveData.gachaExp = 0
+    end
+end
+
+-- 抽奖：按权重随机抽取 count 个物品（等级影响高品质掉率）
+function MD.RollGacha(count, gachaLevel)
+    gachaLevel = gachaLevel or 1
+    -- 构建带等级加成的权重表
     local totalWeight = 0
-    for _, item in ipairs(MD.GACHA_POOL) do
-        totalWeight = totalWeight + item.weight
+    local adjustedWeights = {}
+    for i, item in ipairs(MD.GACHA_POOL) do
+        local w = item.weight
+        -- 装备类根据品质和等级调整权重
+        if item.type == "equip" and gachaLevel > 1 then
+            -- 查找装备品质
+            local quality = 1
+            for _, eq in ipairs(MD.EQUIP_DB) do
+                if eq.id == item.id then
+                    quality = eq.quality or 1
+                    break
+                end
+            end
+            local bonus = MD.GACHA_LEVEL_BONUS[quality] or 0
+            if bonus > 0 then
+                w = w * (1 + (gachaLevel - 1) * bonus)
+            end
+        end
+        adjustedWeights[i] = w
+        totalWeight = totalWeight + w
     end
     -- 抽取
     local results = {}
     for _ = 1, count do
         local roll = math.random() * totalWeight
         local acc = 0
-        for _, item in ipairs(MD.GACHA_POOL) do
-            acc = acc + item.weight
+        for i, item in ipairs(MD.GACHA_POOL) do
+            acc = acc + adjustedWeights[i]
             if roll <= acc then
                 -- 构建奖励信息
                 local reward = { type = item.type }
@@ -869,48 +1066,58 @@ MD.TURRET_UPGRADES = {
 ------------------------------------------------------------------------
 -- 炮塔词条（每个等级解锁的特殊能力）
 ------------------------------------------------------------------------
+-- 品质颜色映射（用于局外展示）
+MD.QUALITY_COLORS = {
+    [1] = {220, 220, 200},   -- 优质(白)
+    [2] = {100, 180, 255},   -- 稀有(蓝)
+    [3] = {200, 130, 255},   -- 史诗(紫)
+    [4] = {255, 160, 40},    -- 传说(橙)
+    [5] = {255, 60, 60},     -- 至臻(红)
+}
+MD.QUALITY_NAMES = { "优质", "稀有", "史诗", "传说", "至臻" }
+
+-- 炮塔强化卡解锁数据（局外展示用，与 Config.UPGRADES 中 unlockLevel 对应）
 MD.TURRET_AFFIXES = {
     arrow = {
-        { lv = 1, desc = "攻击力+10%", color = {220, 220, 200} },
-        { lv = 2, desc = "攻击速度+15%", color = {220, 220, 200} },
-        { lv = 3, desc = "射程+20%", color = {100, 180, 255} },
-        { lv = 4, desc = "双箭射击：同时射出2支箭", color = {200, 160, 50} },
-        { lv = 5, desc = "穿透箭：箭矢穿透1个敌人", color = {255, 140, 40} },
+        { lv = 1, name = "硬化箭矢", desc = "弓箭伤害+60%", quality = 3 },
+        { lv = 2, name = "远程弓弦", desc = "弓箭射程+60%", quality = 3 },
+        { lv = 3, name = "速射改装", desc = "弓箭攻速+80%", quality = 3 },
+        { lv = 4, name = "贯穿箭",   desc = "箭矢穿透+3个目标", quality = 3 },
+        { lv = 5, name = "毒素箭头", desc = "命中施加4秒毒素", quality = 4 },
+        { lv = 6, name = "穿链弹",   desc = "击中后弹射至附近1个敌人", quality = 4 },
     },
     minigun = {
-        { lv = 1, desc = "攻击力+10%", color = {220, 220, 200} },
-        { lv = 2, desc = "攻击速度+20%", color = {220, 220, 200} },
-        { lv = 3, desc = "减速效果：命中减速10%", color = {100, 180, 255} },
-        { lv = 4, desc = "弹幕风暴：攻速额外+30%", color = {200, 160, 50} },
-        { lv = 5, desc = "过热模式：每10秒全力射击3秒", color = {255, 140, 40} },
+        { lv = 1, name = "穿甲弹芯", desc = "机枪伤害+55%", quality = 3 },
+        { lv = 2, name = "超频枪管", desc = "机枪攻速+90%", quality = 3 },
+        { lv = 3, name = "长管改造", desc = "机枪射程+50%", quality = 2 },
+        { lv = 4, name = "跳弹装甲", desc = "子弹反弹2次", quality = 2 },
+        { lv = 5, name = "燃烧弹头", desc = "命中附加2.5秒燃烧", quality = 4 },
     },
     flame = {
-        { lv = 1, desc = "伤害+10%", color = {220, 220, 200} },
-        { lv = 2, desc = "灼烧效果：持续伤害3秒", color = {220, 220, 200} },
-        { lv = 3, desc = "范围+15%", color = {100, 180, 255} },
-        { lv = 4, desc = "烈焰风暴：灼烧伤害+50%", color = {200, 160, 50} },
-        { lv = 5, desc = "焚尽：灼烧降低敌人防御20%", color = {255, 140, 40} },
+        { lv = 1, name = "高温燃料", desc = "喷火伤害+65%", quality = 3 },
+        { lv = 2, name = "长焰喷嘴", desc = "喷火射程+50%", quality = 2 },
+        { lv = 3, name = "快速点火", desc = "喷火攻速+55%", quality = 2 },
+        { lv = 4, name = "跳弹装甲", desc = "子弹反弹2次", quality = 2 },
+        { lv = 5, name = "旋转火舌", desc = "喷火方向持续旋转扫射", quality = 5 },
     },
     sniper = {
-        { lv = 1, desc = "攻击力+15%", color = {220, 220, 200} },
-        { lv = 2, desc = "暴击率+10%", color = {220, 220, 200} },
-        { lv = 3, desc = "射程+25%", color = {100, 180, 255} },
-        { lv = 4, desc = "致命打击：暴击伤害+80%", color = {200, 160, 50} },
-        { lv = 5, desc = "处决：对30%以下生命敌人造成双倍伤害", color = {255, 140, 40} },
+        { lv = 1, name = "穿甲狙击弹", desc = "狙击伤害+80%", quality = 3 },
+        { lv = 2, name = "长距镜",     desc = "狙击射程+90%", quality = 3 },
+        { lv = 3, name = "快拉枪栓",   desc = "狙击装填速度+70%", quality = 2 },
+        { lv = 4, name = "要害瞄准",   desc = "50%暴击×2.5倍", quality = 3 },
+        { lv = 5, name = "冰封子弹",   desc = "命中敌人眩晕1.8秒", quality = 5 },
     },
     electric = {
-        { lv = 1, desc = "伤害+10%", color = {220, 220, 200} },
-        { lv = 2, desc = "链式闪电：跳跃至2个敌人", color = {220, 220, 200} },
-        { lv = 3, desc = "麻痹效果：15%几率眩晕1秒", color = {100, 180, 255} },
-        { lv = 4, desc = "闪电链+1跳跃目标", color = {200, 160, 50} },
-        { lv = 5, desc = "雷暴领域：周围持续造成范围伤害", color = {255, 140, 40} },
+        { lv = 1, name = "高压电容", desc = "电能伤害+70%", quality = 3 },
+        { lv = 2, name = "急放电",   desc = "电能攻速+85%", quality = 3 },
+        { lv = 3, name = "导电延伸", desc = "电能射程+55%", quality = 2 },
+        { lv = 4, name = "链式放电", desc = "电弧弹射至附近+1个目标", quality = 3 },
     },
     rocket = {
-        { lv = 1, desc = "爆炸范围+10%", color = {220, 220, 200} },
-        { lv = 2, desc = "攻击力+15%", color = {220, 220, 200} },
-        { lv = 3, desc = "破甲效果：无视20%防御", color = {100, 180, 255} },
-        { lv = 4, desc = "集束弹头：分裂为3枚小火箭", color = {200, 160, 50} },
-        { lv = 5, desc = "毁灭轰炸：爆炸留下灼烧区域4秒", color = {255, 140, 40} },
+        { lv = 1, name = "重型弹头", desc = "火箭伤害+80%", quality = 3 },
+        { lv = 2, name = "扩爆装药", desc = "火箭爆炸范围+85%", quality = 3 },
+        { lv = 3, name = "快速装弹", desc = "火箭装填速度+65%", quality = 2 },
+        { lv = 4, name = "五连齐射", desc = "同时发射5枚散布火箭", quality = 5 },
     },
 }
 
@@ -926,7 +1133,7 @@ function MD.NewSaveData()
         stone = 20,
 
         -- 关卡进度
-        maxLevel = 25,      -- 已解锁最高关卡（临时测试用，原值1）
+        maxLevel = 1,       -- 已解锁最高关卡（第1关默认解锁）
         levelStars = {},    -- 每关星数 {[1]=3, [2]=2, ...}
         chestClaimed = {},  -- 已领取宝箱 {["1_1"]=true, ["1_2"]=true} 键="关卡_宝箱序号"
 
@@ -955,8 +1162,8 @@ function MD.NewSaveData()
         charFrags = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },          -- 角色碎片数 {charId = count}
         charStars = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },           -- 角色星级 {charId = star}
 
-        -- 天赋等级
-        talents = {},       -- {hp=0, atk=0, ...}
+        -- 天赋等级（线性50级）
+        talentLevel = 0,    -- 当前已解锁到的天赋等级（0-50）
 
         -- 炮塔碎片 & 等级
         turretFrags = {},   -- {arrow=0, minigun=0, ...}
@@ -971,6 +1178,14 @@ function MD.NewSaveData()
         dailyBought = {},   -- 今日已买的daily商品id
         dailyPicks = {},    -- 今日随机商品id列表（5个）
         lastDailyReset = 0, -- 上次daily重置时间戳
+
+        -- 充值钻石冷却（os.time 时间戳，0=立即可用）
+        rechargeOnceTime = 0,   -- 上次充值一次的时间
+        rechargeTenTime = 0,    -- 上次充值十次的时间
+
+        -- 钻石抽奖等级
+        gachaLevel = 1,         -- 抽奖等级 1~20
+        gachaExp = 0,           -- 当前经验值
 
         -- 玩家信息
         playerName = "幸存者",
