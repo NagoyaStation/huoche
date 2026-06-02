@@ -25,6 +25,8 @@ local vc_joystick = nil
 local heroImgHandle = 0  -- 主角立绘图片句柄
 local heroAnimHandles = {}  -- 主角序列帧: {idle, raise, swing, hit, recover}
 local heroWalkHandles = {}  -- 主角行走序列帧: {walk1, walk2, walk3, walk4}
+local heroSpineInst = nil   -- 主角 Spine 实例（局内）
+local heroSpineAnim = ""    -- 主角当前 Spine 动画名
 -- Spine 丧尸实例池: zombieType id → { instances = {spInst,...}, nextIdx = 1 }
 local spineZombiePool = {}  -- typeId -> { free={inst,...}, loaded=true }
 local SPINE_POOL_PRELOAD = 6  -- 每种丧尸类型预创建空闲实例数
@@ -471,6 +473,34 @@ local function UpdateSpineAnimations(dt)
     end
 end
 
+--- 更新主角 Spine 动画（每帧调用）
+local function UpdateHeroSpine(dt)
+    if not heroSpineInst then return end
+    local p = G.player
+    if not p then return end
+
+    -- 根据玩家状态决定目标动画
+    local desiredAnim = "idle"
+    if p.dead then
+        desiredAnim = "dead"
+    elseif p.atkSwingAnim and p.atkSwingAnim > 0 then
+        desiredAnim = "attack"
+    elseif p.collectAnim and p.collectAnim > 0 then
+        desiredAnim = "attack"
+    elseif p.isWalking then
+        desiredAnim = "run"
+    end
+
+    -- 切换动画
+    if heroSpineAnim ~= desiredAnim then
+        heroSpineAnim = desiredAnim
+        local loop = (desiredAnim == "idle" or desiredAnim == "run")
+        heroSpineInst:SetAnimation(0, desiredAnim, loop)
+    end
+
+    heroSpineInst:Update(dt)
+end
+
 --- 根据局外选择的角色动态加载图片到 G
 local function LoadActiveCharImages()
     local sd = Meta.GetSaveData()
@@ -512,6 +542,33 @@ local function LoadActiveCharImages()
         if mImg and mImg ~= 0 then
             G.mountedShootImg = mImg
         end
+    end
+
+    -- 加载主角局内 Spine（shaun）
+    if charDef.id == "warrior" then
+        heroSpineInst = CreateSpineInst("spine/shaun/shaun.json")
+        if heroSpineInst then
+            heroSpineInst:SetSkin("1")
+            heroSpineInst:SetToSetupPose()
+            -- 激活右脚主鞋子网格（slot default 为 null，需手动设置）
+            heroSpineInst:SetAttachment("cp_1", "cp_1")
+            -- 清除路径约束插槽（path 类型渲染为白色多边形）
+            heroSpineInst:SetAttachment("path_tui_2", "")
+            heroSpineInst:SetAttachment("path_day_1", "")
+            -- 隐藏依赖路径约束的装饰条带（tui_1/tui_2 是缠绕条带，非鞋子本体）
+            -- 路径约束在运行时不生效，条带会显示为尖状遮住下面的鞋子(cp/ct)
+            heroSpineInst:SetAttachment("tui_1", "")
+            heroSpineInst:SetAttachment("tui_2", "")
+            heroSpineInst:SetAttachment("tui_3", "")
+            heroSpineInst:SetAnimation(0, "idle", true)
+            heroSpineAnim = "idle"
+            G.heroSpineInst = heroSpineInst
+            print("[Hero Spine] shaun loaded for in-game, skin=1, setupPose applied, path slots cleared")
+        end
+    else
+        heroSpineInst = nil
+        heroSpineAnim = ""
+        G.heroSpineInst = nil
     end
 
     -- 扫描所有帧图片，取最大宽高作为统一画布尺寸（避免帧间大小跳变）
@@ -700,7 +757,7 @@ function Start()
     print("[Spine] Zombie pool initialized (lazy-load on spawn)")
 
     -- 火车精灵（干净版，无烟雾，烟雾由程序化粒子绘制）
-    trainImgHandle = nvgCreateImage(vg, "image/edited_train_clean_edge_20260416031151.png", NVG_IMAGE_NEAREST)
+    trainImgHandle = nvgCreateImage(vg, "image/火车头.png", 0)
     trainCarriageHandle = nvgCreateImage(vg, "image/train_carriage_20260416100938.png", NVG_IMAGE_NEAREST)
     trainFrontHandle = nvgCreateImage(vg, "image/train_front_20260422062046.png", 0)
     trainSandbagHandle = nvgCreateImage(vg, "image/沙袋雪地.png", 0)
@@ -995,6 +1052,10 @@ function HandleUpdate(eventType, eventData)
         CalcShowAllScale(W, H)
         Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
         G._lastLayoutW, G._lastLayoutH = W, H
+        -- 暴露 showAll 参数给 Renderer（Spine 绝对坐标需要）
+        G._showAllScale = showAllScale
+        G._showAllOffX = showAllOffX
+        G._showAllOffY = showAllOffY
     end
 
     -- F2 切换 UI 编辑器（仅在 lobby 状态下生效）
@@ -1193,6 +1254,7 @@ function HandleUpdate(eventType, eventData)
     -- Spine 丧尸：分配实例 + 更新动画
     AssignSpineInstances()
     UpdateSpineAnimations(dt)
+    UpdateHeroSpine(dt)
     Turret.Update(G, dt)
     Drone.Update(G, dt)
 
