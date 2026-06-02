@@ -55,8 +55,8 @@ MD.TABS = {
     { id = "shop",   name = "商城", img_normal = "image/商城界面图标未选中.png", img_active = "image/商城界面图标选中.png" },
     { id = "equip",  name = "装备", img_normal = "image/装备界面图标未选中.png", img_active = "image/装备界面图标选中.png" },
     { id = "battle", name = "战斗", img_normal = "image/战斗界面图标未选中.png", img_active = "image/战斗界面图标选中.png" },
-    { id = "train",  name = "火车", img_normal = "image/火车界面图标未选中.png", img_active = "image/火车界面图标选中.png" },
-    { id = "talent", name = "天赋", img_normal = "image/天赋界面图标未选中.png", img_active = "image/天赋界面图标选中.png" },
+    { id = "train",  name = "炮塔", img_normal = "image/炮塔底部图标未选中.png", img_active = "image/炮塔底部图标选中.png" },
+    { id = "talent", name = "火车", img_normal = "image/火车界面图标未选中.png", img_active = "image/火车界面图标选中.png" },
 }
 
 ------------------------------------------------------------------------
@@ -622,8 +622,8 @@ MD.TALENT_ICONS = {
     armor_pen = "image/talent_armor_pen_20260601020309.png",   -- 护甲穿透
     cooldown  = "image/talent_cooldown_20260601020312.png",    -- 冷却速度
     gather    = "image/talent_gather_20260601020333.png",      -- 采集速度/时运
-    carry     = "image/talent_carry_20260601020505.png",       -- 携带上限
-    weapon_dmg= "image/talent_weapon_dmg_20260601020505.png",  -- 武器伤害
+    carry     = "image/edited_talent_carry_20260601025752.png",       -- 携带上限
+    weapon_dmg= "image/edited_talent_weapon_dmg_20260601025643.png",  -- 武器伤害
 }
 
 MD.TALENTS = {
@@ -781,7 +781,7 @@ MD.SHOP_RECHARGE = {
 MD.SIGN_IN_REWARDS = {
     { day = 1, type = "gold",   amount = 1000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 1 },
     { day = 2, type = "diamond", amount = 200,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 3 },
-    { day = 3, type = "turret_frag", turretId = "flame", amount = 5, name = "喷火塔碎片", icon = "image/edited_turret_flame_nofire_20260423065123.png", quality = 3 },
+    { day = 3, type = "turret_frag", turretId = "flame", amount = 5, name = "喷火塔碎片", icon = "image/喷火炮塔高清.png", quality = 3 },
     { day = 4, type = "gold",   amount = 3000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 2 },
     { day = 5, type = "diamond", amount = 500,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 4 },
     { day = 6, type = "wood",   amount = 800,  name = "木材",     icon = "image/图层_2 (1).png",   quality = 2 },
@@ -920,12 +920,12 @@ MD.GACHA_POOL = {
     { type = "wood",   amount = 300,  weight = 20, name = "木材",     icon = "image/图层_2 (1).png" },
     { type = "stone",  amount = 300,  weight = 20, name = "石材",     icon = "image/图层_3 (1).png" },
     -- 炮塔碎片
-    { type = "turret_frag", turretId = "arrow",   amount = 3, weight = 12, name = "弓箭塔碎片", icon = "image/turret_arrow_v3_20260420035036.png" },
-    { type = "turret_frag", turretId = "minigun", amount = 3, weight = 12, name = "机枪塔碎片", icon = "image/turret_minigun_v3_20260420035022.png" },
-    { type = "turret_frag", turretId = "flame",   amount = 2, weight = 10, name = "喷火塔碎片", icon = "image/edited_turret_flame_nofire_20260423065123.png" },
-    { type = "turret_frag", turretId = "sniper",  amount = 2, weight = 8,  name = "狙击塔碎片", icon = "image/turret_sniper_v3_20260420035021.png" },
-    { type = "turret_frag", turretId = "electric",amount = 2, weight = 8,  name = "电能塔碎片", icon = "image/turret_electric_v10_20260423040517.png" },
-    { type = "turret_frag", turretId = "rocket",  amount = 1, weight = 6,  name = "火箭塔碎片", icon = "image/turret_rocket_v3_20260420035019.png" },
+    { type = "turret_frag", turretId = "arrow",   amount = 3, weight = 12, name = "弓箭塔碎片", icon = "image/弓箭炮塔高清.png" },
+    { type = "turret_frag", turretId = "minigun", amount = 3, weight = 12, name = "机枪塔碎片", icon = "image/机枪炮塔高清.png" },
+    { type = "turret_frag", turretId = "flame",   amount = 2, weight = 10, name = "喷火塔碎片", icon = "image/喷火炮塔高清.png" },
+    { type = "turret_frag", turretId = "sniper",  amount = 2, weight = 8,  name = "狙击塔碎片", icon = "image/狙击炮塔高清.png" },
+    { type = "turret_frag", turretId = "electric",amount = 2, weight = 8,  name = "电能塔碎片", icon = "image/电能炮塔高清.png" },
+    { type = "turret_frag", turretId = "rocket",  amount = 1, weight = 6,  name = "火箭塔碎片", icon = "image/火箭炮塔高清.png" },
 }
 
 ------------------------------------------------------------------------
@@ -1049,17 +1049,17 @@ end
 -- 炮塔升级数据（局外用碎片升级）
 ------------------------------------------------------------------------
 MD.TURRET_UPGRADES = {
-    { id = "arrow",    name = "弓箭炮塔", maxLv = 5, fragBase = 5,  fragGrow = 1.5, icon = "image/turret_arrow_v3_20260420035036.png",
+    { id = "arrow",    name = "弓箭炮塔", maxLv = 5, fragBase = 5,  fragGrow = 1.5, icon = "image/弓箭炮塔高清.png",
         baseDmg = 8,  baseCD = 1.2, baseRange = 6.0 },
-    { id = "minigun",  name = "机关枪塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/turret_minigun_v3_20260420035022.png",
+    { id = "minigun",  name = "机关枪塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/机枪炮塔高清.png",
         baseDmg = 4,  baseCD = 0.3, baseRange = 5.0 },
-    { id = "flame",    name = "喷火炮塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/edited_turret_flame_nofire_20260423065123.png",
+    { id = "flame",    name = "喷火炮塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/喷火炮塔高清.png",
         baseDmg = 12, baseCD = 1.5, baseRange = 3.5 },
-    { id = "sniper",   name = "狙击炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/turret_sniper_v3_20260420035021.png",
+    { id = "sniper",   name = "狙击炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/狙击炮塔高清.png",
         baseDmg = 30, baseCD = 3.0, baseRange = 12.0 },
-    { id = "electric", name = "电能炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/turret_electric_v10_20260423040517.png",
+    { id = "electric", name = "电能炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/电能炮塔高清.png",
         baseDmg = 6,  baseCD = 0.8, baseRange = 5.5 },
-    { id = "rocket",   name = "火箭炮塔", maxLv = 5, fragBase = 12, fragGrow = 1.8, icon = "image/turret_rocket_v3_20260420035019.png",
+    { id = "rocket",   name = "火箭炮塔", maxLv = 5, fragBase = 12, fragGrow = 1.8, icon = "image/火箭炮塔高清.png",
         baseDmg = 25, baseCD = 2.5, baseRange = 8.0 },
 }
 
