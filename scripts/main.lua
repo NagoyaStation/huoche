@@ -844,12 +844,12 @@ function Start()
 
     -- 炮塔图标 (v3: 48x64, 纯武器造型, 朝下, 透明背景)
     turretImgs = {
-        arrow    = nvgCreateImage(vg, "image/turret_arrow_v3_20260420035036.png", NVG_IMAGE_NEAREST),
-        sniper   = nvgCreateImage(vg, "image/turret_sniper_v3_20260420035021.png", NVG_IMAGE_NEAREST),
-        flame    = nvgCreateImage(vg, "image/edited_turret_flame_nofire_20260423065123.png", NVG_IMAGE_NEAREST),
-        electric = nvgCreateImage(vg, "image/turret_electric_v10_20260423040517.png", NVG_IMAGE_NEAREST),
-        rocket   = nvgCreateImage(vg, "image/turret_rocket_v3_20260420035019.png", NVG_IMAGE_NEAREST),
-        minigun  = nvgCreateImage(vg, "image/turret_minigun_v3_20260420035022.png", NVG_IMAGE_NEAREST),
+        arrow    = nvgCreateImage(vg, "image/弓箭炮塔高清.png", 0),
+        sniper   = nvgCreateImage(vg, "image/狙击炮塔高清.png", 0),
+        flame    = nvgCreateImage(vg, "image/喷火炮塔高清.png", 0),
+        electric = nvgCreateImage(vg, "image/电能炮塔高清.png", 0),
+        rocket   = nvgCreateImage(vg, "image/火箭炮塔高清.png", 0),
+        minigun  = nvgCreateImage(vg, "image/机枪炮塔高清.png", 0),
     }
 
     -- 升级卡图标

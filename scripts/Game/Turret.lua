@@ -55,10 +55,25 @@ local function getTurretCooldown(typeKey, baseCool, G)
 end
 
 ------------------------------------------------------------------------
--- 渲染尺寸
+-- 渲染尺寸（基于高清图实际宽高比，统一高度48）
 ------------------------------------------------------------------------
 local TURRET_H = 48
-local TURRET_W = 36
+local TURRET_W = 36  -- 默认值（fallback）
+-- 每种炮塔的实际宽高比 (w/h)
+local TURRET_RATIOS = {
+    arrow    = 0.87,  -- 976x1120
+    flame    = 0.64,  -- 785x1224
+    minigun  = 0.73,  -- 895x1233
+    rocket   = 0.93,  -- 995x1073
+    sniper   = 0.54,  -- 643x1192
+    electric = 0.56,  -- 665x1190
+}
+-- 各炮塔缩放（让视觉大小协调一致）
+local TURRET_SCALES = {
+    arrow    = 0.80,
+    minigun  = 0.88,
+    rocket   = 0.68,
+}
 
 ------------------------------------------------------------------------
 -- 4 个炮塔槽位（像素偏移）
@@ -1750,12 +1765,17 @@ function T.Draw(vg, G)
             recoilOff = -turret.recoil * 5
         end
 
-        local halfW = TURRET_W / 2
-        local halfH = TURRET_H / 2
+        -- 按实际图片比例计算渲染尺寸
+        local r = TURRET_RATIOS[turret.typeKey] or (TURRET_W / TURRET_H)
+        local sc = TURRET_SCALES[turret.typeKey] or 1
+        local drawH = TURRET_H * sc
+        local drawW = drawH * r
+        local halfW = drawW / 2
+        local halfH = drawH / 2
 
-        local imgPaint = nvgImagePattern(vg, -halfW, -halfH + recoilOff, TURRET_W, TURRET_H, 0, img, 1.0)
+        local imgPaint = nvgImagePattern(vg, -halfW, -halfH + recoilOff, drawW, drawH, 0, img, 1.0)
         nvgBeginPath(vg)
-        nvgRect(vg, -halfW, -halfH + recoilOff, TURRET_W, TURRET_H)
+        nvgRect(vg, -halfW, -halfH + recoilOff, drawW, drawH)
         nvgFillPaint(vg, imgPaint)
         nvgFill(vg)
 
@@ -1785,15 +1805,15 @@ function T.Draw(vg, G)
             local frameIdx = math.floor((turret.flameTime or 0) * fps) % frameCount + 1
             local fImg = G.flameFrames[frameIdx]
             if fImg and fImg ~= 0 then
-                local drawH = 130
-                local drawW = drawH * (101 / 235)
+                local flameH = 130
+                local flameW = flameH * (101 / 235)
                 -- 翻转火焰图片，让火焰尖端朝外喷射
                 nvgSave(vg)
                 nvgTranslate(vg, 0, halfH - 4)
                 nvgScale(vg, 1, -1)
-                local paint = nvgImagePattern(vg, -drawW / 2, -drawH, drawW, drawH, 0, fImg, 1.0)
+                local paint = nvgImagePattern(vg, -flameW / 2, -flameH, flameW, flameH, 0, fImg, 1.0)
                 nvgBeginPath(vg)
-                nvgRect(vg, -drawW / 2, -drawH, drawW, drawH)
+                nvgRect(vg, -flameW / 2, -flameH, flameW, flameH)
                 nvgFillPaint(vg, paint)
                 nvgFill(vg)
                 nvgRestore(vg)

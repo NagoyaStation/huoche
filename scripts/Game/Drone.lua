@@ -13,6 +13,8 @@ local D = {}
 local DRONE = C.DRONE or {}
 local SPEED        = DRONE.SPEED or 200
 local COLLECT_TIME = DRONE.COLLECT_TIME or 0.3
+local DRONE_HIT_INTERVAL = 0.35  -- 飞机每次敲击间隔(秒)
+local DRONE_HIT_DMG = 20         -- 飞机每次敲击伤害
 local SEARCH_RADIUS = DRONE.SEARCH_RADIUS or 300
 local MAX_COUNT    = DRONE.MAX_COUNT or 3
 local SIZE         = DRONE.SIZE or 40
@@ -152,21 +154,36 @@ local function deliverResource(G, drone)
 
     -- 1) 增加资源总量
     G.totalRes[drone.carryType] = (G.totalRes[drone.carryType] or 0) + amount
-
-    -- 2) 增加关卡进度（与玩家提交一致）
-    G.levelProgress = G.levelProgress + amount
-
-    -- 3) 奖励金币（与玩家提交一致）
-    local goldEarned = math.floor(amount * C.GOLD_PER_SUBMIT * (G.goldMul or 1))
-    G.gold = (G.gold or 0) + goldEarned
-
-    -- 4) 检查通关
-    if G.levelProgress >= G.levelTarget then
-        G.pendingLevelUp = true
+    -- 同步更新saveData持久化数据（局内外资源一致）
+    local sd = G.saveData
+    if sd then
+        local rtype = drone.carryType
+        if rtype == "ore" then
+            sd.diamond = (sd.diamond or 0) + amount
+        elseif rtype == "wood" or rtype == "bush" then
+            sd.wood = (sd.wood or 0) + amount
+        elseif rtype == "stone" or rtype == "pebble" then
+            sd.stone = (sd.stone or 0) + amount
+        end
     end
 
-    -- 浮动文字：显示金币奖励
-    E.SpawnFloatText(G, dropX, dropY - 15, "+" .. goldEarned, "gold")
+    -- 2) 增加关卡进度（钻石+2，其他+1 每份）
+    if drone.carryType == "ore" then
+        G.levelProgress = G.levelProgress + 2 * amount
+    else
+        G.levelProgress = G.levelProgress + amount
+    end
+
+    -- 3) 钻石提交时左侧显示获得提示
+    if drone.carryType == "ore" then
+        E.SpawnRewardToast(G, "gem", "获得 x" .. amount .. " 钻石")
+    end
+
+    -- 4) 检查通关（升级状态中不重复触发）
+    if G.levelProgress >= G.levelTarget
+       and G.state ~= "upgradeVfx" and G.state ~= "upgrade" then
+        G.pendingLevelUp = true
+    end
 
     -- 投递特效
     E.SpawnParticles(G, dropX, dropY, {255, 220, 80}, 5)
@@ -237,7 +254,7 @@ function D.Update(G, dt)
 
                 if dist < 8 then
                     drone.state = "collecting"
-                    drone.collectTimer = COLLECT_TIME
+                    drone.collectTimer = 0  -- 立刻第一下敲击
                 else
                     local moveSpd = SPEED * dt
                     drone.x = drone.x + (dx / dist) * math.min(moveSpd, dist)
@@ -246,19 +263,41 @@ function D.Update(G, dt)
             end
 
         elseif drone.state == "collecting" then
-            -- 采集停留
-            drone.collectTimer = drone.collectTimer - dt
+            -- 逐下扣血采集
             drone.tilt = drone.tilt + math.sin(drone.hoverPhase * 3) * 0.005
+            drone.collectTimer = (drone.collectTimer or 0) - dt
 
-            if drone.collectTimer <= 0 then
-                local target = drone.target
-                if target and not target.dead then
+            local target = drone.target
+            if not target or target.dead then
+                -- 目标已被别人打死，直接拾取残余
+                if target and target.dead then
                     collectResource(G, drone, target)
                 end
                 if target then target.claimedByDrone = false end
                 drone.target = nil
-                -- 采集完成，飞回放置点
                 drone.state = "flying_back"
+            elseif drone.collectTimer <= 0 then
+                -- 敲击一下
+                drone.collectTimer = DRONE_HIT_INTERVAL
+                target.hp = target.hp - DRONE_HIT_DMG
+                target.hitAnim = 0.2
+                target.squashAnim = 1.0
+
+                -- 敲击粒子
+                local rc = C.CLR.wood_color
+                if target.rtype == "stone" then rc = C.CLR.stone_color
+                elseif target.rtype == "ore" then rc = C.CLR.ore_color
+                elseif target.rtype == "bush" then rc = C.CLR.bush_color
+                elseif target.rtype == "pebble" then rc = C.CLR.pebble_color end
+                E.SpawnParticles(G, target.x, target.y, rc, 2)
+
+                if target.hp <= 0 then
+                    -- 资源被打碎，收集
+                    collectResource(G, drone, target)
+                    if target then target.claimedByDrone = false end
+                    drone.target = nil
+                    drone.state = "flying_back"
+                end
             end
 
         elseif drone.state == "flying_back" then

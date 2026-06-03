@@ -5,6 +5,23 @@ local Turret = require "Game.Turret"
 local R = {}
 
 ------------------------------------------------------------------------
+-- 模块级复用表/常量（避免每帧分配）
+------------------------------------------------------------------------
+local _pts = {}           -- DrawPath 采样点复用表
+local _ptCount = 0        -- 当前采样点数量
+local STROKE_DIRS = { { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } } -- 描边偏移方向
+local _imgSizeCache = {}  -- nvgImageSize 缓存: img handle → {w, h}
+
+--- 缓存版 nvgImageSize：图片尺寸加载后不变，避免每帧 C 调用
+local function imgSize(vg, img)
+    local c = _imgSizeCache[img]
+    if c then return c[1], c[2] end
+    local w, h = nvgImageSize(vg, img)
+    _imgSizeCache[img] = { w, h }
+    return w, h
+end
+
+------------------------------------------------------------------------
 -- 工具
 ------------------------------------------------------------------------
 local function clr(c, a)
@@ -125,14 +142,23 @@ function R.DrawPath(vg, G)
     local pR, pG, pB = C.CLR.path[1], C.CLR.path[2], C.CLR.path[3]
     local pdR, pdG, pdB = C.CLR.path_dark[1], C.CLR.path_dark[2], C.CLR.path_dark[3]
 
-    -- 预计算采样点
-    local pts = {}
+    -- 预计算采样点（复用模块级表，避免每帧分配）
+    local pts = _pts
+    local n = 0
     for sy = G.renderTopY, H + step, step do
         local worldY = sy + scrollY
         local pathL, pathR, cx = Ent.GetPathBounds(W, worldY)
-        pts[#pts + 1] = { y = sy, l = pathL, r = pathR, cx = cx }
+        n = n + 1
+        local p = pts[n]
+        if p then
+            p.y, p.l, p.r, p.cx = sy, pathL, pathR, cx
+        else
+            pts[n] = { y = sy, l = pathL, r = pathR, cx = cx }
+        end
     end
-    local n = #pts
+    -- 清除多余旧数据
+    for i = n + 1, _ptCount do pts[i] = nil end
+    _ptCount = n
     if n < 2 then return end
 
     -- 辅助：用采样点画闭合多边形（左偏移、右偏移）
@@ -332,7 +358,7 @@ function R.DrawRailway(vg, G)
     if not img or img == 0 then return end
 
     -- 获取铁轨图片原始尺寸
-    local imgW, imgH = nvgImageSize(vg, img)
+    local imgW, imgH = imgSize(vg, img)
     if imgW == 0 or imgH == 0 then return end
 
     -- 铁轨显示宽度 = railSep + 一些余量，与道路宽度协调
@@ -415,7 +441,7 @@ function R.DrawDecorations(vg, G)
         if not img or img == 0 then goto continue_deco end
 
         -- 获取图片原始尺寸，保持宽高比
-        local imgW, imgH = nvgImageSize(vg, img)
+        local imgW, imgH = imgSize(vg, img)
         if imgW <= 0 or imgH <= 0 then goto continue_deco end
 
         -- 装饰物使用固定缩放（不随滚动变化，避免看起来在"动"）
@@ -531,9 +557,9 @@ function R.DrawTrain(vg, G)
     -- === 火车精灵 ===
     local trainImg = G.trainImg
     if trainImg and trainImg ~= 0 then
-        -- 保持原图比例 (207x308)
+        -- 保持原图比例 (382x1380)
         local drawH = ch + 20
-        local drawW = drawH * 207 / 308
+        local drawW = drawH * 382 / 1380
 
         -- 引擎震动效果 (微小抖动，模拟蒸汽机运转)
         local vibeX = math.sin(t * 25) * 0.4
@@ -1156,13 +1182,13 @@ function R.DrawCarryQueue(vg, G)
     local trail = p.trail
     if #trail < 2 then return end
 
-    -- 资源类型→图片映射
+    -- 资源类型→图片映射（小灌木丛算木头，小石头算石头）
     local imgMap = {
         wood   = G.hudIconWood,
         stone  = G.hudIconStone,
         ore    = G.hudIconGem,
-        bush   = G.mapBushImg,
-        pebble = G.mapPebbleImg,
+        bush   = G.hudIconWood,
+        pebble = G.hudIconStone,
     }
 
     local iconSize = 16          -- 每个资源图标大小
@@ -1207,29 +1233,7 @@ function R.DrawCarryQueue(vg, G)
         nvgRestore(vg)
     end
 
-    -- 满载时在队伍末尾显示 "Max"
-    if p.carrying >= (G.maxCarry or C.MAX_CARRY) then
-        -- 在最后一个资源图标位置之后显示
-        local lastIdx = math.min(count + 2, #trail)
-        if lastIdx >= 2 then
-            local pt = trail[lastIdx]
-            nvgSave(vg)
-            nvgFontFace(vg, "sans")
-            nvgFontSize(vg, 12)
-            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-            -- 黑底标签
-            local tw = 28
-            local th = 14
-            nvgBeginPath(vg)
-            nvgRoundedRect(vg, pt.x - tw / 2, pt.y - th / 2 - 1, tw, th, 3)
-            nvgFillColor(vg, nvgRGBA(20, 20, 20, 200))
-            nvgFill(vg)
-            -- 白色文字
-            nvgFillColor(vg, nvgRGBA(255, 80, 80, 255))
-            nvgText(vg, pt.x, pt.y - 1, "Max", nil)
-            nvgRestore(vg)
-        end
-    end
+
 end
 
 ------------------------------------------------------------------------
@@ -1241,8 +1245,41 @@ function R.DrawPlayer(vg, G)
     local py = p.y
     local t = G.gameTime or 0
 
+    -- 无敌闪烁（提前声明，Spine 和帧图都需要，也避免 goto 跳过 local）
+    local stunAlpha = 255
+    if p.stunTimer and p.stunTimer > 0 then
+        stunAlpha = math.sin(t * 16) > 0 and 255 or 100
+    end
+
+    -- ========== Spine 渲染（优先，在 translate 之前，使用绝对设计坐标） ==========
+    local heroSpInst = G.heroSpineInst
+    if heroSpInst then
+        -- shaun spine: skeleton height=379.54, root bone at y=0 (near feet)
+        -- 缩放匹配帧图视觉大小(~53px)，与僵尸 drawScale=0.14 保持一致
+        local sc = 0.35
+        local footDesignY = py + C.PLAYER_H * 0.5  -- 脚底对齐碰撞盒底部
+        local facingScale = sc * p.facing  -- facing: 1=右, -1=左
+        nvgSave(vg)
+        heroSpInst:SetPosition(px, footDesignY)
+        heroSpInst:SetScale(facingScale, -sc)
+        if stunAlpha < 255 then
+            nvgGlobalAlpha(vg, stunAlpha / 255.0)
+        end
+        ---@diagnostic disable-next-line: undefined-global
+        nvgSpineRender(vg, heroSpInst)
+        if stunAlpha < 255 then
+            nvgGlobalAlpha(vg, 1.0)
+        end
+        nvgRestore(vg)
+    end
+
     nvgSave(vg)
     nvgTranslate(vg, px, py)
+
+    -- 如果 spine 已渲染，跳过帧图但保留后续效果（光圈、阴影、背包等）
+    if heroSpInst then
+        goto hero_after_body
+    end
 
     -- 柔阴影 (径向渐变)
     do
@@ -1310,15 +1347,9 @@ function R.DrawPlayer(vg, G)
         nvgRestore(vg)
     end
 
-    -- 无敌闪烁
-    local stunAlpha = 255
-    if p.stunTimer and p.stunTimer > 0 then
-        stunAlpha = math.sin(t * 16) > 0 and 255 or 100
-    end
-
     -- 上车射击状态：炮塔模式，纯旋转控制方向（跳过 facing 翻转）
     if G.mounted and G.mountedShootImg and G.mountedShootImg ~= 0 then
-        local imgW, imgH = nvgImageSize(vg, G.mountedShootImg)
+        local imgW, imgH = imgSize(vg, G.mountedShootImg)
         if imgW <= 0 or imgH <= 0 then imgW, imgH = 542, 1103 end
         local ratio = imgH / imgW  -- ~2.03
         local drawW = C.PLAYER_W      -- 上车状态角色
@@ -1348,7 +1379,7 @@ function R.DrawPlayer(vg, G)
             local frameIdx = math.min(4, math.floor(progress * 4) + 1)
             local flashImg = mfFrames[frameIdx]
             if flashImg and flashImg ~= 0 then
-                local fImgW, fImgH = nvgImageSize(vg, flashImg)
+                local fImgW, fImgH = imgSize(vg, flashImg)
                 if fImgW > 0 and fImgH > 0 then
                     local flashSize = 18
                     local scl = 0.3 + 0.7 * progress
@@ -1384,6 +1415,8 @@ function R.DrawPlayer(vg, G)
     -- 翻转（仅非上车状态）
     if p.facing < 0 then nvgScale(vg, -1, 1) end
 
+    -- ========== 帧图渲染（Fallback） ==========
+    do
     -- 主角序列帧动画绘制
     -- 攻击帧: 1=idle, 2=raise, 3=swing, 4=hit, 5=recover
     -- 行走帧: walk1~walk4 (4帧循环)
@@ -1441,7 +1474,7 @@ function R.DrawPlayer(vg, G)
         local drawH = drawW * canvasRatio
 
         -- 计算当前帧在统一画布内的居中 fit 位置
-        local imgW, imgH = nvgImageSize(vg, frameImg)
+        local imgW, imgH = imgSize(vg, frameImg)
         if imgW <= 0 or imgH <= 0 then imgW, imgH = canvasW, canvasH end
         local frameRatio = imgH / imgW
         local fitW, fitH, fitX, fitY
@@ -1498,6 +1531,9 @@ function R.DrawPlayer(vg, G)
         nvgFill(vg)
         nvgRestore(vg)
     end
+    end -- do block
+
+    ::hero_after_body::
 
     -- 收集光效 (暗化，偏冷色)
     if p.collectAnim and p.collectAnim > 0 then
@@ -1561,32 +1597,25 @@ end
 ------------------------------------------------------------------------
 function R.DrawZombies(vg, G)
     local t = G.gameTime or 0
-    local idleImg1 = G.zombieIdleImg
-    local walkFrames1 = G.zombieWalkFrames
-    local idleImg2 = G.zombie2IdleImg
-    local walkFrames2 = G.zombie2WalkFrames
-    local idleImg3 = G.crawlerIdleImg
-    local walkFrames3 = G.crawlerWalkFrames
 
     -- 当前攻击目标引用（用于画红色锁定光圈）
     local atkTargetRef = G.player and G.player.atkTarget and G.player.atkTarget.ref or nil
 
     for _, z in ipairs(G.zombies or {}) do
-        if z.dead then goto continue_z end
-        if z.y < G.renderTopY - 20 or z.y > G.screenH + 20 then goto continue_z end
+        if z.spawnDelay and z.spawnDelay > 0 then goto continue_z end
+        if z.dead and not z.dying then goto continue_z end
+        if z.deadDone then goto continue_z end
+        if z.y < G.renderTopY - 40 or z.y > G.screenH + 10 then goto continue_z end
 
         local zx = z.x
         local zy = z.y
         local hitFlash = (z.hitAnim or 0) > 0
 
-        -- 根据僵尸类型选择精灵集
-        local zType = z.zombieType or 1
-
         -- 被攻击时：脚底红色锁定光圈
         if atkTargetRef == z then
             local haloRX = 16
             local haloRY = 6
-            local haloCY = (zType == 3) and 6 or (C.ZOMBIE_SIZE * 0.9)
+            local haloCY = C.ZOMBIE_SIZE * 0.9
             local orbAngle = t * 2.0
 
             nvgSave(vg)
@@ -1632,129 +1661,47 @@ function R.DrawZombies(vg, G)
             nvgRestore(vg)
         end
 
-        nvgSave(vg)
-        nvgTranslate(vg, zx, zy)
-
-        -- 柔阴影 (径向渐变，爬行僵尸阴影贴地)
-        do
-            local shY, shRx, shRy
-            if zType == 3 then
-                -- 爬行僵尸：阴影在身体正下方，更扁更宽（贴地）
-                shY = 6
-                shRx = 20
-                shRy = 7
-            else
-                shY = C.ZOMBIE_SIZE * 0.9
-                shRx = 14
-                shRy = 5
-            end
-            local shPaint = nvgRadialGradient(vg, 2, shY, 2, shRx,
-                nvgRGBA(8, 10, 5, 75), nvgRGBA(8, 10, 5, 0))
-            nvgBeginPath(vg)
-            nvgEllipse(vg, 2, shY, shRx, shRy)
-            nvgFillPaint(vg, shPaint)
-            nvgFill(vg)
-        end
-
-        -- 翻转（俯视角爬行僵尸朝上，不做水平翻转）
-        if zType ~= 3 and z.facing < 0 then nvgScale(vg, -1, 1) end
-
-        -- 选择精灵集
-        local idleImg, walkFrames
-        if zType == 3 then
-            idleImg = idleImg3
-            walkFrames = walkFrames3
-        elseif zType == 2 then
-            idleImg = idleImg2
-            walkFrames = walkFrames2
-        else
-            idleImg = idleImg1
-            walkFrames = walkFrames1
-        end
-
-        -- 选择精灵帧（支持动态帧数）
-        local frameImg = idleImg  -- 默认idle
-        local wa = z.walkAnim or 0
-        local frameCount = walkFrames and #walkFrames or 0
-        if walkFrames and frameCount >= 1 and z.isWalking then
-            local walkIdx = (math.floor(wa) % frameCount) + 1
-            frameImg = walkFrames[walkIdx]
-        end
-
-        if frameImg and frameImg ~= 0 then
-            -- 僵尸精灵尺寸：比碰撞框稍大
-            local drawW, drawH
-            if zType == 3 then
-                -- 爬行僵尸：更扁平，贴地（放大）
-                drawW = C.ZOMBIE_SIZE + 28
-                drawH = drawW * 1.0  -- 正方形比例(爬行姿态)
-            else
-                drawW = C.ZOMBIE_SIZE + 16
-                drawH = drawW * 1.24  -- 保持512x636原图比例
-            end
-
-            -- 程序化行走摇晃：弹跳 + 倾斜（僵尸比玩家更夸张）
-            local isMoving = z.isWalking
-            local wobbleY = 0
-            local wobbleTilt = 0
-
-            if zType == 3 then
-                -- 爬行僵尸：快速左右摇摆，不弹跳
-                if isMoving then
-                    local phase = wa * math.pi * 0.5
-                    wobbleTilt = math.sin(phase) * 0.10  -- 爬行时身体左右大幅摇摆
-                else
-                    wobbleTilt = math.sin(t * 3 + z.phase) * 0.04  -- 蠕动感
-                end
-            elseif isMoving then
-                local phase = wa * math.pi * 0.5
-                wobbleY = -math.abs(math.sin(phase)) * 2.0
-                wobbleTilt = math.sin(phase) * 0.06  -- 僵尸摇摆更大
-            else
-                -- 站立时轻微呼吸摇动
-                wobbleTilt = math.sin(t * 2 + z.phase) * 0.02
-            end
+        -- Spine 渲染（Spine 自带阴影，不再手动画）
+        local spInst = z.spineInst
+        if spInst then
+            local sc = z.drawScale or 0.14
+            -- 水平翻转：facing < 0 时 scaleX 取反
+            local scX = (z.facing and z.facing < 0) and -sc or sc
+            -- Spine 原点在脚底，设置 Y 到丧尸脚底位置
+            local footY = zy + C.ZOMBIE_SIZE * 0.9
 
             nvgSave(vg)
-            nvgTranslate(vg, 0, wobbleY)
-            if wobbleTilt ~= 0 then
-                nvgTranslate(vg, 0, drawH * 0.4)
-                nvgRotate(vg, wobbleTilt)
-                nvgTranslate(vg, 0, -drawH * 0.4)
+            spInst:SetPosition(zx, footY)
+            spInst:SetScale(scX, -sc)
+            -- 受击闪白效果
+            if hitFlash then
+                nvgGlobalAlpha(vg, 0.5)
             end
-
-            local drawX = -drawW / 2
-            local drawY
-            if zType == 3 then
-                -- 爬行僵尸：贴地绘制，中心偏下
-                drawY = -drawH / 2 + 4
-            else
-                drawY = -drawH / 2 - 2
+            ---@diagnostic disable-next-line: undefined-global
+            nvgSpineRender(vg, spInst)
+            if hitFlash then
+                nvgGlobalAlpha(vg, 1.0)
             end
-            local alpha = hitFlash and 0.5 or 1.0
-            local imgPaint = nvgImagePattern(vg, drawX, drawY, drawW, drawH, 0, frameImg, alpha)
-            nvgBeginPath(vg)
-            nvgRect(vg, drawX, drawY, drawW, drawH)
-            nvgFillPaint(vg, imgPaint)
-            nvgFill(vg)
-
             nvgRestore(vg)
+        else
+            -- Fallback: Spine实例缺失时画简易僵尸轮廓
+            local r = C.ZOMBIE_SIZE * 0.8
+            nvgBeginPath(vg)
+            nvgCircle(vg, zx, zy - r * 0.3, r)
+            nvgFillColor(vg, nvgRGBA(80, 120, 60, 200))
+            nvgFill(vg)
+            nvgBeginPath(vg)
+            nvgCircle(vg, zx, zy - r * 1.2, r * 0.6)
+            nvgFillColor(vg, nvgRGBA(100, 140, 70, 200))
+            nvgFill(vg)
         end
-
-        nvgRestore(vg)
 
         -- 血条 (HP < maxHp 时显示, restore后绘制避免翻转影响)
         if z.hp and z.maxHp and z.hp < z.maxHp and z.hp > 0 then
             local barW = 24
             local barH = 3
             local bx = zx - barW / 2
-            local by
-            if zType == 3 then
-                -- 爬行僵尸血条：在身体上方（爬行姿态更矮）
-                by = zy - (C.ZOMBIE_SIZE + 28) * 0.5 / 2 - 6
-            else
-                by = zy - (C.ZOMBIE_SIZE + 16) * 1.24 / 2 - 6
-            end
+            local by = zy - C.ZOMBIE_SIZE - 6
             local ratio = z.hp / z.maxHp
             -- 背景
             nvgBeginPath(vg)
@@ -1781,8 +1728,11 @@ function R.DrawFloatTexts(vg, G)
         local alpha = ft.life / ft.maxLife
         local a255 = math.floor(alpha * 255)
         local isDmg = (ft.rtype == "damage" or ft.rtype == "crit" or ft.rtype == "train_damage")
+        local isSubmit = (ft.rtype == "submit")
         local col
-        if ft.rtype == "gold" then
+        if ft.rtype == "submit" then
+            col = {255, 255, 255} -- 提交+1：白色
+        elseif ft.rtype == "gold" then
             col = C.CLR.gold_color
         elseif ft.rtype == "wood" then
             col = C.CLR.wood_color
@@ -1798,6 +1748,8 @@ function R.DrawFloatTexts(vg, G)
             col = {255, 60, 50}   -- 暴击：红色
         elseif ft.rtype == "train_damage" then
             col = {255, 50, 40}   -- 火车受击：红色
+        elseif ft.rtype == "heal" then
+            col = {80, 255, 120}  -- 治疗：绿色
         elseif ft.rtype == "damage" then
             col = {255, 255, 255} -- 普通伤害：白色
         else
@@ -1807,10 +1759,11 @@ function R.DrawFloatTexts(vg, G)
         local scale = 0.8 + (1 - alpha) * 0.4
         if isDmg then fontSize = 16 end
         if ft.rtype == "crit" then fontSize = 20 end  -- 暴击更大
+        if isSubmit then fontSize = 16 end  -- 提交+1
         nvgFontSize(vg, fontSize * scale)
         nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-        -- 伤害/暴击：8方向粗黑描边
-        if isDmg then
+        -- 伤害/暴击/提交：8方向粗黑描边
+        if isDmg or isSubmit then
             local o = 1.5  -- 描边厚度
             nvgFillColor(vg, nvgRGBA(0, 0, 0, a255))
             nvgText(vg, ft.x - o, ft.y, ft.text, nil)
@@ -1824,7 +1777,7 @@ function R.DrawFloatTexts(vg, G)
         end
         -- 主体文字多次绘制模拟加粗
         nvgFillColor(vg, nvgRGBA(col[1], col[2], col[3], a255))
-        if isDmg then
+        if isDmg or isSubmit then
             nvgText(vg, ft.x - 0.5, ft.y, ft.text, nil)
             nvgText(vg, ft.x + 0.5, ft.y, ft.text, nil)
         end
@@ -1853,7 +1806,7 @@ function R.DrawPuffs(vg, G)
         local frames = p.smokeType == 1 and G.smokeAFrames or G.smokeBFrames
         local img = frames[p.frame]
         if img and img ~= 0 then
-            local iw, ih = nvgImageSize(vg, img)
+            local iw, ih = imgSize(vg, img)
             nvgSave(vg)
             nvgTranslate(vg, p.x, p.y)
             nvgBeginPath(vg)
@@ -1872,7 +1825,7 @@ function R.DrawBursts(vg, G)
     for _, b in ipairs(G.bursts) do
         local img = frames[b.frame]
         if img and img ~= 0 then
-            local iw, ih = nvgImageSize(vg, img)
+            local iw, ih = imgSize(vg, img)
             local dw, dh = iw * sc, ih * sc
             nvgSave(vg)
             nvgTranslate(vg, b.x, b.y)
@@ -1923,6 +1876,155 @@ function R.DrawDropItems(vg, G)
             nvgFillColor(vg, nvgRGBA(rc[1], rc[2], rc[3], 230))
             nvgFill(vg)
         end
+    end
+end
+
+------------------------------------------------------------------------
+-- 10.4 提交资源飞行动画
+------------------------------------------------------------------------
+function R.DrawSubmitFlyItems(vg, G)
+    local imgMap = {
+        wood   = G.hudIconWood,
+        stone  = G.hudIconStone,
+        ore    = G.hudIconGem,
+        bush   = G.hudIconWood,    -- 小灌木丛算木头
+        pebble = G.hudIconStone,   -- 小石头算石头
+    }
+    local sz = 24
+    for _, item in ipairs(G.submitFlyItems) do
+        local img = imgMap[item.rtype]
+        local t = math.min(1, item.timer / item.duration)
+        -- 逐渐缩小 + 透明
+        local sc = 1.0 - t * 0.4
+        local alpha = 1.0 - t * 0.3
+        nvgSave(vg)
+        nvgTranslate(vg, item.x, item.y)
+        nvgScale(vg, sc, sc)
+        nvgRotate(vg, item.rot)
+        nvgGlobalAlpha(vg, alpha)
+        if img and img ~= 0 then
+            local imgPaint = nvgImagePattern(vg, -sz / 2, -sz / 2, sz, sz, 0, img, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, -sz / 2, -sz / 2, sz, sz)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+        else
+            local rc = C.CLR[(item.rtype or "") .. "_color"] or {150, 150, 150}
+            nvgBeginPath(vg)
+            nvgCircle(vg, 0, 0, 5)
+            nvgFillColor(vg, nvgRGBA(rc[1], rc[2], rc[3], 230))
+            nvgFill(vg)
+        end
+        nvgRestore(vg)
+    end
+end
+
+------------------------------------------------------------------------
+-- 10.4a2 左侧获得提示 toast（带图标）
+------------------------------------------------------------------------
+function R.DrawRewardToasts(vg, G)
+    if not G.rewardToasts or #G.rewardToasts == 0 then return end
+    local s = G.uiScale or 1
+    local H = G.screenH
+    local baseY = H * 0.38  -- 屏幕左侧偏上位置
+
+    local iconMap = {
+        gem   = G.hudIconGem,
+        wood  = G.hudIconWood,
+        stone = G.hudIconStone,
+        gold  = G.hudIconGold,
+    }
+
+    for idx, toast in ipairs(G.rewardToasts) do
+        local t = toast.timer / toast.life
+        -- 入场滑入(0~0.15) + 停留 + 出场淡出(0.75~1.0)
+        local slideIn = math.min(1, toast.timer / 0.25)
+        local fadeOut = t > 0.75 and (1 - (t - 0.75) / 0.25) or 1.0
+        local easeIn = 1 - (1 - slideIn) * (1 - slideIn)
+
+        local iSz = 18 * s
+        local padX = 8 * s
+        local padY = 5 * s
+        local fontSize = 13 * s
+
+        -- 测量文字宽度
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, fontSize)
+        local tw = nvgTextBounds(vg, 0, 0, toast.text)
+        local contentW = padX + iSz + 6 * s + tw + padX  -- 内容实际宽度
+        local tailW = 20 * s  -- 渐变尾巴额外宽度
+        local boxW = contentW + tailW
+        local boxH = iSz + padY * 2
+
+        local offX = -boxW * (1 - easeIn)  -- 从左侧滑入
+        local posX = 10 * s + offX
+        local posY = baseY + (idx - 1) * (boxH + 6 * s)
+        local alpha = fadeOut
+
+        nvgSave(vg)
+        nvgGlobalAlpha(vg, alpha)
+
+        -- 半透明黑底，右侧渐变消失（渐变从内容末尾开始）
+        local gradStart = posX + contentW
+        local gradEnd   = posX + boxW
+        local bgPaint = nvgLinearGradient(vg, gradStart, posY, gradEnd, posY,
+            nvgRGBA(0, 0, 0, 160), nvgRGBA(0, 0, 0, 0))
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, posX, posY, boxW, boxH, 6 * s)
+        nvgFillPaint(vg, bgPaint)
+        nvgFill(vg)
+
+        -- 图标
+        local img = iconMap[toast.icon]
+        local iconX = posX + padX
+        local iconY = posY + padY
+        if img and img ~= 0 then
+            local ip = nvgImagePattern(vg, iconX, iconY, iSz, iSz, 0, img, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, iconX, iconY, iSz, iSz)
+            nvgFillPaint(vg, ip)
+            nvgFill(vg)
+        end
+
+        -- 文字
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, fontSize)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+        nvgText(vg, iconX + iSz + 6 * s, posY + boxH / 2, toast.text)
+
+        nvgRestore(vg)
+    end
+end
+
+------------------------------------------------------------------------
+-- 10.4b 金币飞行动画（击杀僵尸掉落金币飞向HUD）
+------------------------------------------------------------------------
+function R.DrawGoldFlyItems(vg, G)
+    local img = G.hudIconGold
+    local sz = 20
+    for _, item in ipairs(G.goldFlyItems) do
+        local dur = item.phase == 1 and item.popDur or item.flyDur or 0.4
+        local t = math.min(1, item.timer / dur)
+        local sc = item.scale or 1.0
+        local alpha = item.phase == 1 and 1.0 or (1.0 - t * 0.3)
+        nvgSave(vg)
+        nvgTranslate(vg, item.x, item.y)
+        nvgScale(vg, sc, sc)
+        nvgGlobalAlpha(vg, alpha)
+        if img and img ~= 0 then
+            local imgPaint = nvgImagePattern(vg, -sz / 2, -sz / 2, sz, sz, 0, img, 1.0)
+            nvgBeginPath(vg)
+            nvgRect(vg, -sz / 2, -sz / 2, sz, sz)
+            nvgFillPaint(vg, imgPaint)
+            nvgFill(vg)
+        else
+            nvgBeginPath(vg)
+            nvgCircle(vg, 0, 0, 6)
+            nvgFillColor(vg, nvgRGBA(255, 215, 0, 230))
+            nvgFill(vg)
+        end
+        nvgRestore(vg)
     end
 end
 
@@ -2021,15 +2123,17 @@ function R.DrawRightPanel(vg, G)
                 nvgFill(vg)
             end
 
-            -- 炮塔精灵图标
+            -- 炮塔精灵图标（按实际图片比例渲染）
             if def then
                 local img = G.turretImgs and G.turretImgs[def.imgKey]
                 if img and img ~= 0 then
+                    local iw, ih = imgSize(vg, img)
+                    local ratio = (iw > 0 and ih > 0) and (ih / iw) or 1.33
                     local sprW = iconSize - 10 * s
-                    local sprH = sprW * 1.33
+                    local sprH = sprW * ratio
                     if sprH > iconSize - 8 * s then
                         sprH = iconSize - 8 * s
-                        sprW = sprH / 1.33
+                        sprW = sprH / ratio
                     end
                     local ccx = ix + iconSize / 2
                     local ccy = iy + iconSize / 2
@@ -2119,7 +2223,7 @@ function R.DrawRightPanel(vg, G)
     local barX = barCenterX - barW / 2
 
     -- 波次进度（平滑插值：战斗阶段+间歇阶段连续推进，最后一波结束时到达终点）
-    local curWave = G.currentWave or 1
+    local curWave = math.max(1, G.currentWave or 1)
     local maxWave = G.maxWaves or 10
     local waveDur = G.waveDuration or 30   -- 每波战斗时长
     local restDur = 10                      -- 间歇时长
@@ -2203,12 +2307,13 @@ function R.DrawHUD(vg, G)
 
     nvgFontFace(vg, "sans")
 
-    -- 资源项定义
+    -- 资源项定义（直接读取saveData持久化数据，与局外一致）
+    local sd = G.saveData
     local items = {
-        { img = G.hudIconGold,  count = G.gold          },
-        { img = G.hudIconWood,  count = G.totalRes.wood },
-        { img = G.hudIconStone, count = G.totalRes.stone },
-        { img = G.hudIconGem,   count = G.totalRes.ore   },
+        { img = G.hudIconGold,  count = sd and sd.gold or 0     },
+        { img = G.hudIconWood,  count = sd and sd.wood or 0     },
+        { img = G.hudIconStone, count = sd and sd.stone or 0    },
+        { img = G.hudIconGem,   count = sd and sd.diamond or 0  },
     }
 
     -- 内框尺寸：统一固定宽度，紧凑排列
@@ -2233,7 +2338,7 @@ function R.DrawHUD(vg, G)
 
     if capImg and capImg ~= 0 then
         -- 获取端盖原始尺寸，按高度等比缩放
-        local capImgW, capImgH = nvgImageSize(vg, capImg)
+        local capImgW, capImgH = imgSize(vg, capImg)
         local capScale = outerH / capImgH
         local capW = capImgW * capScale
 
@@ -2242,7 +2347,7 @@ function R.DrawHUD(vg, G)
             local midX = outerX + capW
             local midW = outerW - capW * 2
             if midW > 0 then
-                local midImgW, midImgH = nvgImageSize(vg, midImg)
+                local midImgW, midImgH = imgSize(vg, midImg)
                 local midTileW = midImgW * capScale
                 local midTileH = midImgH * capScale
                 local midPaint = nvgImagePattern(vg, midX, outerY, midTileW, midTileH, 0, midImg, 1.0)
@@ -2368,7 +2473,7 @@ function R.DrawWavePanel(vg, G)
 
     nvgFontSize(vg, 10 * s)
     nvgFillColor(vg, nvgRGBA(255, 210, 80, 255))
-    nvgText(vg, textX + 20 * s, lineY1, tostring(G.currentWave or 1) .. "/" .. tostring(G.maxWaves or 20), nil)
+    nvgText(vg, textX + 20 * s, lineY1, tostring(math.max(1, G.currentWave or 1)) .. "/" .. tostring(G.maxWaves or 20), nil)
 
     -- 第二行: "下一波  00:23"
     local lineY2 = py + panelH * 0.7
@@ -2627,6 +2732,122 @@ function R.DrawGameOver(vg, G)
     local t = G.gameTime or 0
     local s = G.uiScale or 1
 
+    -- ===== 胜利画面 =====
+    if G.gameWin then
+        -- 金色光晕覆盖
+        local overlayP = nvgRadialGradient(vg, W / 2, H * 0.3, 40, H * 0.7,
+            nvgRGBA(80, 60, 10, 200), nvgRGBA(10, 12, 8, 235))
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillPaint(vg, overlayP)
+        nvgFill(vg)
+
+        nvgFontFace(vg, "sans")
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+
+        local titleY = H * 0.16
+        local pulse = 0.85 + math.sin(t * 1.8) * 0.15
+
+        -- 标题阴影
+        nvgFontSize(vg, 32 * s)
+        nvgFillColor(vg, nvgRGBA(0, 0, 0, 140))
+        nvgText(vg, W / 2 + 2, titleY + 2, "列车幸存！", nil)
+        -- 标题金色
+        nvgFillColor(vg, nvgRGBA(255, 210, 60, 255))
+        nvgText(vg, W / 2, titleY, "列车幸存！", nil)
+
+        -- 装饰线
+        local lineW = 80 * s
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, W / 2 - lineW / 2, titleY + 20 * s)
+        nvgLineTo(vg, W / 2 + lineW / 2, titleY + 20 * s)
+        nvgStrokeColor(vg, nvgRGBA(255, 200, 60, 100))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+
+        nvgFontSize(vg, 13 * s)
+        nvgFillColor(vg, nvgRGBA(200, 230, 170, 210))
+        nvgText(vg, W / 2, titleY + 38 * s, "成功抵御所有" .. (G.maxWaves or 10) .. "波攻击，列车平安抵达！", nil)
+
+        -- 统计卡片
+        local stats = {
+            { "存活波次", "全部 " .. (G.maxWaves or 10) .. " 波" },
+            { "行驶距离", math.floor((G.distance or 0) / 10) .. "m" },
+            { "金币获得", tostring(G.gold or 0) },
+            { "木材采集", tostring((G.totalRes and G.totalRes.wood) or 0) },
+            { "岩石采集", tostring((G.totalRes and G.totalRes.stone) or 0) },
+            { "矿石采集", tostring((G.totalRes and G.totalRes.ore) or 0) },
+        }
+
+        local lineH = 22 * s
+        local cardW = math.min(W * 0.65, 300 * s)
+        local cardH = #stats * lineH + 16 * s
+        local cardX = (W - cardW) / 2
+        local cardY = titleY + 55 * s
+
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cardX, cardY, cardW, cardH, 8)
+        nvgFillColor(vg, nvgRGBA(15, 18, 10, 160))
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cardX, cardY, cardW, cardH, 8)
+        nvgStrokeColor(vg, nvgRGBA(180, 160, 60, 60))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        for i, st in ipairs(stats) do
+            local sy = cardY + 8 * s + (i - 1) * lineH + lineH / 2
+            if i % 2 == 0 then
+                nvgBeginPath(vg)
+                nvgRect(vg, cardX + 4, sy - lineH / 2, cardW - 8, lineH)
+                nvgFillColor(vg, nvgRGBA(255, 255, 255, 6))
+                nvgFill(vg)
+            end
+            nvgFontSize(vg, 12 * s)
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(170, 160, 130, 200))
+            nvgText(vg, W / 2 - 6 * s, sy, st[1], nil)
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 230, 130, 240))
+            nvgText(vg, W / 2 + 6 * s, sy, st[2], nil)
+        end
+
+        -- 返回大厅按钮（金色）
+        local btnW = 155 * s
+        local btnH = 44 * s
+        local btnX = (W - btnW) / 2
+        local btnY = cardY + cardH + 20 * s
+
+        local glowP = nvgRadialGradient(vg, W / 2, btnY + btnH / 2, btnW * 0.3, btnW * 0.7,
+            nvgRGBA(200, 170, 50, math.floor(pulse * 35)), nvgRGBA(200, 170, 50, 0))
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, btnX - 15, btnY - 10, btnW + 30, btnH + 20, 20)
+        nvgFillPaint(vg, glowP)
+        nvgFill(vg)
+
+        local btnP = nvgLinearGradient(vg, btnX, btnY, btnX, btnY + btnH,
+            nvgRGBA(195, 160, 40, math.floor(pulse * 255)),
+            nvgRGBA(150, 120, 25, math.floor(pulse * 255)))
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 10)
+        nvgFillPaint(vg, btnP)
+        nvgFill(vg)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, btnX, btnY, btnW, btnH, 10)
+        nvgStrokeColor(vg, nvgRGBA(255, 220, 80, math.floor(pulse * 80)))
+        nvgStrokeWidth(vg, 1.2)
+        nvgStroke(vg)
+
+        nvgFontSize(vg, 19 * s)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+        nvgText(vg, W / 2, btnY + btnH / 2, "返回大厅", nil)
+
+        G.restartBtn = { x = btnX, y = btnY, w = btnW, h = btnH }
+        return
+    end
+
+    -- ===== 失败画面 =====
     -- 暗红色径向覆盖
     local overlayP = nvgRadialGradient(vg, W / 2, H * 0.3, 40, H * 0.6,
         nvgRGBA(55, 18, 18, 200), nvgRGBA(15, 8, 8, 235))
@@ -2663,7 +2884,7 @@ function R.DrawGameOver(vg, G)
 
     -- 统计卡片背景
     local stats = {
-        { "存活记录", "第" .. (G.stage or 1) .. "关 第" .. (G.currentWave or 1) .. "波" },
+        { "存活记录", "第" .. (G.stage or 1) .. "关 第" .. math.max(1, G.currentWave or 1) .. "波" },
         { "行驶距离", math.floor((G.distance or 0) / 10) .. "m" },
         { "金币获得", tostring(G.gold or 0) },
         { "木材采集", tostring((G.totalRes and G.totalRes.wood) or 0) },
@@ -2863,7 +3084,14 @@ function R.DrawSkillButtons(vg, G)
     local charCD    = G.skillCharCD or 0
     local charCDMax = G.skillCharCDMax or 15
 
-    drawSkillBtn(rightX, btnY, bombImg, charCD, charCDMax, {255, 180, 50}, G.skillCharActive, nil)
+    -- 按当前角色选择对应技能图标
+    local charSkillIcon = bombImg  -- 默认（warrior）
+    local charId = G.activeCharId or "warrior"
+    if G.skillIconImgs and G.skillIconImgs[charId] and G.skillIconImgs[charId] ~= 0 then
+        charSkillIcon = G.skillIconImgs[charId]
+    end
+
+    drawSkillBtn(rightX, btnY, charSkillIcon, charCD, charCDMax, {255, 180, 50}, G.skillCharActive, nil)
 
     -- 技能持续时间条
     if G.skillCharActive and G.skillCharDuration > 0 and G.skillCharDurationMax > 0 then
@@ -2945,7 +3173,7 @@ function R.DrawBombs(vg, G)
     local t = G.gameTime or 0
 
     -- 获取炸弹图片原始尺寸（保持比例）
-    local imgW, imgH = nvgImageSize(vg, img)
+    local imgW, imgH = imgSize(vg, img)
     if imgW <= 0 then imgW = 1 end
     if imgH <= 0 then imgH = 1 end
     local aspect = imgW / imgH  -- 宽高比
