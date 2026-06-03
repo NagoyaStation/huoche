@@ -438,10 +438,20 @@ MD.EQUIP_AFFIXES = {
 }
 
 -- 洗练费用（按品质等级）
-MD.REFORGE_COST = { 50, 100, 200, 400, 800 }
+-- 洗练消耗（木头和石头，按品质等级递增）
+MD.REFORGE_COST = {
+    { wood = 20,  stone = 15 },   -- 品质1（普通）
+    { wood = 40,  stone = 30 },   -- 品质2（优质）
+    { wood = 80,  stone = 60 },   -- 品质3（稀有）
+    { wood = 150, stone = 100 },  -- 品质4（史诗）
+    { wood = 300, stone = 200 },  -- 品质5（传说）
+}
 
 -- 分解返还金币（按品质等级）
 MD.DECOMPOSE_GOLD = { 10, 25, 60, 150, 400 }
+
+-- 装备最高等级（升级需消耗同ID同等级的另一件装备）
+MD.EQUIP_MAX_LEVEL = 20
 
 -- 生成随机词条（quality: 1-5）
 function MD.GenerateAffixes(quality)
@@ -1061,6 +1071,16 @@ MD.TURRET_UPGRADES = {
         baseDmg = 6,  baseCD = 0.8, baseRange = 5.5 },
     { id = "rocket",   name = "火箭炮塔", maxLv = 5, fragBase = 12, fragGrow = 1.8, icon = "image/火箭炮塔高清.png",
         baseDmg = 25, baseCD = 2.5, baseRange = 8.0 },
+}
+
+-- 炮塔升级资源消耗（每升1级消耗的木头和石头，按当前等级递增）
+-- index = 升级前等级+1，即 lv0→lv1 用 [1]，lv1→lv2 用 [2]...
+MD.TURRET_UPGRADE_RES = {
+    { wood = 30,  stone = 20  },   -- Lv.0 → Lv.1
+    { wood = 60,  stone = 40  },   -- Lv.1 → Lv.2
+    { wood = 100, stone = 70  },   -- Lv.2 → Lv.3
+    { wood = 160, stone = 110 },   -- Lv.3 → Lv.4
+    { wood = 250, stone = 170 },   -- Lv.4 → Lv.5
 }
 
 ------------------------------------------------------------------------

@@ -21,6 +21,9 @@ end
 -- 升级准备
 ------------------------------------------------------------------------
 function RL.PrepareUpgrade(G)
+    -- 每次升级重置刷新标记（每次升级可刷新1次）
+    G.refreshUsedThisLevel = false
+
     -- 收集已解锁的炮塔类型（局内已拥有的）
     local unlockedTypes = {}
     for _, t in ipairs(G.turrets or {}) do
@@ -384,24 +387,19 @@ end
 ------------------------------------------------------------------------
 function RL.HandleRefreshClick(G)
     if G.upgradeSelectedCard then return end  -- 正在播动画
+    if G.refreshUsedThisLevel then return end -- 本次升级已用过刷新
 
-    if (G.refreshFreeLeft or 0) > 0 then
-        -- 免费刷新
-        G.refreshFreeLeft = G.refreshFreeLeft - 1
+    -- 消耗钻石刷新
+    local Meta = require "Meta.MetaMain"
+    local sd = Meta.GetSaveData()
+    local cost = C.REFRESH_DIAMOND_COST or 30
+    if sd.diamond >= cost then
+        sd.diamond = sd.diamond - cost
+        G.refreshUsedThisLevel = true
         RL.RefreshUpgradeCards(G)
-        print("[Upgrade] Free refresh used, remaining: " .. G.refreshFreeLeft)
+        print("[Upgrade] Diamond refresh used, cost: " .. cost .. ", remaining diamonds: " .. sd.diamond)
     else
-        -- 消耗钻石刷新
-        local Meta = require "Meta.MetaMain"
-        local sd = Meta.GetSaveData()
-        local cost = C.REFRESH_DIAMOND_COST or 30
-        if sd.diamond >= cost then
-            sd.diamond = sd.diamond - cost
-            RL.RefreshUpgradeCards(G)
-            print("[Upgrade] Diamond refresh used, cost: " .. cost .. ", remaining diamonds: " .. sd.diamond)
-        else
-            print("[Upgrade] Not enough diamonds for refresh, need: " .. cost .. ", have: " .. sd.diamond)
-        end
+        print("[Upgrade] Not enough diamonds for refresh, need: " .. cost .. ", have: " .. sd.diamond)
     end
 end
 
@@ -410,6 +408,7 @@ end
 ------------------------------------------------------------------------
 function RL.HandleGetAllClick(G)
     if G.upgradeSelectedCard then return end  -- 正在播动画
+    if G.getAllUsedThisGame then return end   -- 本局已用过获取全部
 
     local Meta = require "Meta.MetaMain"
     local sd = Meta.GetSaveData()
@@ -421,6 +420,7 @@ function RL.HandleGetAllClick(G)
 
     -- 消耗钻石
     sd.diamond = sd.diamond - cost
+    G.getAllUsedThisGame = true
     print("[Upgrade] GetAll used, cost: " .. cost .. ", remaining diamonds: " .. sd.diamond)
 
     -- 应用所有3张卡效果
@@ -445,7 +445,7 @@ function RL.HandleGetAllClick(G)
     G.hintText = "Lv." .. G.level .. " 目标: " .. G.levelTarget .. " 资源"
     G.hintTimer = 4.0
     Ent.SpawnParticles(G, G.screenW / 2, G.screenH * 0.4, {255, 220, 80}, 15)
-    print("[Upgrade] GetAll complete, remaining: " .. G.getAllVideoLeft)
+    print("[Upgrade] GetAll complete (used for this game)")
 end
 
 ------------------------------------------------------------------------
@@ -1074,29 +1074,6 @@ function RL.DrawUpgradeUI(vg, G)
         local btnH = btnAreaH
         local btnW = 155  -- 每个按钮宽度（放大）
         local btnGap = 30
-        local totalBtnW = btnW * 2 + btnGap
-        local btnStartX = (W - totalBtnW) / 2
-
-        -- 提示文字："更高概率出 高级词条"（白色+紫色）
-        local hintFontSize = math.max(9, math.floor(32 * S))
-        nvgFontSize(vg, hintFontSize)
-        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
-        -- 先测量总宽度以居中
-        local hintPart1 = "更高概率出 "
-        local hintPart2 = "高级词条"
-        local w1 = nvgTextBounds(vg, 0, 0, hintPart1, nil)
-        local w2 = nvgTextBounds(vg, 0, 0, hintPart2, nil)
-        local hintTotalW = w1 + w2
-        local hintStartX = btnStartX + (btnW - hintTotalW) / 2
-        -- 白色部分
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
-        nvgText(vg, hintStartX, btnY, hintPart1, nil)
-        -- 紫色部分
-        nvgFillColor(vg, nvgRGBA(200, 120, 255, 255))
-        nvgText(vg, hintStartX + w1, btnY, hintPart2, nil)
-
-        local imgBtnY = btnY + hintFontSize + 4
-        local imgBtnH = btnH - hintFontSize - 2
 
         -- === 获取当前钻石数 ===
         local Meta = require "Meta.MetaMain"
@@ -1104,18 +1081,48 @@ function RL.DrawUpgradeUI(vg, G)
         local curDiamond = sd.diamond or 0
         local gemIcon = G.hudIconGem
 
-        -- === 左侧：免费刷新 / 钻石刷新 ===
-        local leftBtnX = btnStartX
-        local hasFreeRefresh = (G.refreshFreeLeft or 0) > 0
-        local refreshImg = hasFreeRefresh and G.refreshFreeImg or G.refreshDiamondImg
-        local refreshCost = C.REFRESH_DIAMOND_COST or 30
-        local refreshEnabled = hasFreeRefresh or (curDiamond >= refreshCost)
+        -- === 判断按钮可见性 ===
+        local showGetAll = not G.getAllUsedThisGame
+        local refreshUsed = G.refreshUsedThisLevel
 
-        -- 统一按钮绘制尺寸（两个按钮等比缩放到相同大小）
+        -- 布局：获取全部已用 → 刷新居中；否则双按钮
+        local totalBtnW, btnStartX
+        if showGetAll then
+            totalBtnW = btnW * 2 + btnGap
+            btnStartX = (W - totalBtnW) / 2
+        else
+            totalBtnW = btnW
+            btnStartX = (W - btnW) / 2
+        end
+
+        -- 提示文字："更高概率出 高级词条"（白色+紫色）
+        local hintFontSize = math.max(9, math.floor(32 * S))
+        nvgFontSize(vg, hintFontSize)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+        local hintPart1 = "更高概率出 "
+        local hintPart2 = "高级词条"
+        local w1 = nvgTextBounds(vg, 0, 0, hintPart1, nil)
+        local w2 = nvgTextBounds(vg, 0, 0, hintPart2, nil)
+        local hintTotalW = w1 + w2
+        local hintStartX = btnStartX + (btnW - hintTotalW) / 2
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
+        nvgText(vg, hintStartX, btnY, hintPart1, nil)
+        nvgFillColor(vg, nvgRGBA(200, 120, 255, 255))
+        nvgText(vg, hintStartX + w1, btnY, hintPart2, nil)
+
+        local imgBtnY = btnY + hintFontSize + 4
+        local imgBtnH = btnH - hintFontSize - 2
+
+        -- 统一按钮绘制尺寸
         local unifiedBtnW = btnW * 0.92
         local unifiedBtnH = imgBtnH * 0.72
 
-        -- 绘制刷新按钮图片
+        -- === 刷新按钮（钻石刷新，每次升级1次）===
+        local refreshBtnX = btnStartX  -- 如果有获取全部则在左侧，否则居中
+        local refreshImg = G.refreshDiamondImg
+        local refreshCost = C.REFRESH_DIAMOND_COST or 30
+        local refreshEnabled = (not refreshUsed) and (curDiamond >= refreshCost)
+
         if refreshImg and refreshImg ~= 0 then
             local alpha = refreshEnabled and 1.0 or 0.4
             local iw, ih = nvgImageSize(vg, refreshImg)
@@ -1123,7 +1130,7 @@ function RL.DrawUpgradeUI(vg, G)
                 local scale = math.min(unifiedBtnW / iw, unifiedBtnH / ih)
                 local dw = iw * scale
                 local dh = ih * scale
-                local dx = leftBtnX + (btnW - dw) / 2
+                local dx = refreshBtnX + (btnW - dw) / 2
                 local dy = imgBtnY + (imgBtnH - dh) / 2 - 4
                 local paint = nvgImagePattern(vg, dx, dy, dw, dh, 0, refreshImg, alpha)
                 nvgBeginPath(vg)
@@ -1132,33 +1139,27 @@ function RL.DrawUpgradeUI(vg, G)
                 nvgFill(vg)
             end
         end
-        -- 底部文字
+
+        -- 刷新按钮底部文字
         local countFontSize = math.max(9, math.floor(30 * S))
         nvgFontSize(vg, countFontSize)
         local countY = imgBtnY + imgBtnH - 5
         local iconSize = countFontSize * 0.9
 
-        if hasFreeRefresh then
-            -- 免费时显示"剩余次数：X"
-            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
-            local labelStr = "剩余次数："
-            local numStr = tostring(G.refreshFreeLeft)
-            local lw = nvgTextBounds(vg, 0, 0, labelStr, nil)
-            local nw = nvgTextBounds(vg, 0, 0, numStr, nil)
-            local cx = leftBtnX + (btnW - lw - nw) / 2
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
-            nvgText(vg, cx, countY, labelStr, nil)
-            nvgFillColor(vg, nvgRGBA(80, 255, 80, 255))
-            nvgText(vg, cx + lw, countY, numStr, nil)
+        if refreshUsed then
+            -- 已使用，显示"已使用"
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+            nvgFillColor(vg, nvgRGBA(180, 180, 180, 180))
+            nvgText(vg, refreshBtnX + btnW / 2, countY, "已使用", nil)
         else
-            -- 钻石消耗：消耗：30 💎
+            -- 钻石消耗
             nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
             local labelCost1 = "消耗："
             local numCost1 = tostring(refreshCost)
             local lw1 = nvgTextBounds(vg, 0, 0, labelCost1, nil)
             local nw1 = nvgTextBounds(vg, 0, 0, numCost1, nil)
             local totalCostW1 = lw1 + nw1 + iconSize + 2
-            local cx1 = leftBtnX + (btnW - totalCostW1) / 2
+            local cx1 = refreshBtnX + (btnW - totalCostW1) / 2
             nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
             nvgText(vg, cx1, countY, labelCost1, nil)
             nvgFillColor(vg, nvgRGBA(80, 255, 80, 255))
@@ -1174,58 +1175,59 @@ function RL.DrawUpgradeUI(vg, G)
         end
 
         -- 注册刷新按钮点击区域
-        G.upgradeRefreshBtn = refreshEnabled and { x = leftBtnX, y = imgBtnY, w = btnW, h = imgBtnH } or nil
+        G.upgradeRefreshBtn = refreshEnabled and { x = refreshBtnX, y = imgBtnY, w = btnW, h = imgBtnH } or nil
 
-        -- === 右侧：获取全部（消耗钻石）===
-        local rightBtnX = btnStartX + btnW + btnGap
-        local getAllImg = G.getAllImg
-        local getAllCost = C.GETALL_DIAMOND_COST or 50
-        local getAllEnabled = curDiamond >= getAllCost
+        -- === 获取全部（消耗钻石，每局1次，用后消失）===
+        if showGetAll then
+            local rightBtnX = btnStartX + btnW + btnGap
+            local getAllImg = G.getAllImg
+            local getAllCost = C.GETALL_DIAMOND_COST or 50
+            local getAllEnabled = curDiamond >= getAllCost
 
-        if getAllImg and getAllImg ~= 0 then
-            local alpha = getAllEnabled and 1.0 or 0.4
-            local iw, ih = nvgImageSize(vg, getAllImg)
-            if iw > 0 and ih > 0 then
-                local scale = math.min(unifiedBtnW / iw, unifiedBtnH / ih)
-                local dw = iw * scale
-                local dh = ih * scale
-                local dx = rightBtnX + (btnW - dw) / 2
-                local dy = imgBtnY + (imgBtnH - dh) / 2 - 4
-                local paint = nvgImagePattern(vg, dx, dy, dw, dh, 0, getAllImg, alpha)
+            if getAllImg and getAllImg ~= 0 then
+                local alpha = getAllEnabled and 1.0 or 0.4
+                local iw, ih = nvgImageSize(vg, getAllImg)
+                if iw > 0 and ih > 0 then
+                    local scale = math.min(unifiedBtnW / iw, unifiedBtnH / ih)
+                    local dw = iw * scale
+                    local dh = ih * scale
+                    local dx = rightBtnX + (btnW - dw) / 2
+                    local dy = imgBtnY + (imgBtnH - dh) / 2 - 4
+                    local paint = nvgImagePattern(vg, dx, dy, dw, dh, 0, getAllImg, alpha)
+                    nvgBeginPath(vg)
+                    nvgRoundedRect(vg, dx, dy, dw, dh, 4)
+                    nvgFillPaint(vg, paint)
+                    nvgFill(vg)
+                end
+            end
+            -- 消耗文字
+            nvgFontSize(vg, countFontSize)
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+            local labelCost2 = "消耗："
+            local numCost2 = tostring(getAllCost)
+            local lw2 = nvgTextBounds(vg, 0, 0, labelCost2, nil)
+            local nw2 = nvgTextBounds(vg, 0, 0, numCost2, nil)
+            local totalCostW2 = lw2 + nw2 + iconSize + 2
+            local cx2 = rightBtnX + (btnW - totalCostW2) / 2
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
+            nvgText(vg, cx2, countY, labelCost2, nil)
+            nvgFillColor(vg, nvgRGBA(80, 255, 80, 255))
+            nvgText(vg, cx2 + lw2, countY, numCost2, nil)
+            if gemIcon and gemIcon ~= 0 then
+                local gx2 = cx2 + lw2 + nw2 + 2
+                local gy2 = countY
+                local gPaint2 = nvgImagePattern(vg, gx2, gy2, iconSize, iconSize, 0, gemIcon, 1.0)
                 nvgBeginPath(vg)
-                nvgRoundedRect(vg, dx, dy, dw, dh, 4)
-                nvgFillPaint(vg, paint)
+                nvgRoundedRect(vg, gx2, gy2, iconSize, iconSize, 2)
+                nvgFillPaint(vg, gPaint2)
                 nvgFill(vg)
             end
-        end
-        -- 消耗文字：消耗：50 💎
-        nvgFontSize(vg, countFontSize)
-        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
-        local labelCost2 = "消耗："
-        local numCost2 = tostring(getAllCost)
-        local lw2 = nvgTextBounds(vg, 0, 0, labelCost2, nil)
-        local nw2 = nvgTextBounds(vg, 0, 0, numCost2, nil)
-        local totalCostW2 = lw2 + nw2 + iconSize + 2
-        local cx2 = rightBtnX + (btnW - totalCostW2) / 2
-        -- 白色"消耗："
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
-        nvgText(vg, cx2, countY, labelCost2, nil)
-        -- 绿色数字
-        nvgFillColor(vg, nvgRGBA(80, 255, 80, 255))
-        nvgText(vg, cx2 + lw2, countY, numCost2, nil)
-        -- 钻石图标
-        if gemIcon and gemIcon ~= 0 then
-            local gx2 = cx2 + lw2 + nw2 + 2
-            local gy2 = countY
-            local gPaint2 = nvgImagePattern(vg, gx2, gy2, iconSize, iconSize, 0, gemIcon, 1.0)
-            nvgBeginPath(vg)
-            nvgRoundedRect(vg, gx2, gy2, iconSize, iconSize, 2)
-            nvgFillPaint(vg, gPaint2)
-            nvgFill(vg)
-        end
 
-        -- 注册获取全部按钮点击区域
-        G.upgradeGetAllBtn = getAllEnabled and { x = rightBtnX, y = imgBtnY, w = btnW, h = imgBtnH } or nil
+            -- 注册获取全部按钮点击区域
+            G.upgradeGetAllBtn = getAllEnabled and { x = rightBtnX, y = imgBtnY, w = btnW, h = imgBtnH } or nil
+        else
+            G.upgradeGetAllBtn = nil
+        end
     else
         G.upgradeRefreshBtn = nil
         G.upgradeGetAllBtn = nil

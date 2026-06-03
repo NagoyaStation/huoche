@@ -89,7 +89,7 @@ function E.UpdatePlayer(G, dt, moveX, moveY)
     p.vy = moveY * speed
 
     -- 随世界滚动向上移动（与资源、丧尸一致）
-    local scrollSpeed = (C.BASE_SCROLL_SPEED + G.level * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
+    local scrollSpeed = (C.BASE_SCROLL_SPEED + G.difficultyLevel * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
     local scrollDelta = scrollSpeed * dt
     p.y = p.y - scrollDelta
 
@@ -220,7 +220,7 @@ function E.UpdatePlayer(G, dt, moveX, moveY)
     p.bobAnim = p.bobAnim + dt * 3
     p.collectAnim = math.max(0, p.collectAnim - dt)
     p.submitAnim = math.max(0, p.submitAnim - dt)
-    p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4)
+    p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4 * (G.atkSpdMul or 1.0))
 
     -- 攻击冷却
     local atkInterval = C.AUTO_ATTACK_INTERVAL / (G.atkSpdMul or 1.0)
@@ -944,7 +944,7 @@ end
 -- 滚动更新
 ------------------------------------------------------------------------
 function E.UpdateScroll(G, dt)
-    local speed = (C.BASE_SCROLL_SPEED + G.level * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
+    local speed = (C.BASE_SCROLL_SPEED + G.difficultyLevel * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
     local scrollDelta = speed * dt
     G.scrollY = G.scrollY + scrollDelta
     G.distance = G.distance + scrollDelta
@@ -1348,8 +1348,8 @@ function E.SpawnWaveHorde(G, count)
         local zy = H + 80 + (row - 1) * 35 + math.random(0, 20)
 
         local zt = pool[math.random(1, #pool)]
-        local zSpeed = C.GetZombieSpeed(zt.speed, G.level)
-        local zHP = C.GetZombieHP(zt.hp, G.level)
+        local zSpeed = C.GetZombieSpeed(zt.speed, G.difficultyLevel)
+        local zHP = C.GetZombieHP(zt.hp, G.difficultyLevel)
 
         -- 分批入场延迟：每行延迟0.15秒，避免大量僵尸同帧分配Spine导致闪烁
         local spawnDelay = (row - 1) * 0.15
@@ -1379,7 +1379,7 @@ end
 
 function E.SpawnZombie(G)
     local zombies = G.zombies
-    local maxZ = math.min(C.ZOMBIE_MAX_BASE + G.level * C.ZOMBIE_MAX_PER_LEVEL, C.ZOMBIE_MAX_CAP)
+    local maxZ = math.min(C.ZOMBIE_MAX_BASE + G.difficultyLevel * C.ZOMBIE_MAX_PER_LEVEL, C.ZOMBIE_MAX_CAP)
     if #zombies >= maxZ then return end
 
     local W = G.screenW
@@ -1398,8 +1398,8 @@ function E.SpawnZombie(G)
     if #pool == 0 then return end
 
     local zt = pool[math.random(1, #pool)]
-    local zSpeed = C.GetZombieSpeed(zt.speed, G.level)
-    local zHP = C.GetZombieHP(zt.hp, G.level)
+    local zSpeed = C.GetZombieSpeed(zt.speed, G.difficultyLevel)
+    local zHP = C.GetZombieHP(zt.hp, G.difficultyLevel)
 
     table.insert(zombies, {
         x = zx,
@@ -1427,7 +1427,7 @@ end
 -- 丧尸更新 (朝列车移动，到达后攻击列车)
 ------------------------------------------------------------------------
 function E.UpdateZombies(G, dt)
-    local scrollSpeed = (C.BASE_SCROLL_SPEED + G.level * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
+    local scrollSpeed = (C.BASE_SCROLL_SPEED + G.difficultyLevel * C.SCROLL_SPEED_PER_LEVEL) * G.scrollSpeedMul
     local scrollDelta = scrollSpeed * dt
 
     -- 列车碰撞区域（与玩家碰撞使用相同参数）
@@ -1602,7 +1602,7 @@ function E.UpdateMounted(G, dt, moveX, moveY)
 
     -- 动画
     p.bobAnim = p.bobAnim + dt * 3
-    p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4)
+    p.atkSwingAnim = math.max(0, p.atkSwingAnim - dt * 4 * (G.atkSpdMul or 1.0))
 
     -- 上车攻击冷却（比步行更快）
     local atkInterval = 0.55 / (G.atkSpdMul or 1.0)

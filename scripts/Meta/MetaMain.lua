@@ -891,6 +891,83 @@ end
 ------------------------------------------------------------------------
 -- 底部Tab栏（完整按钮图片渲染）
 ------------------------------------------------------------------------
+-- 前向声明（定义在后面，但 checkTabBadge 需要引用）
+local findEquipData
+
+--- 检测某个Tab是否有红标需要显示
+local function checkTabBadge(tabId)
+    if tabId == "equip" then
+        -- 背包中有可升级装备（有同ID同等级副本）或有比当前装备更好的
+        if saveData and saveData.inventory then
+            local equippedSet = {}
+            if saveData.equipped then
+                for _, idx in pairs(saveData.equipped) do equippedSet[idx] = true end
+            end
+            for i, inst in ipairs(saveData.inventory) do
+                if not equippedSet[i] then
+                    local itemData = findEquipData(inst.id)
+                    if itemData then
+                        local curLevel = inst.level or 1
+                        -- 可升级？
+                        if curLevel < MD.EQUIP_MAX_LEVEL then
+                            for j, other in ipairs(saveData.inventory) do
+                                if j ~= i and other.id == inst.id and (other.level or 1) == curLevel then
+                                    return true
+                                end
+                            end
+                        end
+                        -- 比当前装备更好？
+                        if itemData.slot then
+                            local eqIdx = saveData.equipped and saveData.equipped[itemData.slot]
+                            if eqIdx then
+                                local eqInst = saveData.inventory[eqIdx]
+                                local eqData = eqInst and findEquipData(eqInst.id)
+                                if eqData then
+                                    local myScore = (itemData.quality or 1) * 100 + curLevel
+                                    local eqScore = (eqData.quality or 1) * 100 + (eqInst.level or 1)
+                                    if myScore > eqScore then return true end
+                                end
+                            else
+                                return true  -- 空槽位
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    elseif tabId == "train" then
+        -- 有可升级的炮塔
+        if saveData then
+            for _, t in ipairs(MD.TURRET_UPGRADES) do
+                if saveData.turretUnlocked[t.id] then
+                    local lv = saveData.turretLevels[t.id] or 0
+                    local frags = saveData.turretFrags[t.id] or 0
+                    local needFrags = math.floor(t.fragBase * (t.fragGrow ^ lv))
+                    local res = MD.TURRET_UPGRADE_RES[lv + 1] or MD.TURRET_UPGRADE_RES[#MD.TURRET_UPGRADE_RES]
+                    if lv < t.maxLv and frags >= needFrags
+                        and saveData.wood >= res.wood and saveData.stone >= res.stone then
+                        return true
+                    end
+                end
+            end
+        end
+    elseif tabId == "shop" then
+        if saveData then
+            -- 免费金币未领取
+            if not (saveData.dailyBought or {})["daily_gold"] then return true end
+            -- 充值一次/十次冷却完毕
+            local now = os.time()
+            local rechargeConf = MD.SHOP_RECHARGE
+            if rechargeConf then
+                local onceCD = (saveData.rechargeOnceTime or 0) + rechargeConf.cooldown_once - now
+                local tenCD  = (saveData.rechargeTenTime or 0) + rechargeConf.cooldown_ten - now
+                if onceCD <= 0 or tenCD <= 0 then return true end
+            end
+        end
+    end
+    return false
+end
+
 function M.DrawTabBar(vg, W, H)
     local h = L.tabBarH
     local y = H - h
@@ -918,6 +995,20 @@ function M.DrawTabBar(vg, W, H)
             local icoW = icoH  -- 图标近正方形
             local ix = tx + (tabW - icoW) / 2
             M.DrawImage(vg, img, ix, y, icoW, icoH)
+
+            -- 右上角红标（有提示时显示，包括当前选中Tab）
+            if checkTabBadge(tab.id) then
+                local badgeS = 16
+                local badgeImg = imgCache["btn_red_badge"]
+                if badgeImg and badgeImg ~= 0 then
+                    M.DrawImage(vg, badgeImg, ix + icoW - badgeS - 2, y + 4, badgeS, badgeS)
+                else
+                    nvgBeginPath(vg)
+                    nvgCircle(vg, ix + icoW - 8, y + 10, 5)
+                    nvgFillColor(vg, nvgRGBA(230, 50, 50, 255))
+                    nvgFill(vg)
+                end
+            end
         end
     end
 end
@@ -1839,6 +1930,14 @@ function M.DrawShopPanel(vg, W)
             nvgText(vg, btnX2 + btnW2 / 2, btnY3 + btnH2 / 2, "充值十次")
         end
 
+        -- 红标：冷却完毕时显示
+        if onceReady then
+            M.DrawRedBadge(vg, btnX1, btnY3, btnW2, btnH2, 13)
+        end
+        if tenReady then
+            M.DrawRedBadge(vg, btnX2, btnY3, btnW2, btnH2, 13)
+        end
+
         -- 缓存按钮位置
         L.shopRechargeOnceBtn = { x = btnX1, y = btnY3, w = btnW2, h = btnH2 }
         L.shopRechargeTenBtn  = { x = btnX2, y = btnY3, w = btnW2, h = btnH2 }
@@ -1880,6 +1979,7 @@ function M.DrawShopPanel(vg, W)
 
     -- 缓存商品按钮位置供点击使用
     L.shopItems = {}
+    local pendingBadges = {}  -- 收集需要绘制的红标，循环结束后统一绘制避免图层遮挡
 
     local dailyList = getDailyShopList()
     for i, item in ipairs(dailyList) do
@@ -1962,8 +2062,18 @@ function M.DrawShopPanel(vg, W)
             nvgText(vg, startX + diW + 2, pBtnY + pBtnH / 2, priceStr)
         end
 
+        -- 收集红标（免费且未领取），循环结束后统一绘制
+        if item.currency == "free" and not bought then
+            pendingBadges[#pendingBadges + 1] = { x = ix, y = iy, w = itemW, h = itemH }
+        end
+
         -- 缓存按钮区域
         L.shopItems[i] = { x = pBtnX, y = pBtnY, w = pBtnW, h = pBtnH }
+    end
+
+    -- 统一绘制红标（在所有卡片之上，避免被相邻卡片遮挡）
+    for _, b in ipairs(pendingBadges) do
+        M.DrawRedBadge(vg, b.x, b.y, b.w - 6, b.h, 16)
     end
 
     local totalRows = math.ceil(#dailyList / cols)
@@ -2045,7 +2155,7 @@ function M.DrawShopPanel(vg, W)
 end
 
 -- 根据装备id查找 EQUIP_DB 数据
-local function findEquipData(equipId)
+findEquipData = function(equipId)
     for _, eq in ipairs(MD.EQUIP_DB) do
         if eq.id == equipId then return eq end
     end
@@ -2435,6 +2545,35 @@ function M.DrawEquipPanel(vg, W)
                     if lkImg and lkImg ~= 0 then
                         local lkS = math.floor(cellSize * 0.28)
                         M.DrawImageFit(vg, lkImg, cx + 2, cy + cellSize - lkS - 2, lkS, lkS)
+                    end
+                end
+
+                -- 右上角标记：红标（可升级）或绿色箭头（比当前装备更好）
+                local curLevel = inst.level or 1
+                local hasDup = false
+                for di, other in ipairs(saveData.inventory) do
+                    if di ~= invIdx and other.id == inst.id and (other.level or 1) == curLevel then
+                        hasDup = true; break
+                    end
+                end
+                if hasDup and curLevel < MD.EQUIP_MAX_LEVEL then
+                    M.DrawRedBadge(vg, cx, cy, cellSize, cellSize)
+                elseif itemData.slot then
+                    -- 检查是否比当前装备的更好（品质更高或等级更高）
+                    local eqIdx = saveData.equipped and saveData.equipped[itemData.slot]
+                    if eqIdx then
+                        local eqInst = saveData.inventory[eqIdx]
+                        local eqData = eqInst and findEquipData(eqInst.id)
+                        if eqData then
+                            local myScore = (itemData.quality or 1) * 100 + curLevel
+                            local eqScore = (eqData.quality or 1) * 100 + (eqInst.level or 1)
+                            if myScore > eqScore then
+                                M.DrawGreenArrow(vg, cx, cy, cellSize, cellSize)
+                            end
+                        end
+                    else
+                        -- 该槽位没有装备，有可穿的就显示绿箭头
+                        M.DrawGreenArrow(vg, cx, cy, cellSize, cellSize)
                     end
                 end
             end
@@ -3004,14 +3143,16 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
         curY = curY + rowH
     end
 
-    -- ====== 底部按钮区域（3个按钮：分解 / 装备 / 洗练） ======
-    local btnAreaH = math.floor(popH * 0.10)
-    local btnAreaY = py + popH - btnAreaH - 6
-    local btnCount = 3
-    local btnGap = math.floor(innerPad * 0.6)
-    local btnW2 = math.floor((popW - innerPad * 2 - (btnCount - 1) * btnGap) / btnCount)
-    local btnH2 = math.floor(btnAreaH * 0.70)
-    local btnY2 = btnAreaY + (btnAreaH - btnH2) / 2
+    -- ====== 底部按钮区域（4个按钮：2×2 网格） ======
+    local btnRowGap = math.floor(innerPad * 0.4)   -- 上下行间距
+    local btnColGap = math.floor(innerPad * 0.5)   -- 左右列间距
+    local btnW2 = math.floor((popW - innerPad * 2 - btnColGap) / 2)
+    local btnH2 = math.floor(popH * 0.065)
+    local btnAreaH = btnH2 * 2 + btnRowGap
+    local btnRow1Y = py + popH - btnAreaH - math.floor(innerPad * 0.6)  -- 上排Y
+    local btnRow2Y = btnRow1Y + btnH2 + btnRowGap                       -- 下排Y
+    local btnColL = px + innerPad                                        -- 左列X
+    local btnColR = btnColL + btnW2 + btnColGap                          -- 右列X
 
     -- 检查是否已装备到某个槽位
     local eqSlotId = nil
@@ -3019,23 +3160,9 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
         if idx == invIdx then eqSlotId = slotName; break end
     end
 
-    -- 按钮1：分解（红色）
-    local decompX = px + innerPad
+    -- 按钮（上左）：装备/卸下（绿色/暗色）
     nvgBeginPath(vg)
-    nvgRoundedRect(vg, decompX, btnY2, btnW2, btnH2, 5)
-    nvgFillColor(vg, nvgRGBA(160, 50, 40, 220))
-    nvgFill(vg)
-    nvgFontFace(vg, "sans")
-    nvgFontSize(vg, math.floor(btnH2 * 0.42))
-    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-    nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
-    nvgText(vg, decompX + btnW2 / 2, btnY2 + btnH2 / 2, "分解")
-    L.equipDetailDecompBtn = { x = decompX, y = btnY2, w = btnW2, h = btnH2 }
-
-    -- 按钮2：装备/卸下（绿色/暗色）
-    local equipBtnX = decompX + btnW2 + btnGap
-    nvgBeginPath(vg)
-    nvgRoundedRect(vg, equipBtnX, btnY2, btnW2, btnH2, 5)
+    nvgRoundedRect(vg, btnColL, btnRow1Y, btnW2, btnH2, 5)
     if eqSlotId then
         nvgFillColor(vg, nvgRGBA(100, 70, 50, 220))
     else
@@ -3043,18 +3170,58 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
     end
     nvgFill(vg)
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, math.floor(btnH2 * 0.42))
+    nvgFontSize(vg, math.floor(btnH2 * 0.45))
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
-    nvgText(vg, equipBtnX + btnW2 / 2, btnY2 + btnH2 / 2, eqSlotId and "卸下" or "装备")
-    L.equipDetailEquipBtn = { x = equipBtnX, y = btnY2, w = btnW2, h = btnH2 }
+    nvgText(vg, btnColL + btnW2 / 2, btnRow1Y + btnH2 / 2, eqSlotId and "卸下" or "装备")
+    L.equipDetailEquipBtn = { x = btnColL, y = btnRow1Y, w = btnW2, h = btnH2 }
 
-    -- 按钮3：洗练（金色）
-    local reforgeX = equipBtnX + btnW2 + btnGap
-    local reforgeCost = MD.REFORGE_COST[eqData.quality] or 50
-    local canReforge = saveData.gold >= reforgeCost and inst.affixes and #inst.affixes > 0
+    -- 按钮（上右）：升级（蓝色）— 需要背包中有同ID同等级的另一件装备
+    local curLevel = inst.level or 1
+    local dupCount = 0  -- 统计背包中同ID同等级的其他装备数量
+    for i, other in ipairs(saveData.inventory) do
+        if i ~= invIdx and other.id == inst.id and (other.level or 1) == curLevel then
+            dupCount = dupCount + 1
+        end
+    end
+    local canUpgrade = curLevel < MD.EQUIP_MAX_LEVEL and dupCount >= 1
     nvgBeginPath(vg)
-    nvgRoundedRect(vg, reforgeX, btnY2, btnW2, btnH2, 5)
+    nvgRoundedRect(vg, btnColR, btnRow1Y, btnW2, btnH2, 5)
+    if canUpgrade then
+        nvgFillColor(vg, nvgRGBA(50, 100, 180, 220))
+    else
+        nvgFillColor(vg, nvgRGBA(50, 60, 80, 160))
+    end
+    nvgFill(vg)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(btnH2 * 0.45))
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, canUpgrade and 240 or 120))
+    nvgText(vg, btnColR + btnW2 / 2, btnRow1Y + btnH2 * 0.38, "升级")
+    -- 升级费用小字
+    nvgFontSize(vg, math.floor(btnH2 * 0.26))
+    nvgFillColor(vg, nvgRGBA(180, 220, 255, canUpgrade and 200 or 80))
+    nvgText(vg, btnColR + btnW2 / 2, btnRow1Y + btnH2 * 0.75, (eqData and eqData.name or inst.id) .. "×1 (" .. dupCount .. ")")
+    L.equipDetailUpgradeBtn = { x = btnColR, y = btnRow1Y, w = btnW2, h = btnH2 }
+
+    -- 按钮（下左）：分解（红色）
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnColL, btnRow2Y, btnW2, btnH2, 5)
+    nvgFillColor(vg, nvgRGBA(160, 50, 40, 220))
+    nvgFill(vg)
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, math.floor(btnH2 * 0.45))
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+    nvgText(vg, btnColL + btnW2 / 2, btnRow2Y + btnH2 / 2, "分解")
+    L.equipDetailDecompBtn = { x = btnColL, y = btnRow2Y, w = btnW2, h = btnH2 }
+
+    -- 按钮（下右）：洗练（金色）— 消耗木头和石头
+    local refCost = MD.REFORGE_COST[eqData.quality] or MD.REFORGE_COST[1]
+    local canReforge = saveData.wood >= refCost.wood and saveData.stone >= refCost.stone
+        and inst.affixes and #inst.affixes > 0
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, btnColR, btnRow2Y, btnW2, btnH2, 5)
     if canReforge then
         nvgFillColor(vg, nvgRGBA(180, 145, 40, 220))
     else
@@ -3062,15 +3229,15 @@ function M.DrawEquipDetailPopup(vg, W, invIdx)
     end
     nvgFill(vg)
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, math.floor(btnH2 * 0.42))
+    nvgFontSize(vg, math.floor(btnH2 * 0.45))
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(vg, nvgRGBA(255, 255, 255, canReforge and 240 or 120))
-    nvgText(vg, reforgeX + btnW2 / 2, btnY2 + btnH2 / 2, "洗练")
+    nvgText(vg, btnColR + btnW2 / 2, btnRow2Y + btnH2 * 0.38, "洗练")
     -- 洗练费用小字
-    nvgFontSize(vg, math.floor(btnH2 * 0.28))
+    nvgFontSize(vg, math.floor(btnH2 * 0.26))
     nvgFillColor(vg, nvgRGBA(255, 220, 100, canReforge and 200 or 80))
-    nvgText(vg, reforgeX + btnW2 / 2, btnY2 + btnH2 * 0.82, reforgeCost .. "金")
-    L.equipDetailReforgeBtn = { x = reforgeX, y = btnY2, w = btnW2, h = btnH2 }
+    nvgText(vg, btnColR + btnW2 / 2, btnRow2Y + btnH2 * 0.75, refCost.wood .. "木 " .. refCost.stone .. "石")
+    L.equipDetailReforgeBtn = { x = btnColR, y = btnRow2Y, w = btnW2, h = btnH2 }
 
     -- 缓存弹窗区域
     L.equipDetailPopup = { x = popX, y = popY, w = popW, h = popH }
@@ -3731,6 +3898,18 @@ function M.DrawTrainPanel(vg, W)
             nvgText(vg, rx + rw - 8, ry + rowH / 2, "详情 >")
         end
 
+        -- 右上角红标：可升级时显示
+        if unlocked then
+            local tLv = lv
+            local tFrags = saveData.turretFrags[t.id] or 0
+            local tNeedFrags = math.floor(t.fragBase * (t.fragGrow ^ tLv))
+            local tRes = MD.TURRET_UPGRADE_RES[tLv + 1] or MD.TURRET_UPGRADE_RES[#MD.TURRET_UPGRADE_RES]
+            if tLv < t.maxLv and tFrags >= tNeedFrags
+                and saveData.wood >= tRes.wood and saveData.stone >= tRes.stone then
+                M.DrawRedBadge(vg, rx, ry, rw, rowH, math.floor(rowH * 0.4))
+            end
+        end
+
         -- 缓存整行点击区域
         L.turretRows[idx] = { x = rx, y = ry, w = rw, h = rowH, turretIdx = idx }
     end
@@ -3759,7 +3938,9 @@ function M.DrawTurretDetailPopup(vg, W, tId)
     local lv = saveData.turretLevels[tId] or 0
     local frags = saveData.turretFrags[tId] or 0
     local needFrags = math.floor(tData.fragBase * (tData.fragGrow ^ lv))
+    local tUpgRes = MD.TURRET_UPGRADE_RES[lv + 1] or MD.TURRET_UPGRADE_RES[#MD.TURRET_UPGRADE_RES]
     local canUpgrade = unlocked and lv < tData.maxLv and frags >= needFrags
+        and saveData.wood >= tUpgRes.wood and saveData.stone >= tUpgRes.stone
     local affixes = MD.TURRET_AFFIXES[tId] or {}
 
     -- 半透明遮罩
@@ -4017,7 +4198,11 @@ function M.DrawTurretDetailPopup(vg, W, tId)
         nvgText(vg, upgBtnX + btnW2 / 2, btnY2 + btnH2 / 2, "未解锁")
     else
         nvgFillColor(vg, nvgRGBA(255, 255, 255, canUpgrade and 240 or 120))
-        nvgText(vg, upgBtnX + btnW2 / 2, btnY2 + btnH2 / 2, "升级")
+        nvgText(vg, upgBtnX + btnW2 / 2, btnY2 + btnH2 * 0.38, "升级")
+        -- 显示资源费用
+        nvgFontSize(vg, math.floor(btnH2 * 0.26))
+        nvgFillColor(vg, nvgRGBA(180, 220, 255, canUpgrade and 200 or 80))
+        nvgText(vg, upgBtnX + btnW2 / 2, btnY2 + btnH2 * 0.75, tUpgRes.wood .. "木 " .. tUpgRes.stone .. "石")
     end
     L.turretDetailUpgradeBtn = { x = upgBtnX, y = btnY2, w = btnW2, h = btnH2 }
 
@@ -4420,6 +4605,49 @@ function M.DrawImageFit(vg, img, x, y, maxW, maxH)
     local dx = x + math.floor((maxW - dw) / 2)
     local dy = y + math.floor((maxH - dh) / 2)
     M.DrawImage(vg, img, dx, dy, dw, dh)
+end
+
+------------------------------------------------------------------------
+-- 右上角红标（使用图片素材）
+------------------------------------------------------------------------
+function M.DrawRedBadge(vg, x, y, w, h, size)
+    local badgeImg = imgCache["btn_red_badge"]
+    local s = size or math.floor(math.min(w, h) * 0.35)
+    local bx = x + w - s * 0.6
+    local by = y - s * 0.3
+    if badgeImg and badgeImg ~= 0 then
+        M.DrawImage(vg, badgeImg, bx, by, s, s)
+    else
+        nvgBeginPath(vg)
+        nvgCircle(vg, bx + s / 2, by + s / 2, s * 0.4)
+        nvgFillColor(vg, nvgRGBA(230, 50, 50, 255))
+        nvgFill(vg)
+    end
+end
+
+--- 右上角绿色上升箭头（纯NanoVG绘制）
+function M.DrawGreenArrow(vg, x, y, w, h, size)
+    local s = size or math.floor(math.min(w, h) * 0.30)
+    local cx = x + w - s * 0.5
+    local cy = y + s * 0.5
+    -- 绿色圆形背景
+    nvgBeginPath(vg)
+    nvgCircle(vg, cx, cy, s * 0.45)
+    nvgFillColor(vg, nvgRGBA(50, 200, 80, 230))
+    nvgFill(vg)
+    -- 白色上箭头
+    local arrS = s * 0.28
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, cx, cy - arrS)
+    nvgLineTo(vg, cx + arrS * 0.7, cy + arrS * 0.2)
+    nvgLineTo(vg, cx - arrS * 0.7, cy + arrS * 0.2)
+    nvgClosePath(vg)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 255))
+    nvgFill(vg)
+    -- 箭杆
+    nvgBeginPath(vg)
+    nvgRect(vg, cx - arrS * 0.25, cy + arrS * 0.2, arrS * 0.5, arrS * 0.6)
+    nvgFill(vg)
 end
 
 ------------------------------------------------------------------------
@@ -5688,7 +5916,16 @@ function M.DrawRechargePopup(vg, W, H)
     local popW = math.min(W * 0.85, 300)
     local cellPad = 8
     local cols = math.min(count, 5)
-    local cellSize = math.floor((popW - cellPad * (cols + 1)) / cols)
+    -- 单充时使用与十连充一致的小卡片尺寸
+    local maxCellSize = 56
+    local cellSize
+    if count <= 1 then
+        cellSize = maxCellSize
+        popW = math.min(popW, 180)  -- 单充弹窗更紧凑
+    else
+        cellSize = math.floor((popW - cellPad * (cols + 1)) / cols)
+        if cellSize > maxCellSize then cellSize = maxCellSize end
+    end
     local rows = math.ceil(count / cols)
     local gridH = rows * (cellSize + cellPad) + cellPad
     local headerH = 44
@@ -6077,18 +6314,72 @@ function M.HandleClick(x, y, W, H)
             return true
         end
 
+        -- 升级按钮
+        if hitBtn(L.equipDetailUpgradeBtn) then
+            local inst = saveData.inventory[equipDetailIdx]
+            if inst then
+                local eqData = findEquipData(inst.id)
+                local curLevel = inst.level or 1
+                if curLevel >= MD.EQUIP_MAX_LEVEL then
+                    print("[Equip] 已达最高等级")
+                else
+                    -- 查找背包中同ID同等级的另一件装备作为材料
+                    local matIdx = nil
+                    for i, other in ipairs(saveData.inventory) do
+                        if i ~= equipDetailIdx and other.id == inst.id and (other.level or 1) == curLevel then
+                            matIdx = i
+                            break
+                        end
+                    end
+                    if matIdx then
+                        -- 先卸下材料装备（如果已装备）
+                        for slotName, idx in pairs(saveData.equipped) do
+                            if idx == matIdx then
+                                saveData.equipped[slotName] = nil
+                                break
+                            end
+                        end
+                        -- 移除材料装备
+                        table.remove(saveData.inventory, matIdx)
+                        -- 修正索引（如果材料在当前装备前面，当前装备索引要前移）
+                        if matIdx < equipDetailIdx then
+                            equipDetailIdx = equipDetailIdx - 1
+                        end
+                        -- 修正 equipped 中的索引
+                        local newEquipped = {}
+                        for slotName, idx in pairs(saveData.equipped) do
+                            if idx > matIdx then
+                                newEquipped[slotName] = idx - 1
+                            else
+                                newEquipped[slotName] = idx
+                            end
+                        end
+                        saveData.equipped = newEquipped
+                        -- 升级当前装备
+                        inst.level = curLevel + 1
+                        print("[Equip] 升级 " .. (eqData and eqData.name or inst.id) .. " → Lv." .. inst.level .. "（消耗同装备×1）")
+                    else
+                        print("[Equip] 需要同ID同等级的装备作为材料")
+                    end
+                end
+            end
+            return true
+        end
+
         -- 洗练按钮
         if hitBtn(L.equipDetailReforgeBtn) then
             local inst = saveData.inventory[equipDetailIdx]
             if inst then
                 local eqData = findEquipData(inst.id)
-                local cost = MD.REFORGE_COST[eqData and eqData.quality or 1] or 50
-                if saveData.gold >= cost and inst.affixes and #inst.affixes > 0 then
-                    saveData.gold = saveData.gold - cost
+                local refCost = MD.REFORGE_COST[eqData and eqData.quality or 1] or MD.REFORGE_COST[1]
+                if saveData.wood >= refCost.wood and saveData.stone >= refCost.stone
+                    and inst.affixes and #inst.affixes > 0 then
+                    saveData.wood = saveData.wood - refCost.wood
+                    saveData.stone = saveData.stone - refCost.stone
                     inst.affixes = MD.GenerateAffixes(eqData and eqData.quality or 1)
-                    print("[Equip] 洗练 " .. (eqData and eqData.name or inst.id) .. "，花费 " .. cost)
+                    print("[Equip] 洗练 " .. (eqData and eqData.name or inst.id) .. "，花费 " .. refCost.wood .. "木 " .. refCost.stone .. "石")
                 else
-                    print("[Equip] 金币不足或无随机属性")
+                    print("[Equip] 木头或石头不足，或无随机属性")
                 end
             end
             return true
@@ -6402,12 +6693,24 @@ function M.HandleTrainClick(x, y, W)
             local lv = saveData.turretLevels[turretDetailId] or 0
             local frags = saveData.turretFrags[turretDetailId] or 0
             local needFrags = math.floor(tData.fragBase * (tData.fragGrow ^ lv))
-            if unlocked and lv < tData.maxLv and frags >= needFrags then
+            local tUpgRes2 = MD.TURRET_UPGRADE_RES[lv + 1] or MD.TURRET_UPGRADE_RES[#MD.TURRET_UPGRADE_RES]
+            if unlocked and lv < tData.maxLv and frags >= needFrags
+                and saveData.wood >= tUpgRes2.wood and saveData.stone >= tUpgRes2.stone then
                 saveData.turretFrags[turretDetailId] = frags - needFrags
+                saveData.wood = saveData.wood - tUpgRes2.wood
+                saveData.stone = saveData.stone - tUpgRes2.stone
                 saveData.turretLevels[turretDetailId] = lv + 1
-                print("[Meta] " .. tData.name .. " 升级到 Lv." .. (lv + 1))
+                print("[Meta] " .. tData.name .. " 升级到 Lv." .. (lv + 1) .. "，花费 " .. tUpgRes2.wood .. "木 " .. tUpgRes2.stone .. "石")
             else
-                print("[Meta] 碎片不足，需要 " .. needFrags)
+                if not unlocked then
+                    print("[Meta] 炮塔未解锁")
+                elseif lv >= tData.maxLv then
+                    print("[Meta] 已达最高等级")
+                elseif frags < needFrags then
+                    print("[Meta] 碎片不足，需要 " .. needFrags)
+                else
+                    print("[Meta] 木头或石头不足，需要 " .. tUpgRes2.wood .. "木 " .. tUpgRes2.stone .. "石")
+                end
             end
             return true
         end

@@ -75,9 +75,7 @@ local skillFrameHandle = 0            -- 技能按钮边框
 local skillBombHandle = 0             -- 角色技能图标（炸弹/默认）
 local skillIconHandles = {}           -- 角色技能图标 {charId = handle}
 -- 升级面板：刷新/获取全部按钮图片
-local refreshFreeHandle = 0           -- 免费刷新按钮
-local refreshVideoHandle = 0          -- 视频刷新按钮
-local refreshDiamondHandle = 0        -- 钻石刷新按钮（免费用完后）
+local refreshDiamondHandle = 0        -- 钻石刷新按钮
 local getAllHandle = 0                 -- 获取全部按钮（钻石版）
 -- 炸弹 & 爆炸帧动画句柄
 local bombImgHandle = 0               -- 落地炸弹图片
@@ -203,6 +201,7 @@ local function ResetGame()
         stage = 1,               -- 当前关卡（通关10波后+1）
         currentWave = 0,         -- 开局为0，倒计时结束后递增到1才是第一波
         maxWaves = 10,
+        difficultyLevel = 1,     -- 全局难度等级（由stage+wave决定，不影响升级等级）
         waveTimer = 0,           -- 当前波次已进行时间
         waveDuration = 30,       -- 每波持续时间(秒)
         waveProgress = 0,        -- 波次进度 0~1（用于新丧尸mid-wave出场）
@@ -231,9 +230,8 @@ local function ResetGame()
         -- 升级 UI
         upgradeCards = {},
         upgradeCardBtns = {},
-        refreshFreeLeft = 1,        -- 免费刷新剩余次数（每局1次）
-        refreshVideoLeft = 3,       -- 视频刷新剩余次数（每局3次）
-        getAllVideoLeft = 2,         -- 获取全部剩余次数（每局2次）
+        refreshUsedThisLevel = false, -- 本次升级是否已使用刷新（每次升级重置）
+        getAllUsedThisGame = false,   -- 本局是否已使用获取全部（每局1次）
 
         -- 菜单/重开按钮
         menuBtn = nil,
@@ -340,8 +338,6 @@ local function MountImageHandles()
     -- 升级品质标签图片
     G.qualityImgs = qualityImgHandles
     -- 升级面板刷新/获取全部按钮图片
-    G.refreshFreeImg = refreshFreeHandle
-    G.refreshVideoImg = refreshVideoHandle
     G.refreshDiamondImg = refreshDiamondHandle
     G.getAllImg = getAllHandle
     -- 激光序列帧（ResetGame会清空G，每次MountImageHandles重新挂载）
@@ -498,7 +494,13 @@ local function UpdateHeroSpine(dt)
         heroSpineInst:SetAnimation(0, desiredAnim, loop)
     end
 
-    heroSpineInst:Update(dt)
+    -- 攻击动画根据攻速倍率加速播放
+    local spineDt = dt
+    if desiredAnim == "attack" then
+        spineDt = dt * (G.atkSpdMul or 1.0)
+    end
+    heroSpineInst:Update(spineDt)
+    heroSpineInst:UpdateWorldTransform()
 end
 
 --- 根据局外选择的角色动态加载图片到 G
@@ -901,11 +903,9 @@ function Start()
     print("Loaded quality images: " .. #qualityImgHandles)
 
     -- 升级面板：刷新/获取全部按钮图片
-    refreshFreeHandle = nvgCreateImage(vg, "image/免费刷新.png", 0)
-    refreshVideoHandle = nvgCreateImage(vg, "image/视频点刷新.png", 0)
     refreshDiamondHandle = nvgCreateImage(vg, "image/df009fd3-70c1-40a5-8dd2-1cbe98f2d509 (1).png", 0)
     getAllHandle = nvgCreateImage(vg, "image/Layer_0 (14).png", 0)
-    print("Loaded refresh/getAll btn images: free=" .. refreshFreeHandle .. " diamond=" .. refreshDiamondHandle .. " getAll=" .. getAllHandle)
+    print("Loaded refresh/getAll btn images: diamond=" .. refreshDiamondHandle .. " getAll=" .. getAllHandle)
 
     -- 炸弹 & 爆炸帧动画
     bombImgHandle = nvgCreateImage(vg, "image/炸弹/炸弹.png", 0)
@@ -1146,7 +1146,7 @@ function HandleUpdate(eventType, eventData)
         if G.zombieSpawnTimer >= spawnInterval then
             G.zombieSpawnTimer = G.zombieSpawnTimer - spawnInterval
             -- 每次生成多只僵尸：随关卡进度递增
-            local spawnCount = 1 + math.floor(G.level / 4)  -- 每4级多生成1只
+            local spawnCount = 1 + math.floor((G.difficultyLevel or 1) / 4)  -- 每4难度级多生成1只
             spawnCount = math.min(spawnCount, 5)  -- 单次最多5只
             for i = 1, spawnCount do
                 Ent.SpawnZombie(G)
@@ -1174,11 +1174,11 @@ function HandleUpdate(eventType, eventData)
             G.waveActive = true
             G.waveTimer = 0
             G.waveCountdown = G.waveDuration
-            G.level = (G.stage - 1) * G.maxWaves + G.currentWave  -- 全局难度等级
+            G.difficultyLevel = (G.stage - 1) * G.maxWaves + G.currentWave  -- 全局难度等级（不影响升级等级）
 
             -- 波次开始时批量涌现一大群僵尸（第一关第一波跳过）
             if not (G.stage == 1 and G.currentWave == 1) then
-                local hordeCount = math.min(6 + G.level * 3 + G.currentWave * 2, 50)
+                local hordeCount = math.min(6 + G.difficultyLevel * 3 + G.currentWave * 2, 50)
                 Ent.SpawnWaveHorde(G, hordeCount)
             end
         end
