@@ -3821,42 +3821,46 @@ function M.DrawTurretDetailPopup(vg, W, tId)
     nvgFillColor(vg, nvgRGBA(38, 42, 55, 200))
     nvgFill(vg)
 
-    -- 左侧：大图标
-    local bigIcoS = math.floor(cardH * 0.70)
+    -- 左侧：大图标（占卡片高度85%，垂直居中）
+    local bigIcoS = math.floor(cardH * 0.85)
     local bigIcoPad = math.floor((cardH - bigIcoS) / 2)
+    local icoX = px + innerPad + bigIcoPad
+    local icoY = cardY + bigIcoPad
     local tImg = imgCache[tData.icon]
     if tImg and tImg ~= 0 then
         if not unlocked then
             nvgSave(vg)
             nvgGlobalAlpha(vg, 0.35)
-            M.DrawImage(vg, tImg, px + innerPad + bigIcoPad, cardY + bigIcoPad, bigIcoS, bigIcoS)
+            M.DrawImageFit(vg, tImg, icoX, icoY, bigIcoS, bigIcoS)
             nvgRestore(vg)
         else
-            M.DrawImage(vg, tImg, px + innerPad + bigIcoPad, cardY + bigIcoPad, bigIcoS, bigIcoS)
+            M.DrawImageFit(vg, tImg, icoX, icoY, bigIcoS, bigIcoS)
         end
     end
 
-    -- 右侧：属性信息
-    local infoX = px + innerPad + bigIcoPad + bigIcoS + 10
+    -- 右侧：属性信息（垂直居中于卡片）
+    local infoX = icoX + bigIcoS + 10
     local infoFontSize = math.floor(popW * 0.035)
-    local lineH = math.floor(infoFontSize * 1.6)
+    local lineH = math.floor(infoFontSize * 1.7)
+    local totalTextH = lineH * 4
+    local textStartY = cardY + math.floor((cardH - totalTextH) / 2)
     nvgFontFace(vg, "sans")
     nvgFontSize(vg, infoFontSize)
     nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
 
     -- 等级
     nvgFillColor(vg, nvgRGBA(200, 180, 100, 255))
-    nvgText(vg, infoX, cardY + bigIcoPad + lineH * 0.5, "Lv." .. lv .. " / " .. tData.maxLv)
+    nvgText(vg, infoX, textStartY + lineH * 0.5, "Lv." .. lv .. " / " .. tData.maxLv)
 
     -- 攻击力
     nvgFillColor(vg, nvgRGBA(200, 195, 180, 220))
-    nvgText(vg, infoX, cardY + bigIcoPad + lineH * 1.5, "攻击: " .. tData.baseDmg)
+    nvgText(vg, infoX, textStartY + lineH * 1.5, "攻击: " .. tData.baseDmg)
 
     -- 攻速
-    nvgText(vg, infoX, cardY + bigIcoPad + lineH * 2.5, "攻速: " .. string.format("%.1fs", tData.baseCD))
+    nvgText(vg, infoX, textStartY + lineH * 2.5, "攻速: " .. string.format("%.1fs", tData.baseCD))
 
     -- 射程
-    nvgText(vg, infoX, cardY + bigIcoPad + lineH * 3.5, "射程: " .. string.format("%.1f", tData.baseRange))
+    nvgText(vg, infoX, textStartY + lineH * 3.5, "射程: " .. string.format("%.1f", tData.baseRange))
 
     -- 碎片进度条
     if unlocked and lv < tData.maxLv then
@@ -6103,50 +6107,53 @@ function M.HandleClick(x, y, W, H)
         return true
     end
 
-    -- 签到按钮检测（header 区域）
-    if L.signinBtn then
-        local sb = L.signinBtn
-        if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
-            signInPopup.show = true
-            signInPopup.animTimer = 0
-            signInPopup.claimAnim = 0
-            print("[Meta] Open sign-in popup")
-            return true
+    -- 签到/排行/公告/设置按钮只在战斗界面响应
+    if activeTab == "battle" then
+        -- 签到按钮检测（header 区域）
+        if L.signinBtn then
+            local sb = L.signinBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                signInPopup.show = true
+                signInPopup.animTimer = 0
+                signInPopup.claimAnim = 0
+                print("[Meta] Open sign-in popup")
+                return true
+            end
         end
-    end
 
-    -- 排行按钮检测（header 区域）
-    if L.rankingBtn then
-        local rb = L.rankingBtn
-        if x >= rb.x and x <= rb.x + rb.w and y >= rb.y and y <= rb.y + rb.h then
-            rankingPopup.show = true
-            rankingPopup.animTimer = 0
-            fetchRankingData()
-            print("[Meta] Open ranking popup")
-            return true
+        -- 排行按钮检测（header 区域）
+        if L.rankingBtn then
+            local rb = L.rankingBtn
+            if x >= rb.x and x <= rb.x + rb.w and y >= rb.y and y <= rb.y + rb.h then
+                rankingPopup.show = true
+                rankingPopup.animTimer = 0
+                fetchRankingData()
+                print("[Meta] Open ranking popup")
+                return true
+            end
         end
-    end
 
-    -- 公告按钮检测（header 区域）
-    if L.announceBtn then
-        local ab = L.announceBtn
-        if x >= ab.x and x <= ab.x + ab.w and y >= ab.y and y <= ab.y + ab.h then
-            mailPopup.show = true
-            mailPopup.animTimer = 0
-            mailPopup.detailIdx = nil
-            print("[Meta] Open mail popup")
-            return true
+        -- 公告按钮检测（header 区域）
+        if L.announceBtn then
+            local ab = L.announceBtn
+            if x >= ab.x and x <= ab.x + ab.w and y >= ab.y and y <= ab.y + ab.h then
+                mailPopup.show = true
+                mailPopup.animTimer = 0
+                mailPopup.detailIdx = nil
+                print("[Meta] Open mail popup")
+                return true
+            end
         end
-    end
 
-    -- 设置按钮检测
-    if L.settingBtn then
-        local sb = L.settingBtn
-        if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
-            settingPopup.show = true
-            settingPopup.animTimer = 0
-            print("[Meta] Open setting popup")
-            return true
+        -- 设置按钮检测
+        if L.settingBtn then
+            local sb = L.settingBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                settingPopup.show = true
+                settingPopup.animTimer = 0
+                print("[Meta] Open setting popup")
+                return true
+            end
         end
     end
 
