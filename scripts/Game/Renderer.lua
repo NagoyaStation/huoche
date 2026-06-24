@@ -1252,11 +1252,12 @@ function R.DrawPlayer(vg, G)
     end
 
     -- ========== Spine 渲染（优先，在 translate 之前，使用绝对设计坐标） ==========
+    -- 上车时跳过 Spine，改用静态图片模式
     local heroSpInst = G.heroSpineInst
-    if heroSpInst then
+    if heroSpInst and not G.mounted then
         -- shaun spine: skeleton height=379.54, root bone at y=0 (near feet)
         -- 缩放匹配帧图视觉大小(~53px)，与僵尸 drawScale=0.14 保持一致
-        local sc = 0.35
+        local sc = 0.14
         local footDesignY = py + C.PLAYER_H * 0.5  -- 脚底对齐碰撞盒底部
         local facingScale = sc * p.facing  -- facing: 1=右, -1=左
         nvgSave(vg)
@@ -1276,8 +1277,8 @@ function R.DrawPlayer(vg, G)
     nvgSave(vg)
     nvgTranslate(vg, px, py)
 
-    -- 如果 spine 已渲染，跳过帧图但保留后续效果（光圈、阴影、背包等）
-    if heroSpInst then
+    -- 如果 spine 已渲染（非上车），跳过帧图但保留后续效果（光圈、阴影、背包等）
+    if heroSpInst and not G.mounted then
         goto hero_after_body
     end
 
@@ -1352,7 +1353,7 @@ function R.DrawPlayer(vg, G)
         local imgW, imgH = imgSize(vg, G.mountedShootImg)
         if imgW <= 0 or imgH <= 0 then imgW, imgH = 542, 1103 end
         local ratio = imgH / imgW  -- ~2.03
-        local drawW = C.PLAYER_W      -- 上车状态角色
+        local drawW = C.PLAYER_W * 1.25  -- 上车状态角色（稍大）
         local drawH = drawW * ratio
 
         -- 原图枪口朝下(π/2)，旋转到瞄准方向
@@ -1363,7 +1364,7 @@ function R.DrawPlayer(vg, G)
         nvgRotate(vg, rot)
 
         local dx = -drawW / 2
-        local dy = -drawH / 2
+        local dy = -drawH / 2 - drawH * 0.12
         local imgPaint = nvgImagePattern(vg, dx, dy, drawW, drawH, 0, G.mountedShootImg, stunAlpha / 255.0)
         nvgBeginPath(vg)
         nvgRect(vg, dx, dy, drawW, drawH)
@@ -1549,8 +1550,9 @@ function R.DrawPlayer(vg, G)
 
     -- 背包数量显示（下车且有携带资源时显示 "当前/上限"）
     if not G.mounted and p.carrying and p.carrying > 0 then
-        -- 抵消角色朝向翻转，保持文字正向
-        if p.facing < 0 then nvgScale(vg, -1, 1) end
+        -- 抵消角色朝向翻转，保持文字正向（仅帧图模式需要，Spine模式NVG上下文无翻转）
+        local needCounterFlip = (not heroSpInst) and (p.facing < 0)
+        if needCounterFlip then nvgScale(vg, -1, 1) end
 
         local maxC = G.maxCarry or C.MAX_CARRY
         local bagStr = p.carrying .. "/" .. maxC
@@ -1586,7 +1588,7 @@ function R.DrawPlayer(vg, G)
         nvgText(vg, bagX, bagY, bagStr)
 
         -- 恢复翻转
-        if p.facing < 0 then nvgScale(vg, -1, 1) end
+        if needCounterFlip then nvgScale(vg, -1, 1) end
     end
 
     nvgRestore(vg)
@@ -2638,11 +2640,11 @@ function R.DrawMenu(vg, G)
     -- 大标题阴影
     nvgFontSize(vg, 28 * s)
     nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
-    nvgText(vg, W / 2 + 2, titleY + 2, "末世：我开火车送快递")
+    nvgText(vg, W / 2 + 2, titleY + 2, "我在尸潮开火车")
 
     -- 大标题
     nvgFillColor(vg, nvgRGBA(230, 240, 255, 255))
-    nvgText(vg, W / 2, titleY, "末世：我开火车送快递")
+    nvgText(vg, W / 2, titleY, "我在尸潮开火车")
 
     -- 装饰分割线
     local lineW = 90 * s

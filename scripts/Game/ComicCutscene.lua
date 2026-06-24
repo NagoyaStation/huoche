@@ -113,10 +113,10 @@ end
 function CC.HandleClick(x, y, DW, DH)
     if not state.active then return end
 
-    -- 跳过按钮点击区域（右上角，与 Draw 中绘制位置对齐，加宽松区域）
+    -- 跳过按钮点击区域（左上角，与 Draw 中绘制位置对齐，加宽松区域）
     local skipH = 30
     local skipW = 78
-    local skipX = DW - skipW - 12
+    local skipX = 12
     local skipY = 46
     -- 扩大点击区域（上下左右各扩展 10px）
     if x >= skipX - 10 and x <= skipX + skipW + 10
@@ -313,7 +313,7 @@ function CC.Draw(vg, DW, DH)
         end
     end
 
-    -- 3. 跳过按钮（右上角，图片）
+    -- 3. 跳过按钮（左上角，图片）
     local skipH = 30
     local skipW = 78
     if state.skipHandle and state.skipHandle ~= 0 then
@@ -323,7 +323,7 @@ function CC.Draw(vg, DW, DH)
             skipW = math.floor(skipH * (sW / sH))
         end
     end
-    local skipX = DW - skipW - 12
+    local skipX = 12
     local skipY = 46
 
     if state.skipHandle and state.skipHandle ~= 0 then

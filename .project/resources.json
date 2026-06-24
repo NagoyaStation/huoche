@@ -2,10 +2,80 @@
   "$schema": "../schemas/resources.schema.json",
 
   "preload_groups": [
-
+    "comic",
+    "level1_spine",
+    "level1_battle"
   ],
 
   "groups": {
+    "comic": [
+      "image/开幕剧情/*.png",
+      "image/通用背景.png",
+      "image/Layer_0 (10).png",
+      "image/title_bg_20260421072428.png"
+    ],
+    "level1_spine": [
+      "spine/shaun/*",
+      "spine/Zombies/famish/*",
+      "spine/Zombies/twitch/*"
+    ],
+    "level1_battle": [
+      "image/hero_idle_20260414072856.png",
+      "image/hero_axe_raise_20260414072858.png",
+      "image/hero_axe_swing_20260414072953.png",
+      "image/hero_axe_hit_20260414072957.png",
+      "image/hero_axe_recover_20260414072959.png",
+      "image/hero_run_a_20260414082846.png",
+      "image/hero_run_b_20260414082855.png",
+      "image/hero_run_c_20260414082948.png",
+      "image/hero_run_d_20260414083003.png",
+      "image/火车头.png",
+      "image/train_carriage_20260416100938.png",
+      "image/train_front_20260422062046.png",
+      "image/沙袋雪地.png",
+      "image/bg_white_snow_20260416070957.png",
+      "image/铁轨旧.png",
+      "image/arrow_projectile.png",
+      "image/edited_map_dead_tree_clean_20260416060145.png",
+      "image/edited_map_pine_tree_clean_20260416060114.png",
+      "image/edited_map_green_tree_clean_20260416060048.png",
+      "image/edited_map_stone_clean_20260416060244.png",
+      "image/edited_map_ore_clean_20260416060319.png",
+      "image/map_bush_small_20260416074158.png",
+      "image/map_pebble_v2_20260416074909.png",
+      "image/地图装饰/*",
+      "image/hud_gold_coin.png",
+      "image/图层_2 (1).png",
+      "image/图层_3 (1).png",
+      "image/图层_4 (1).png",
+      "image/hud_settings.png",
+      "image/局内资源外框.png",
+      "image/图层_7.png",
+      "image/内框.png",
+      "image/设置框底.png",
+      "image/怪物波次UI.png",
+      "image/击杀怪物数量.png",
+      "image/炮塔底（顶部）.png",
+      "image/炮塔底（中部）.png",
+      "image/炮塔底（底部）.png",
+      "image/炮塔上锁.png",
+      "image/炮塔显示框.png",
+      "image/hp_bar_frame_20260420020959.png",
+      "image/22fb797b.png",
+      "image/弓箭炮塔高清.png",
+      "image/狙击炮塔高清.png",
+      "image/喷火炮塔高清.png",
+      "image/电能炮塔高清.png",
+      "image/火箭炮塔高清.png",
+      "image/机枪炮塔高清.png",
+      "image/局内上车按钮.png",
+      "image/局内上车按钮不可用.png",
+      "image/局内技能按钮.png",
+      "image/局内技能炸弹.png"
+    ],
+    "battle": [
+      "image/**"
+    ],
     "default": [
       "**"
     ]

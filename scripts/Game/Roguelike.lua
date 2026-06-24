@@ -1,8 +1,10 @@
+---@diagnostic disable: assign-type-mismatch, missing-parameter
 -- Game/Roguelike.lua - 升级系统：三选一强化
 local C = require "Game.Config"
 local Ent = require "Game.Entities"
 local Turret = require "Game.Turret"
 local Drone = require "Game.Drone"
+local Audio = require "Game.Audio"
 local RL = {}
 
 ------------------------------------------------------------------------
@@ -52,8 +54,10 @@ function RL.PrepareUpgrade(G)
         elseif card.isTurretUpgrade then
             -- 炮塔升级卡：该炮塔已在局内解锁才显示，且不是第一次升级
             if not isFirstUpgrade and unlockedTypes[card.turretType] then
-                -- 局外等级门控：卡片有 unlockLevel 时，需局外炮塔等级 >= unlockLevel
-                if card.unlockLevel then
+                -- 局外等级门控：仅对高级机制卡（unlockLevel>=4）且无prereq的主卡生效
+                -- 基础属性卡（unlockLevel 1-3：伤害/射程/攻速）部署炮塔即可刷到
+                -- 有prereq的进阶卡（剧毒强化等）不受局外等级限制，靠prereq自控
+                if card.unlockLevel and card.unlockLevel >= 4 and not card.prereq then
                     local metaLv = (G.metaTurretLevels and G.metaTurretLevels[card.turretType]) or 0
                     if metaLv < card.unlockLevel then
                         goto continueFilter
@@ -94,11 +98,31 @@ function RL.PrepareUpgrade(G)
         end
         ::continueFilter::
     end
-    -- 打乱
-    for i = #available, 2, -1 do
-        local j = math.random(1, i)
-        available[i], available[j] = available[j], available[i]
+    -- 加权打乱：通用卡权重降低，炮塔升级卡/无人机卡权重正常
+    -- 通用卡权重 0.35，其他卡权重 1.0
+    local function weightedShuffle(arr)
+        local n = #arr
+        if n <= 1 then return end
+        -- 按权重排序：加权随机值越大越靠前
+        local keys = {}
+        for i = 1, n do
+            local card = C.UPGRADES[arr[i]]
+            local w = 1.0
+            if not card.isTurret and not card.isTurretUpgrade and not card.isDrone then
+                w = 0.35  -- 通用强化卡权重降低
+            end
+            keys[i] = { idx = i, key = math.random() ^ (1.0 / w) }
+        end
+        table.sort(keys, function(a, b) return a.key > b.key end)
+        local sorted = {}
+        for i = 1, n do
+            sorted[i] = arr[keys[i].idx]
+        end
+        for i = 1, n do
+            arr[i] = sorted[i]
+        end
     end
+    weightedShuffle(available)
 
     -- 前6次强化：炮塔解锁卡排到最前，确保4种武器尽早解锁
     if G.level <= 6 then
@@ -205,6 +229,9 @@ function RL.PrepareUpgrade(G)
         G.submitFlyItems = {}
     end
 
+    -- 播放升级音效
+    Audio.PlayUpgrade()
+
     -- 先播升级特效，再弹面板
     G.state = "upgradeVfx"
     G.upgradeVfxTimer = 0
@@ -213,12 +240,7 @@ function RL.PrepareUpgrade(G)
     G.upgradeCardEnterTimer = 0 -- 卡片入场动画计时器
     G.upgradeGlowTime = 0       -- 品质光晕时钟
 
-    -- 升级奖励金币
-    G.gold = G.gold + C.GOLD_PER_LEVEL
-    -- 同步更新saveData金币
-    local sd = G.saveData
-    if sd then sd.gold = (sd.gold or 0) + C.GOLD_PER_LEVEL end
-    Ent.SpawnFloatText(G, G.screenW / 2, G.screenH * 0.4, "+" .. C.GOLD_PER_LEVEL .. " Gold!", "gold")
+    -- 升级不再奖励金币（只有击杀僵尸才给金币）
 end
 
 ------------------------------------------------------------------------

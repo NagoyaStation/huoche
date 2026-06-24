@@ -4,6 +4,7 @@
 ------------------------------------------------------------------------
 local C = require "Game.Config"
 local E = require "Game.Entities"
+local Audio = require "Game.Audio"
 local T = {}
 
 -- 飙血颜色
@@ -23,6 +24,20 @@ T.TYPES = {
 
 T.TYPE_LIST = { "arrow", "sniper", "flame", "electric", "rocket", "minigun" }
 
+--- 获取炮塔局外等级加成倍率（每级 +15% 伤害, +8% 射程, -5% 冷却）
+local function getMetaLevelMul(typeKey, G, stat)
+    local metaLv = (G.metaTurretLevels and G.metaTurretLevels[typeKey]) or 0
+    if metaLv <= 0 then return 1.0 end
+    if stat == "damage" then
+        return 1.0 + metaLv * 0.15
+    elseif stat == "range" then
+        return 1.0 + metaLv * 0.08
+    elseif stat == "cooldown" then
+        return 1.0 / (1.0 + metaLv * 0.05)
+    end
+    return 1.0
+end
+
 --- 获取炮台加成后伤害
 local function getTurretDamage(typeKey, baseDmg, G)
     local bonus = 0
@@ -31,7 +46,9 @@ local function getTurretDamage(typeKey, baseDmg, G)
     end
     -- 天赋通用炮塔伤害加成
     local generalPct = G.turretDmgPct or 0
-    return math.floor(baseDmg * (1 + bonus / 100) * (1 + generalPct / 100))
+    -- 局外等级加成
+    local metaMul = getMetaLevelMul(typeKey, G, "damage")
+    return math.floor(baseDmg * metaMul * (1 + bonus / 100) * (1 + generalPct / 100))
 end
 
 --- 获取炮台加成后射程
@@ -40,7 +57,9 @@ local function getTurretRange(typeKey, baseRange, G)
     if G.turretRangeBonus then
         bonus = G.turretRangeBonus[typeKey] or 0
     end
-    return baseRange * (1 + bonus / 100)
+    -- 局外等级加成
+    local metaMul = getMetaLevelMul(typeKey, G, "range")
+    return baseRange * metaMul * (1 + bonus / 100)
 end
 
 --- 获取炮台加成后冷却（加成越高冷却越短）
@@ -51,7 +70,9 @@ local function getTurretCooldown(typeKey, baseCool, G)
     end
     -- 天赋通用冷却加速
     local cdMul = G.cooldownMul or 1.0
-    return baseCool / ((1 + bonus / 100) * cdMul)
+    -- 局外等级加成
+    local metaMul = getMetaLevelMul(typeKey, G, "cooldown")
+    return baseCool * metaMul / ((1 + bonus / 100) * cdMul)
 end
 
 ------------------------------------------------------------------------
@@ -654,6 +675,7 @@ function T.Update(G, dt)
                     -- ---- 弓箭炮台 ----
                     turret.recoil = 1.0
                     turret.fireFlash = 0.12
+                    Audio.PlayTurretFire("arrow")
                     local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
                     local projType = T.HasUpgrade(G, "arrow", "poison") and "poison_arrow" or "arrow"
 
@@ -701,6 +723,7 @@ function T.Update(G, dt)
                     if not turret.aimed then goto continue end
                     turret.recoil = 1.0
                     turret.fireFlash = 0.15
+                    Audio.PlayTurretFire("sniper")
                     local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
 
                     -- 暴击计算
@@ -723,6 +746,7 @@ function T.Update(G, dt)
                         end
                         if not hasBeam and turret.laserTimer >= laserCooldown then
                             turret.laserTimer = 0
+                            Audio.PlayLaserSkill()
                             local laserDmgMul  = T.HasUpgrade(G, "sniper", "laser_plus") and 3.0 or 2.0
                             local beamDuration = T.HasUpgrade(G, "sniper", "laser_plus") and 5.0 or 3.0
                             local dmgInterval  = 0.15   -- 每0.15秒造一次伤害
@@ -812,6 +836,7 @@ function T.Update(G, dt)
                     -- ---- 电能炮台 ----
                     turret.recoil = 1.0
                     turret.fireFlash = 0.12
+                    Audio.PlayTurretFire("electric")
                     local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
 
                     -- 全场闪电：全屏随机攻击所有敌人
@@ -911,6 +936,7 @@ function T.Update(G, dt)
                     -- ---- 火箭炮台 ----
                     turret.recoil = 1.0
                     turret.fireFlash = 0.15
+                    Audio.PlayTurretFire("rocket")
                     local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
 
                     -- 导弹雨：从天而降12枚
@@ -999,6 +1025,7 @@ function T.Update(G, dt)
                     -- ---- 机关枪炮台 ----
                     turret.recoil = 0.5
                     turret.fireFlash = 0.06
+                    Audio.PlayTurretFire("minigun")
                     local projDmg = getTurretDamage(turret.typeKey, def.damage, G)
 
                     -- 360°弹幕风暴（触发型，有冷却）
@@ -1094,22 +1121,25 @@ function T.Update(G, dt)
                     end
                     turret.recoil = 1.0
                     turret.fireFlash = 0.12
+                    Audio.PlayTurretFire(turret.typeKey)
                     spawnProjectile(G, def.projType, mx, my, nearEnemy.x, nearEnemy.y, turret.angle, nearEnemy,
                         getTurretDamage(turret.typeKey, def.damage, G), effectiveRange)
                 end
             end
 
-            -- 喷火炮台：有目标时持续播放火焰动画
+            -- 喷火炮台：有目标时持续播放火焰动画 + 循环音效
             if turret.typeKey == "flame" then
                 turret.flaming = true
                 turret.flameTime = (turret.flameTime or 0) + dt
+                Audio.StartFlameLoop(turret)
             end
         else
             turret.targeting = false
-            -- 喷火炮台：无目标时停止喷火
+            -- 喷火炮台：无目标时停止喷火 + 停止循环音效
             if turret.typeKey == "flame" then
                 turret.flaming = false
                 turret.flameTime = 0
+                Audio.StopFlameLoop(turret)
             end
             local target = math.pi / 2
             local diff = target - turret.angle
@@ -1461,6 +1491,7 @@ function T.UpdateProjectiles(G, dt)
                     if distSq < 225 then
                         p.exploded = true
                         p.life = 0
+                        Audio.PlayRocketExplode()
                         -- 温压弹：超大范围 AOE + 减速
                         if p.thermobaric then
                             -- 临时扩大 AOE，通过直接计算（基础爆炸半径80px）

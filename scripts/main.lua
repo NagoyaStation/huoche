@@ -13,6 +13,7 @@ local Meta = require "Meta.MetaMain"
 local UIEditor = require "Editor.UIEditor"
 local MD = require "Meta.MetaData"
 local Comic = require "Game.ComicCutscene"
+local Audio = require "Game.Audio"
 
 ------------------------------------------------------------------------
 -- 全局游戏状态
@@ -86,7 +87,7 @@ local gameSettingPopup = {
     show = false,
     animTimer = 0,
     sfxVolume = 0.8,
-    bgmVolume = 0.6,
+    bgmVolume = 0.1,
     sfxOn = true,
     bgmOn = true,
     dragging = nil,  -- "sfx" / "bgm" / nil
@@ -494,10 +495,11 @@ local function UpdateHeroSpine(dt)
         heroSpineInst:SetAnimation(0, desiredAnim, loop)
     end
 
-    -- 攻击动画根据攻速倍率加速播放
+    -- 攻击动画根据攻速倍率加速播放（限制最大2.5倍速，避免过快导致僵硬）
     local spineDt = dt
     if desiredAnim == "attack" then
-        spineDt = dt * (G.atkSpdMul or 1.0)
+        local animSpd = math.min(G.atkSpdMul or 1.0, 2.5)
+        spineDt = dt * animSpd
     end
     heroSpineInst:Update(spineDt)
     heroSpineInst:UpdateWorldTransform()
@@ -557,15 +559,19 @@ local function LoadActiveCharImages()
             -- 清除路径约束插槽（path 类型渲染为白色多边形）
             heroSpineInst:SetAttachment("path_tui_2", "")
             heroSpineInst:SetAttachment("path_day_1", "")
-            -- 隐藏依赖路径约束的装饰条带（tui_1/tui_2 是缠绕条带，非鞋子本体）
-            -- 路径约束在运行时不生效，条带会显示为尖状遮住下面的鞋子(cp/ct)
-            heroSpineInst:SetAttachment("tui_1", "")
-            heroSpineInst:SetAttachment("tui_2", "")
-            heroSpineInst:SetAttachment("tui_3", "")
+            -- tui_1/tui_2/tui_3 是主角背包，保持显示
+            -- 设置动画过渡混合时间（避免瞬间跳切导致僵硬）
+            heroSpineInst:SetDefaultMix(0.15)
+            heroSpineInst:SetMix("idle", "attack", 0.08)   -- idle→attack 快速切入
+            heroSpineInst:SetMix("attack", "idle", 0.25)   -- attack→idle 缓慢恢复
+            heroSpineInst:SetMix("idle", "run", 0.15)
+            heroSpineInst:SetMix("run", "idle", 0.15)
+            heroSpineInst:SetMix("run", "attack", 0.08)
+            heroSpineInst:SetMix("attack", "run", 0.2)
             heroSpineInst:SetAnimation(0, "idle", true)
             heroSpineAnim = "idle"
             G.heroSpineInst = heroSpineInst
-            print("[Hero Spine] shaun loaded for in-game, skin=1, setupPose applied, path slots cleared")
+            print("[Hero Spine] shaun loaded for in-game, skin=1, setupPose applied, mix configured")
         end
     else
         heroSpineInst = nil
@@ -678,13 +684,34 @@ local function StartLevel(selectedLevel)
         sd.talentLevel or 0, tStats.atk, tStats.critRate, tStats.critDmg, tStats.atkSpd,
         tStats.atkRange, tStats.atkDmg, tStats.turretDmg, tStats.armorPen, tStats.carry))
 
+    -- 角色升星加成应用
+    local starStats = MD.CalcCharStarStats(sd)
+    G.meleeAtkMul    = (G.meleeAtkMul or 1.0) * (1 + starStats.meleeAtkPct / 100)
+    G.rangedAtkMul   = (G.rangedAtkMul or 1.0) * (1 + starStats.rangedAtkPct / 100)
+    G.atkSpdMul      = G.atkSpdMul * (1 + starStats.atkSpdPct / 100)
+    G.bombDmgMul     = (G.bombDmgMul or 1.0) * (1 + starStats.bombDmgPct / 100)
+    G.maxCarry       = G.maxCarry + starStats.carry
+    G.gatherExtra    = (G.gatherExtra or 0) + starStats.gatherExtra
+    G.healMul        = (G.healMul or 1.0) * (1 + starStats.healPct / 100)
+    G.postSkillSpdPct = (G.postSkillSpdPct or 0) + starStats.postSkillSpdPct
+    G.cooldownMul    = (G.cooldownMul or 1.0) * (1 - starStats.cooldownPct / 100)
+    G.trainMaxHP     = G.trainMaxHP + starStats.trainHP
+    G.trainHP        = G.trainMaxHP
+    G.critDmg        = G.critDmg + starStats.critDmgPct
+    G.critRate       = G.critRate + starStats.critRatePct
+    G.meleeRangeMul  = (G.meleeRangeMul or 1.0) * (1 + starStats.meleeRangePct / 100)
+    print(string.format("[Game] StarStats applied (%s star %d): meleeAtk+%d%% rangedAtk+%d%% atkSpd+%d%% carry+%d trainHP+%d critRate+%d%% critDmg+%d%%",
+        sd.activeChar or "warrior", (sd.charStars and sd.charStars[sd.activeChar or "warrior"]) or 1,
+        starStats.meleeAtkPct, starStats.rangedAtkPct, starStats.atkSpdPct,
+        starStats.carry, starStats.trainHP, starStats.critRatePct, starStats.critDmgPct))
+
     Turret.InitTurrets(G)
 
     -- 注册丧尸移除回调，回收 Spine 实例
     G.onZombieRemoved = ReleaseSpineInstance
 
     G.state = "playing"
-    G.hintText = "靠近资源自动采集，送到列车下方！保护列车！"
+    G.hintText = "收集资源！保护列车！"
     G.hintTimer = 4.0
     Rend.CalcLayout(G, DESIGN_W, DESIGN_H)
     Drone.Init(G)
@@ -696,30 +723,9 @@ local function StartLevel(selectedLevel)
 end
 
 ------------------------------------------------------------------------
--- Start / Stop
+-- 战斗图片加载（可多次调用，首次下载未完成时 handle=0，下载完后重新调用即可获得正确句柄）
 ------------------------------------------------------------------------
-function Start()
-    -- 用 os.date 获取真实时间构造种子（os.time/os.clock/Rand在WASM中可能不可靠）
-    do
-        local dt = os.date("*t")
-        local timeSeed = ((dt.year or 2026) * 366 + (dt.yday or 1)) * 86400
-                       + (dt.hour or 0) * 3600 + (dt.min or 0) * 60 + (dt.sec or 0)
-        math.randomseed(timeSeed)
-    end
-
-    vg = nvgCreate(1)
-    if not vg then
-        print("ERROR: Failed to create NanoVG context")
-        return
-    end
-
-    if nvgCreateFont(vg, "sans", "Fonts/MiSans-Regular.ttf") == -1 then
-        print("ERROR: Failed to load font")
-        return
-    end
-
-
-
+local function LoadBattleImages()
     -- 加载主角序列帧动画 (idle, raise, swing, hit, recover)
     local animFiles = {
         "image/hero_idle_20260414072856.png",
@@ -763,7 +769,7 @@ function Start()
     trainCarriageHandle = nvgCreateImage(vg, "image/train_carriage_20260416100938.png", NVG_IMAGE_NEAREST)
     trainFrontHandle = nvgCreateImage(vg, "image/train_front_20260422062046.png", 0)
     trainSandbagHandle = nvgCreateImage(vg, "image/沙袋雪地.png", 0)
-    mountedShootHandle = nvgCreateImage(vg, "image/Layer_0 (11).png", 0)
+    mountedShootHandle = nvgCreateImage(vg, "image/幸存者上车.png", 0)
     for i = 1, 4 do
         muzzleFlashHandles[i] = nvgCreateImage(vg, "image/开火帧" .. i .. ".png", 0)
     end
@@ -974,7 +980,38 @@ function Start()
     print("Loaded upgrade VFX symbol=" .. upgradeVfxSymbol .. " glow frames=6")
 
     print("Loaded map sprites: deadTree=" .. mapDeadTreeHandle .. " pine=" .. mapPineTreeHandle .. " green=" .. mapGreenTreeHandle .. " stone=" .. mapStoneHandle .. " ore=" .. mapOreHandle .. " bush=" .. mapBushHandle .. " pebble=" .. mapPebbleHandle)
+end
 
+--- 检查战斗图片是否加载成功（heroAnimHandles[1] > 0 表示文件已存在于本地）
+local function IsBattleImagesReady()
+    return heroAnimHandles[1] and heroAnimHandles[1] > 0
+end
+
+------------------------------------------------------------------------
+-- Start / Stop
+------------------------------------------------------------------------
+function Start()
+    -- 用 os.date 获取真实时间构造种子（os.time/os.clock/Rand在WASM中可能不可靠）
+    do
+        local dt = os.date("*t")
+        local timeSeed = ((dt.year or 2026) * 366 + (dt.yday or 1)) * 86400
+                       + (dt.hour or 0) * 3600 + (dt.min or 0) * 60 + (dt.sec or 0)
+        math.randomseed(timeSeed)
+    end
+
+    vg = nvgCreate(1)
+    if not vg then
+        print("ERROR: Failed to create NanoVG context")
+        return
+    end
+
+    if nvgCreateFont(vg, "sans", "Fonts/MiSans-Regular.ttf") == -1 then
+        print("ERROR: Failed to load font")
+        return
+    end
+
+    -- 加载战斗图片（老玩家: 本地缓存立即加载; 新玩家: 首次可能handle=0，漫画结束后重新加载）
+    LoadBattleImages()
     ResetGame()
     MountImageHandles()
     Turret.InitTurrets(G)
@@ -994,6 +1031,11 @@ function Start()
     SubscribeToEvent("TouchBegin", "HandleTouchBegin")
     SubscribeToEvent("TouchMove", "HandleTouchMove")
     SubscribeToEvent("TouchEnd", "HandleTouchEnd")
+
+    -- 初始化音频系统 & 播放标题 BGM
+    Audio.Init()
+    Audio.SyncSettings(gameSettingPopup)
+    Audio.PlayBGM(Audio.BGM_TITLE)
 
     print("=== " .. C.TITLE .. " Started ===")
 end
@@ -1034,11 +1076,33 @@ end
 ------------------------------------------------------------------------
 -- 更新
 ------------------------------------------------------------------------
+local _prevState = "menu"  -- 状态跟踪，用于 BGM 切换检测
 ---@param eventType string
 ---@param eventData UpdateEventData
 function HandleUpdate(eventType, eventData)
     local dt = eventData["TimeStep"]:GetFloat()
     G.gameTime = G.gameTime + dt
+
+    -- 同步音频设置（滑块拖拽时每帧同步）
+    Audio.SyncSettings(gameSettingPopup)
+
+    -- BGM 状态切换检测（集中在此处理，包括 Entities.lua 中直接设置 gameover 的情况）
+    if G.state ~= _prevState then
+        if G.state == "menu" then
+            Audio.PlayBGM(Audio.BGM_TITLE)
+        elseif G.state == "lobby" then
+            Audio.PlayBGM(Audio.BGM_LOBBY)
+        elseif G.state == "playing" then
+            Audio.PlayBGM(Audio.BGM_BATTLE)
+        elseif G.state == "gameover" then
+            if G.gameWin then
+                Audio.PlayBGM(Audio.BGM_VICTORY)
+            else
+                Audio.PlayBGM(Audio.BGM_GAMEOVER)
+            end
+        end
+        _prevState = G.state
+    end
 
     -- VirtualControls.Update() 由 Initialize() 内部自动订阅 BeginFrame 事件调用，无需手动调用
 
@@ -1070,7 +1134,7 @@ function HandleUpdate(eventType, eventData)
         Comic.Update(dt)
     end
 
-    if G.state == "menu" or G.state == "gameover" then
+    if G.state == "menu" or G.state == "gameover" or G.state == "loading_battle" then
         return
     end
 
@@ -1783,6 +1847,7 @@ local function HandleGameSettingClick(x, y)
             Meta.UploadGameScore(stage, wave)
             G.state = "lobby"
             Meta.SyncBattleLevel()
+            Meta.ForceSave()
             if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
             print("[GameSetting] Exit to lobby, stage:" .. stage .. " wave:" .. wave)
             return true
@@ -1824,13 +1889,52 @@ function HandleClick(x, y)
     if G.state == "menu" then
         local btn = G.menuBtn
         if btn and x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
-            -- 启动开幕漫画剧情
-            Comic.Start(vg, function()
+            Audio.PlayClick()
+            local sd = Meta.GetSaveData()
+            if sd and not sd.firstBattleDone then
+                -- 首次进游戏：播放开场漫画，结束后等待战斗资源下载完再进关
+                Comic.Start(vg, function()
+                    print("[DWP] Comic finished, checking battle images...")
+                    -- 重新加载战斗图片（漫画期间 battle 组已优先下载）
+                    LoadBattleImages()
+                    MountImageHandles()
+                    if IsBattleImagesReady() then
+                        -- 下载已完成，直接进入战斗
+                        Audio.PlayBGM(Audio.BGM_BATTLE)
+                        StartLevel(1)
+                        if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
+                        print("[DWP] Battle images ready, entering level 1")
+                    else
+                        -- 极端情况：下载未完成，显示 loading 状态等待
+                        G.state = "loading_battle"
+                        print("[DWP] Battle images not ready, waiting for download...")
+                        local cache = GetCache()
+                        cache:ObserveDownloads(
+                            function(completedCount, totalCount, completedBytes)
+                                -- 进度回调（可选：更新 loading UI）
+                                G.downloadProgress = totalCount > 0 and (completedCount / totalCount) or 0
+                            end,
+                            function(completedBytes)
+                                -- 下载完成，重新加载图片并进入战斗
+                                print("[DWP] Download complete (" .. completedBytes .. " bytes), loading battle images...")
+                                LoadBattleImages()
+                                MountImageHandles()
+                                Audio.PlayBGM(Audio.BGM_BATTLE)
+                                StartLevel(1)
+                                if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
+                                print("[DWP] Battle images loaded, entering level 1")
+                            end
+                        )
+                    end
+                end)
+                print("[Game] Starting opening comic (first-time)")
+            else
+                -- 非首次：跳过漫画，直接进入大厅
                 G.state = "lobby"
+                Audio.PlayBGM(Audio.BGM_LOBBY)
                 if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
-                print("[Game] Comic finished, entered lobby")
-            end)
-            print("[Game] Starting opening comic")
+                print("[Game] Skipped comic, entered lobby directly")
+            end
         end
         return
     end
@@ -1839,6 +1943,7 @@ function HandleClick(x, y)
         -- x, y 已在上游转换为设计坐标，使用设计分辨率
         local result, param = Meta.HandleClick(x, y, DESIGN_W, DESIGN_H)
         if result == "start_level" then
+            Audio.PlayBGM(Audio.BGM_BATTLE)
             StartLevel(param)
             if vc_joystick then vc_joystick.visible = true; vc_joystick:_updateShouldShow() end
             print("[Game] Starting level " .. tostring(param))
@@ -1890,6 +1995,16 @@ function HandleClick(x, y)
     end
 
     if G.state == "upgrade" then
+        -- 齿轮按钮打开设置弹窗
+        if G.hudSettingBtn then
+            local sb = G.hudSettingBtn
+            if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+                gameSettingPopup.show = true
+                gameSettingPopup.animTimer = 0
+                print("[Game] Open in-game settings (upgrade)")
+                return
+            end
+        end
         -- 刷新按钮点击检测
         local refreshBtn = G.upgradeRefreshBtn
         if refreshBtn and x >= refreshBtn.x and x <= refreshBtn.x + refreshBtn.w
@@ -1947,11 +2062,18 @@ function HandleClick(x, y)
                     end
                 end
                 print("[Game] LevelStars: stage " .. stage .. " progress=" .. string.format("%.0f%%", progress * 100) .. " stars=" .. (sd.levelStars[stage] or 0))
+                -- 首次战斗完成标记
+                if not sd.firstBattleDone then
+                    sd.firstBattleDone = true
+                    print("[Game] First battle done! Lobby unlocked.")
+                end
             end
             G.state = "lobby"
             -- 返回大厅时同步关卡选择到当前最高解锁关
             Meta.SyncBattleLevel()
+            Meta.ForceSave()
             if vc_joystick then vc_joystick.visible = false; vc_joystick:_updateShouldShow() end
+            Audio.PlayBGM(Audio.BGM_LOBBY)
             print("[Game] Returned to lobby, stage:" .. stage .. " wave:" .. wave)
         end
         return
@@ -1985,6 +2107,43 @@ function HandleRender(eventType, eventData)
         nvgScale(vg, showAllScale, showAllScale)
         Comic.Draw(vg, DESIGN_W, DESIGN_H)
         nvgRestore(vg)
+        nvgEndFrame(vg)
+        return
+    end
+
+    -- 战斗资源加载等待（漫画结束后极短过渡）
+    if G.state == "loading_battle" then
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, W, H)
+        nvgFillColor(vg, nvgRGBA(15, 15, 20, 255))
+        nvgFill(vg)
+
+        -- 居中文字提示
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 18 * showAllScale)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(200, 200, 200, 255))
+        nvgText(vg, W * 0.5, H * 0.5 - 12 * showAllScale, "加载中...")
+
+        -- 进度条
+        local prog = G.downloadProgress or 0
+        local barW = 160 * showAllScale
+        local barH = 6 * showAllScale
+        local barX = (W - barW) * 0.5
+        local barY = H * 0.5 + 12 * showAllScale
+        -- 背景
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, barX, barY, barW, barH, barH * 0.5)
+        nvgFillColor(vg, nvgRGBA(60, 60, 60, 255))
+        nvgFill(vg)
+        -- 填充
+        if prog > 0 then
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, barX, barY, barW * prog, barH, barH * 0.5)
+            nvgFillColor(vg, nvgRGBA(80, 180, 255, 255))
+            nvgFill(vg)
+        end
+
         nvgEndFrame(vg)
         return
     end

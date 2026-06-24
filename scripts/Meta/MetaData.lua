@@ -73,62 +73,31 @@ MD.CURRENCY_ICONS = {
 -- 角色系统
 ------------------------------------------------------------------------
 MD.CHARACTERS = {
-    { id = "warrior",   name = "求生者",   quality = 3, icon = "image/hero_idle_20260414072856.png",
+    { id = "warrior",   name = "求生者",   quality = 3, icon = "image/求生者角色界面显示1.png",
       portrait = "image/Layer_0 (1).png",
       equipDisplay = "image/装备界面/装备界面主角 .png",
-      mountedImg = "image/Layer_0 (11).png",
+      mountedImg = "image/幸存者上车.png",
       desc = "近战输出，攻守兼备", baseStats = {hp = 120},
       passive = "经验加成+10%",
-      skill = { name = "投掷炸弹", desc = "在脚下放置炸弹，1.5秒后爆炸，对范围内敌人和资源造成200%攻击力伤害" },
+      skill = { name = "投掷炸弹", desc = "放置炸弹，对范围敌人和资源造成伤害" },
       stars = {
-          "初始获得武器[铁剑]",
           "近战伤害+10%",
-          "近战体积+20% 穿透+3",
-          "所有武器穿透+2",
-          "伤害加成+15%",
-          "全属性提升+10%",
+          "近战速度+10%",
+          "炸弹伤害+20%",
+          "射击伤害+30%",
+          "背包容量+10",
+          "每次采集资源+1",
+      },
+      starEffects = {
+          {meleeAtkPct = 10},
+          {atkSpdPct = 10},
+          {bombDmgPct = 20},
+          {rangedAtkPct = 30},
+          {carry = 10},
+          {gatherExtra = 1},
       },
     },
-    { id = "auntie",    name = "王阿姨", quality = 5, icon = "image/角色素材/艾达待机.png",
-      portrait = "image/装备界面/Layer_0 (3).png",
-      equipDisplay = "image/装备界面/Layer_0 (4).png",
-      mountedImg = "image/王阿姨上车.png",
-      desc = "治愈辅助，全队增益", baseStats = {hp = 140},
-      passive = "全队生命恢复+5/秒",
-      skill = { name = "治疗", desc = "立即回复列车20%血量，冷却60秒", icon = "image/治疗.png", cd = 60 },
-      attackFrames = {
-          "image/角色素材/艾达攻击动画1.png",
-          "image/角色素材/艾达攻击动画2.png.png",
-          "image/角色素材/艾达攻击动画3.png",
-          "image/角色素材/艾达攻击动画4.png",
-          "image/角色素材/艾达攻击动画5.png",
-          "image/角色素材/艾达攻击动画6.png",
-          "image/角色素材/艾达攻击动画7.png",
-      },
-      attackFPS = 8,
-      walkFrames = {
-          "image/角色素材/艾达行走动画1.png",
-          "image/角色素材/艾达行走动画2.png",
-          "image/角色素材/艾达行走动画3.png",
-          "image/角色素材/艾达行走动画4.png",
-          "image/角色素材/艾达行走动画5.png",
-          "image/角色素材/艾达行走动画6.png",
-          "image/角色素材/艾达行走动画7.png",
-          "image/角色素材/艾达行走动画8.png",
-          "image/角色素材/艾达行走动画9.png",
-          "image/角色素材/艾达行走动画10.png",
-      },
-      walkFPS = 10,
-      stars = {
-          "初始获得武器[手杖]",
-          "治愈效果+10%",
-          "增益持续时间+20%",
-          "全队防御+8%",
-          "冷却缩减+15%",
-          "终极增益：全属性+12%",
-      },
-    },
-    { id = "lisanguang", name = "李三光", quality = 4, icon = "image/角色素材/李三光/李三光待机.png",
+    { id = "lisanguang", name = "李三光", quality = 4, unlockFragCost = 10, icon = "image/角色素材/李三光/李三光待机.png",
       portrait = "image/角色素材/李三光/Layer_0 (5).png",
       equipDisplay = "image/角色素材/李三光/Layer_0 (6).png",
       mountedImg = "image/李三光上车.png",
@@ -160,20 +129,75 @@ MD.CHARACTERS = {
       },
       walkFPS = 10,
       stars = {
-          "初始获得武器[步枪]",
+          "近战伤害+20%",
           "暴击伤害+15%",
-          "射速+10%",
-          "穿透+1层",
-          "攻击范围+20%",
-          "终极射击：弹道追踪",
+          "背包容量+20",
+          "射击伤害+20%",
+          "近战攻击范围+10%",
+          "背包容量+20",
+      },
+      starEffects = {
+          {meleeAtkPct = 20},
+          {critDmgPct = 15},
+          {carry = 20},
+          {rangedAtkPct = 20},
+          {meleeRangePct = 10},
+          {carry = 20},
       },
     },
-    { id = "weifenglong", name = "威风的龙", quality = 6, icon = "image/角色素材/威风的龙/威风的龙待机.png",
+    { id = "auntie",    name = "王阿姨", quality = 5, unlockFragCost = 20, icon = "image/角色素材/艾达待机.png",
+      portrait = "image/装备界面/Layer_0 (3).png",
+      equipDisplay = "image/装备界面/Layer_0 (4).png",
+      mountedImg = "image/王阿姨上车.png",
+      desc = "治愈辅助，全队增益", baseStats = {hp = 140},
+      passive = "列车生命上限+200",
+      skill = { name = "治疗", desc = "立即回复列车20%血量，冷却60秒", icon = "image/治疗.png", cd = 60 },
+      attackFrames = {
+          "image/角色素材/艾达攻击动画1.png",
+          "image/角色素材/艾达攻击动画2.png.png",
+          "image/角色素材/艾达攻击动画3.png",
+          "image/角色素材/艾达攻击动画4.png",
+          "image/角色素材/艾达攻击动画5.png",
+          "image/角色素材/艾达攻击动画6.png",
+          "image/角色素材/艾达攻击动画7.png",
+      },
+      attackFPS = 8,
+      walkFrames = {
+          "image/角色素材/艾达行走动画1.png",
+          "image/角色素材/艾达行走动画2.png",
+          "image/角色素材/艾达行走动画3.png",
+          "image/角色素材/艾达行走动画4.png",
+          "image/角色素材/艾达行走动画5.png",
+          "image/角色素材/艾达行走动画6.png",
+          "image/角色素材/艾达行走动画7.png",
+          "image/角色素材/艾达行走动画8.png",
+          "image/角色素材/艾达行走动画9.png",
+          "image/角色素材/艾达行走动画10.png",
+      },
+      walkFPS = 10,
+      stars = {
+          "治疗效果+10%",
+          "攻击速度+10%",
+          "使用技能后移动速度+20%",
+          "射击伤害+30%",
+          "技能冷却缩减+10%",
+          "列车生命值+1000",
+      },
+      starEffects = {
+          {healPct = 10},
+          {atkSpdPct = 10},
+          {postSkillSpdPct = 20},
+          {rangedAtkPct = 30},
+          {cooldownPct = 10},
+          {trainHP = 1000},
+      },
+    },
+    { id = "weifenglong", name = "威风的龙", quality = 6, unlockDiamondCost = 20000, icon = "image/角色素材/威风的龙/威风的龙待机.png",
       portrait = "image/角色素材/威风的龙/威风的龙头像.png",
       equipDisplay = "image/角色素材/威风的龙/威风的龙人物形象.png",
       mountedImg = "image/威龙上车.png",
       desc = "龙族后裔，近战霸主", baseStats = {hp = 130},
-      passive = "受伤减免+10%",
+      passive = "列车受伤减免+10%",
       skill = { name = "喷气", desc = "向最后移动方向快速位移，无冷却", icon = "image/威龙喷气.png", cd = 0 },
       attackFrames = {
           "image/角色素材/威风的龙/威风的龙攻击1.png",
@@ -198,18 +222,29 @@ MD.CHARACTERS = {
       },
       walkFPS = 10,
       stars = {
-          "初始获得武器[龙爪]",
-          "受伤减免+15%",
-          "攻击力+12%",
-          "灼烧伤害+30%",
-          "生命值+20%",
-          "终极形态：龙化变身",
+          "近战伤害+30%",
+          "暴击率+30%",
+          "暴击伤害+30%",
+          "射击伤害+30%",
+          "背包容量+15",
+          "列车生命值+500",
+      },
+      starEffects = {
+          {meleeAtkPct = 30},
+          {critRatePct = 30},
+          {critDmgPct = 30},
+          {rangedAtkPct = 30},
+          {carry = 15},
+          {trainHP = 500},
       },
     },
 }
 
+-- 解锁碎片需求（按品质）
+MD.UNLOCK_FRAG_COST = { [3] = 2, [4] = 3, [5] = 5, [6] = 8 }
+
 -- 升星碎片需求
-MD.STAR_FRAG_COST = { 0, 2, 4, 6, 8, 10 }
+MD.STAR_FRAG_COST = { 5, 8, 10, 15, 18, 20 }
 MD.MAX_STAR = 6
 
 ------------------------------------------------------------------------
@@ -518,12 +553,13 @@ function MD.CalcEquipStats(saveData)
     for _, invIdx in pairs(equipped) do
         local item = inventory[invIdx]
         if item then
-            -- 查找装备定义获取 baseStats
+            -- 查找装备定义获取 baseStats（按等级缩放：每级 +10%）
             local def = MD.FindEquipDef(item.id)
             if def and def.baseStats then
+                local lvMul = 1.0 + ((item.level or 1) - 1) * 0.1
                 for k, v in pairs(def.baseStats) do
                     if stats[k] then
-                        stats[k] = stats[k] + v
+                        stats[k] = stats[k] + math.floor(v * lvMul)
                     end
                 end
             end
@@ -547,41 +583,79 @@ function MD.CalcEquipStats(saveData)
 end
 
 ------------------------------------------------------------------------
+-- 角色升星属性计算（局内生效）
+------------------------------------------------------------------------
+function MD.CalcCharStarStats(saveData)
+    local stats = {
+        meleeAtkPct = 0, rangedAtkPct = 0, atkSpdPct = 0,
+        bombDmgPct = 0, carry = 0, gatherExtra = 0,
+        healPct = 0, postSkillSpdPct = 0, cooldownPct = 0,
+        trainHP = 0, critDmgPct = 0, critRatePct = 0,
+        meleeRangePct = 0,
+    }
+    if not saveData then return stats end
+
+    local charId = saveData.activeChar or "warrior"
+    local curStar = (saveData.charStars and saveData.charStars[charId]) or 1
+
+    -- 查找角色定义
+    local charDef = nil
+    for _, ch in ipairs(MD.CHARACTERS) do
+        if ch.id == charId then charDef = ch; break end
+    end
+    if not charDef or not charDef.starEffects then return stats end
+
+    -- 累加已达成星级的效果（curStar > si 表示该星级已解锁）
+    for si = 1, curStar - 1 do
+        local eff = charDef.starEffects[si]
+        if eff then
+            for k, v in pairs(eff) do
+                if stats[k] then
+                    stats[k] = stats[k] + v
+                end
+            end
+        end
+    end
+
+    return stats
+end
+
+------------------------------------------------------------------------
 -- 关卡系统
 ------------------------------------------------------------------------
 MD.LEVELS = {
     -- 雪地 (关卡1-4)
     { id = 1,  name = "起始之地",   waves = 15, reward_gold = 50,   chest = "bronze", unlocked = true,  mapImg = "image/图层_13.png",           floorImg = "image/bg_white_snow_20260416070957.png" },
-    { id = 2,  name = "雪原哨站",   waves = 7,  reward_gold = 80,   chest = "bronze", unlocked = false, mapImg = "image/地图/雪地1.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
-    { id = 3,  name = "暴雪矿道",   waves = 8,  reward_gold = 100,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2 (2).png",   floorImg = "image/bg_white_snow_20260416070957.png" },
-    { id = 4,  name = "风雪断哨",   waves = 10, reward_gold = 150,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地3.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 2,  name = "雪原哨站",   waves = 10, reward_gold = 80,   chest = "bronze", unlocked = false, mapImg = "image/地图/雪地1.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 3,  name = "暴雪矿道",   waves = 11, reward_gold = 100,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2 (2).png",   floorImg = "image/bg_white_snow_20260416070957.png" },
+    { id = 4,  name = "风雪断哨",   waves = 12, reward_gold = 150,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地3.png",        floorImg = "image/bg_white_snow_20260416070957.png" },
     -- 雪地2 (关卡5-7)
-    { id = 5,  name = "白霜补给站", waves = 12, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地2-1.png",      floorImg = "image/地图/雪地.png" },
-    { id = 6,  name = "积雪林线",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/雪地2-2.png",      floorImg = "image/地图/雪地.png" },
-    { id = 7,  name = "寒夜前哨",   waves = 8,  reward_gold = 120,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2-3.png",      floorImg = "image/地图/雪地.png" },
+    { id = 5,  name = "白霜补给站", waves = 13, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/雪地2-1.png",      floorImg = "image/地图/雪地.png" },
+    { id = 6,  name = "积雪林线",   waves = 14, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/雪地2-2.png",      floorImg = "image/地图/雪地.png" },
+    { id = 7,  name = "寒夜前哨",   waves = 15, reward_gold = 120,  chest = "bronze", unlocked = false, mapImg = "image/地图/雪地2-3.png",      floorImg = "image/地图/雪地.png" },
     -- 冻原 (关卡8-10)
-    { id = 8,  name = "冻土驿路",   waves = 10, reward_gold = 160,  chest = "bronze", unlocked = false, mapImg = "image/地图/冻原1.png",        floorImg = "image/地图/冻原.png" },
-    { id = 9,  name = "永冻废墟",   waves = 12, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原2.png",        floorImg = "image/地图/冻原.png" },
-    { id = 10, name = "裂谷补给点", waves = 14, reward_gold = 250,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原3.png",        floorImg = "image/地图/冻原.png" },
+    { id = 8,  name = "冻土驿路",   waves = 14, reward_gold = 160,  chest = "bronze", unlocked = false, mapImg = "image/地图/冻原1.png",        floorImg = "image/地图/冻原.png" },
+    { id = 9,  name = "永冻废墟",   waves = 15, reward_gold = 200,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原2.png",        floorImg = "image/地图/冻原.png" },
+    { id = 10, name = "裂谷补给点", waves = 16, reward_gold = 250,  chest = "silver", unlocked = false, mapImg = "image/地图/冻原3.png",        floorImg = "image/地图/冻原.png" },
     -- 冰原 (关卡11-13)
-    { id = 11, name = "冰原孤灯",   waves = 15, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/冰原1.png",        floorImg = "image/地图/冰原.png" },
-    { id = 12, name = "冰河信标",   waves = 10, reward_gold = 180,  chest = "bronze", unlocked = false, mapImg = "image/地图/冰原2.png",        floorImg = "image/地图/冰原.png" },
-    { id = 13, name = "极寒终点站", waves = 12, reward_gold = 220,  chest = "silver", unlocked = false, mapImg = "image/地图/冰原3.png",        floorImg = "image/地图/冰原.png" },
+    { id = 11, name = "冰原孤灯",   waves = 16, reward_gold = 300,  chest = "gold",   unlocked = false, mapImg = "image/地图/冰原1.png",        floorImg = "image/地图/冰原.png" },
+    { id = 12, name = "冰河信标",   waves = 17, reward_gold = 180,  chest = "bronze", unlocked = false, mapImg = "image/地图/冰原2.png",        floorImg = "image/地图/冰原.png" },
+    { id = 13, name = "极寒终点站", waves = 17, reward_gold = 220,  chest = "silver", unlocked = false, mapImg = "image/地图/冰原3.png",        floorImg = "image/地图/冰原.png" },
     -- 城市 (关卡14-16)
-    { id = 14, name = "废城外环",   waves = 14, reward_gold = 280,  chest = "silver", unlocked = false, mapImg = "image/地图/城市1.png",        floorImg = "image/地图/城市.png" },
-    { id = 15, name = "黑烟街区",   waves = 16, reward_gold = 350,  chest = "gold",   unlocked = false, mapImg = "image/地图/城市2.png",        floorImg = "image/地图/城市.png" },
-    { id = 16, name = "中央避难所", waves = 12, reward_gold = 240,  chest = "bronze", unlocked = false, mapImg = "image/地图/城市3.png",        floorImg = "image/地图/城市.png" },
+    { id = 14, name = "废城外环",   waves = 17, reward_gold = 280,  chest = "silver", unlocked = false, mapImg = "image/地图/城市1.png",        floorImg = "image/地图/城市.png" },
+    { id = 15, name = "黑烟街区",   waves = 18, reward_gold = 350,  chest = "gold",   unlocked = false, mapImg = "image/地图/城市2.png",        floorImg = "image/地图/城市.png" },
+    { id = 16, name = "中央避难所", waves = 18, reward_gold = 240,  chest = "bronze", unlocked = false, mapImg = "image/地图/城市3.png",        floorImg = "image/地图/城市.png" },
     -- 森林 (关卡17-19)
-    { id = 17, name = "枯林哨塔",   waves = 14, reward_gold = 300,  chest = "silver", unlocked = false, mapImg = "image/地图/森林1.png",        floorImg = "image/地图/森林.png" },
-    { id = 18, name = "雪松营地",   waves = 16, reward_gold = 360,  chest = "silver", unlocked = false, mapImg = "image/地图/森林2.png",        floorImg = "image/地图/森林.png" },
-    { id = 19, name = "迷雾林站",   waves = 18, reward_gold = 420,  chest = "gold",   unlocked = false, mapImg = "image/地图/森林3.png",        floorImg = "image/地图/森林.png" },
+    { id = 17, name = "枯林哨塔",   waves = 18, reward_gold = 300,  chest = "silver", unlocked = false, mapImg = "image/地图/森林1.png",        floorImg = "image/地图/森林.png" },
+    { id = 18, name = "雪松营地",   waves = 19, reward_gold = 360,  chest = "silver", unlocked = false, mapImg = "image/地图/森林2.png",        floorImg = "image/地图/森林.png" },
+    { id = 19, name = "迷雾林站",   waves = 20, reward_gold = 420,  chest = "gold",   unlocked = false, mapImg = "image/地图/森林3.png",        floorImg = "image/地图/森林.png" },
     -- 沙漠 (关卡20-22)
-    { id = 20, name = "黄沙旧轨",   waves = 15, reward_gold = 350,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠1.png",        floorImg = "image/地图/沙漠.png" },
-    { id = 21, name = "风蚀驿站",   waves = 18, reward_gold = 450,  chest = "gold",   unlocked = false, mapImg = "image/地图/沙漠2.png",        floorImg = "image/地图/沙漠.png" },
-    { id = 22, name = "烈日补给线", waves = 16, reward_gold = 400,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠3.png",        floorImg = "image/地图/沙漠.png" },
+    { id = 20, name = "黄沙旧轨",   waves = 20, reward_gold = 350,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠1.png",        floorImg = "image/地图/沙漠.png" },
+    { id = 21, name = "风蚀驿站",   waves = 21, reward_gold = 450,  chest = "gold",   unlocked = false, mapImg = "image/地图/沙漠2.png",        floorImg = "image/地图/沙漠.png" },
+    { id = 22, name = "烈日补给线", waves = 22, reward_gold = 400,  chest = "silver", unlocked = false, mapImg = "image/地图/沙漠3.png",        floorImg = "image/地图/沙漠.png" },
     -- 熔岩 (关卡23-25)
-    { id = 23, name = "焦土裂隙",   waves = 20, reward_gold = 500,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩1.png",        floorImg = "image/地图/熔岩.png" },
-    { id = 24, name = "熔岩矿坑",   waves = 22, reward_gold = 600,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩2.png",        floorImg = "image/地图/熔岩.png" },
+    { id = 23, name = "焦土裂隙",   waves = 22, reward_gold = 500,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩1.png",        floorImg = "image/地图/熔岩.png" },
+    { id = 24, name = "熔岩矿坑",   waves = 24, reward_gold = 600,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩2.png",        floorImg = "image/地图/熔岩.png" },
     { id = 25, name = "火山终点站", waves = 25, reward_gold = 800,  chest = "gold",   unlocked = false, mapImg = "image/地图/熔岩3.png",        floorImg = "image/地图/熔岩.png" },
 }
 
@@ -603,17 +677,17 @@ MD.CHEST_REWARDS = {
     bronze = {
         { { "金币", 50 },  { "木材", 200 } },    -- 25%
         { { "金币", 100 }, { "石材", 300 } },     -- 50%
-        { { "金币", 200 }, { "钻石", 10 } },      -- 100%
+        { { "金币", 200 }, { "钻石", 100 } },      -- 100%
     },
     silver = {
         { { "金币", 100 }, { "木材", 500 } },
         { { "金币", 200 }, { "石材", 500 } },
-        { { "金币", 300 }, { "钻石", 20 } },
+        { { "金币", 300 }, { "钻石", 200 } },
     },
     gold = {
         { { "金币", 200 }, { "木材", 1000 } },
         { { "金币", 400 }, { "石材", 1000 } },
-        { { "金币", 500 }, { "钻石", 50 } },
+        { { "金币", 500 }, { "钻石", 500 } },
     },
 }
 
@@ -746,42 +820,52 @@ MD.SHOP_DAILY_FREE = { id = "daily_gold", name = "免费金币", desc = "x100", 
 
 -- 随机池：每天从中抽5个填入后5格
 MD.SHOP_DAILY_POOL = {
-    -- 炮塔碎片
-    { id = "daily_gatling", name = "机关枪塔碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png",              turretId = "minigun" },
-    { id = "daily_commando",name = "弓箭炮塔碎片", desc = "x5",      price = 100, currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png",                turretId = "arrow" },
-    { id = "daily_flame",   name = "喷火炮塔碎片", desc = "x5",      price = 120, currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png",     turretId = "flame" },
-    { id = "daily_sniper",  name = "狙击炮塔碎片", desc = "x5",      price = 150, currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png",               turretId = "sniper" },
-    { id = "daily_rocket",  name = "火箭炮塔碎片", desc = "x3",      price = 200, currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png",               turretId = "rocket" },
+    -- 炮塔碎片（大份）
+    { id = "daily_gatling", name = "机关枪塔碎片", desc = "x5",      price = 1000, currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png",              turretId = "minigun" },
+    { id = "daily_commando",name = "弓箭炮塔碎片", desc = "x5",      price = 1000, currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png",                turretId = "arrow" },
+    { id = "daily_flame",   name = "喷火炮塔碎片", desc = "x5",      price = 1200, currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png",     turretId = "flame" },
+    { id = "daily_sniper",  name = "狙击炮塔碎片", desc = "x5",      price = 1500, currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png",               turretId = "sniper" },
+    { id = "daily_rocket",  name = "火箭炮塔碎片", desc = "x3",      price = 2000, currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png",               turretId = "rocket" },
+    -- 炮塔碎片（小份，钻石购买）
+    { id = "daily_gatling_s",  name = "机关枪塔碎片", desc = "x1", price = 300,  currency = "diamond", icon = "image/turret_minigun_v3_20260420035022.png",              turretId = "minigun" },
+    { id = "daily_commando_s", name = "弓箭炮塔碎片", desc = "x1", price = 300,  currency = "diamond", icon = "image/turret_arrow_v3_20260420035036.png",                turretId = "arrow" },
+    { id = "daily_flame_s",    name = "喷火炮塔碎片", desc = "x1", price = 400,  currency = "diamond", icon = "image/edited_turret_flame_nofire_20260423065123.png",     turretId = "flame" },
+    { id = "daily_sniper_s",   name = "狙击炮塔碎片", desc = "x1", price = 500,  currency = "diamond", icon = "image/turret_sniper_v3_20260420035021.png",               turretId = "sniper" },
+    { id = "daily_rocket_s",   name = "火箭炮塔碎片", desc = "x1", price = 600,  currency = "diamond", icon = "image/turret_rocket_v3_20260420035019.png",               turretId = "rocket" },
     -- 资源
-    { id = "daily_wood",    name = "木材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/meta_icon_wood_20260421063709.png" },
-    { id = "daily_stone",   name = "石材",         desc = "x1000",   price = 50,  currency = "diamond", icon = "image/图层_3 (1).png" },
-    -- 角色碎片
-    { id = "daily_char_auntie",      name = "王阿姨碎片",   desc = "x3", price = 150, currency = "diamond", icon = "image/角色素材/艾达待机.png",                    charId = "auntie" },
-    { id = "daily_char_lisanguang",  name = "李三光碎片",   desc = "x3", price = 120, currency = "diamond", icon = "image/角色素材/李三光/李三光待机.png",             charId = "lisanguang" },
-    { id = "daily_char_weifenglong", name = "威风的龙碎片", desc = "x3", price = 200, currency = "diamond", icon = "image/角色素材/威风的龙/威风的龙待机.png",          charId = "weifenglong" },
+    { id = "daily_wood",    name = "木材",         desc = "x1000",   price = 500,  currency = "diamond", icon = "image/meta_icon_wood_20260421063709.png" },
+    { id = "daily_stone",   name = "石材",         desc = "x1000",   price = 500,  currency = "diamond", icon = "image/图层_3 (1).png" },
+    -- 角色碎片（大份）
+    { id = "daily_char_auntie",      name = "王阿姨碎片",   desc = "x3", price = 2000, currency = "diamond", icon = "image/角色素材/艾达待机.png",                    charId = "auntie" },
+    { id = "daily_char_lisanguang",  name = "李三光碎片",   desc = "x3", price = 1500, currency = "diamond", icon = "image/角色素材/李三光/李三光待机.png",             charId = "lisanguang" },
+    { id = "daily_char_weifenglong", name = "威风的龙碎片", desc = "x3", price = 2500, currency = "diamond", icon = "image/角色素材/威风的龙/威风的龙待机.png",          charId = "weifenglong" },
+    -- 角色碎片（小份，钻石购买）
+    { id = "daily_char_auntie_s",      name = "王阿姨碎片",   desc = "x1", price = 600, currency = "diamond", icon = "image/角色素材/艾达待机.png",                    charId = "auntie" },
+    { id = "daily_char_lisanguang_s",  name = "李三光碎片",   desc = "x1", price = 500, currency = "diamond", icon = "image/角色素材/李三光/李三光待机.png",             charId = "lisanguang" },
+    { id = "daily_char_weifenglong_s", name = "威风的龙碎片", desc = "x1", price = 800, currency = "diamond", icon = "image/角色素材/威风的龙/威风的龙待机.png",          charId = "weifenglong" },
 }
 MD.SHOP_DAILY_PICK = 5  -- 每天从池子里抽几个
 
 MD.SHOP_FIXED = {
-    { id = "fixed_gold_s", name = "金币礼包", desc = "x200",  price = 50,  currency = "diamond", icon = "image/hud_gold_coin.png" },
-    { id = "fixed_gold_m", name = "金币礼包", desc = "x800",  price = 200, currency = "diamond", icon = "image/hud_gold_coin.png" },
+    { id = "fixed_gold_s", name = "金币礼包", desc = "x200",  price = 500,  currency = "diamond", icon = "image/hud_gold_coin.png" },
+    { id = "fixed_gold_m", name = "金币礼包", desc = "x800",  price = 2000, currency = "diamond", icon = "image/hud_gold_coin.png" },
 }
 
 MD.SHOP_GACHA = {
     name = "钻石抽奖",
     desc = "获得稀有装备与碎片",
-    cost_single = 30,
-    cost_ten = 300,
+    cost_single = 300,
+    cost_ten = 3000,
 }
 
 -- 充值获取钻石（免费定时抽取）
 MD.SHOP_RECHARGE = {
     -- 概率表：{钻石数量, 概率权重, 品质标签}
     pool = {
-        { amount = 30,  weight = 50, label = "N" },
-        { amount = 98,  weight = 30, label = "R" },
-        { amount = 198, weight = 15, label = "SR" },
-        { amount = 648, weight = 5,  label = "SSR" },
+        { amount = 300,  weight = 50, label = "N" },
+        { amount = 980,  weight = 30, label = "R" },
+        { amount = 1980, weight = 15, label = "SR" },
+        { amount = 6480, weight = 5,  label = "SSR" },
     },
     cooldown_once = 60,       -- 充值一次冷却：60秒
     cooldown_ten  = 28800,    -- 充值十次冷却：8小时(28800秒)
@@ -790,10 +874,10 @@ MD.SHOP_RECHARGE = {
 -- ===== 7日签到奖励 =====
 MD.SIGN_IN_REWARDS = {
     { day = 1, type = "gold",   amount = 1000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 1 },
-    { day = 2, type = "diamond", amount = 200,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 3 },
+    { day = 2, type = "diamond", amount = 2000,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 3 },
     { day = 3, type = "turret_frag", turretId = "flame", amount = 5, name = "喷火塔碎片", icon = "image/喷火炮塔高清.png", quality = 3 },
     { day = 4, type = "gold",   amount = 3000, name = "金币",     icon = "image/图层_1 (2).png",   quality = 2 },
-    { day = 5, type = "diamond", amount = 500,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 4 },
+    { day = 5, type = "diamond", amount = 5000,  name = "钻石",     icon = "image/图层_4 (1).png",   quality = 4 },
     { day = 6, type = "wood",   amount = 800,  name = "木材",     icon = "image/图层_2 (1).png",   quality = 2 },
     { day = 7, type = "equip",  id = "katana", name = "武士刀", icon = "image/装备/武器/katana_icon.png", quality = 4 },
 }
@@ -853,80 +937,80 @@ MD.GACHA_POOL = {
     { type = "equip", id = "bad_boots",         weight = 18 },
     { type = "equip", id = "cultist_boots",     weight = 18 },
     { type = "equip", id = "cultist_necklace",  weight = 18 },
-    -- 品质3 稀有
-    { type = "equip", id = "metal_hammer",      weight = 12 },
-    { type = "equip", id = "cinderblock_hammer",weight = 12 },
-    { type = "equip", id = "saw_bat",           weight = 12 },
-    { type = "equip", id = "rambo_knife",       weight = 12 },
-    { type = "equip", id = "bone_bow",          weight = 12 },
-    { type = "equip", id = "pistol",            weight = 12 },
-    { type = "equip", id = "grenade",           weight = 12 },
-    { type = "equip", id = "garbage_head",      weight = 12 },
-    { type = "equip", id = "mad_head",          weight = 12 },
-    { type = "equip", id = "hazmat_head",       weight = 12 },
-    { type = "equip", id = "mad_body",          weight = 12 },
-    { type = "equip", id = "hazmat_body",       weight = 12 },
-    { type = "equip", id = "garbage_boots",     weight = 12 },
-    { type = "equip", id = "mad_boots",         weight = 12 },
-    { type = "equip", id = "hazmat_boots",      weight = 12 },
-    { type = "equip", id = "scavenger_necklace", weight = 12 },
-    { type = "equip", id = "explorer_necklace",  weight = 12 },
-    { type = "equip", id = "crystal_shard_ring",  weight = 12 },
-    { type = "equip", id = "turquoise_ring",      weight = 12 },
-    { type = "equip", id = "frost_crystal_ring",  weight = 12 },
-    -- 品质4 史诗
-    { type = "equip", id = "katana",            weight = 6 },
-    { type = "equip", id = "revolver",          weight = 6 },
-    { type = "equip", id = "sport_bow",         weight = 6 },
-    { type = "equip", id = "desert_eagle",      weight = 6 },
-    { type = "equip", id = "remington_870",     weight = 6 },
-    { type = "equip", id = "warchief_necklace", weight = 6 },
-    { type = "equip", id = "football_boots",    weight = 6 },
-    { type = "equip", id = "military_boots",    weight = 6 },
-    { type = "equip", id = "noir_boots",        weight = 6 },
-    { type = "equip", id = "football_head",     weight = 6 },
-    { type = "equip", id = "military_head",     weight = 6 },
-    { type = "equip", id = "noir_head",         weight = 6 },
-    { type = "equip", id = "military_body",     weight = 6 },
-    { type = "equip", id = "noir_body",         weight = 6 },
-    { type = "equip", id = "energy_core_ring",    weight = 6 },
-    { type = "equip", id = "demon_spike_ring",    weight = 6 },
-    { type = "equip", id = "ruby_signet_ring",    weight = 6 },
-    { type = "equip", id = "void_crystal_ring",   weight = 6 },
-    -- 品质5 传说
-    { type = "equip", id = "akm",               weight = 2 },
-    { type = "equip", id = "m16",               weight = 2 },
-    { type = "equip", id = "acr",               weight = 2 },
-    { type = "equip", id = "remington_700",     weight = 2 },
-    { type = "equip", id = "radiant_ring",       weight = 2 },
-    { type = "equip", id = "nuclear_ring",       weight = 2 },
-    { type = "equip", id = "magma_ring",         weight = 2 },
-    { type = "equip", id = "juggernaut_head",   weight = 2 },
-    { type = "equip", id = "warlord_head",      weight = 2 },
-    { type = "equip", id = "overlord_head",     weight = 2 },
-    { type = "equip", id = "juggernaut_body",   weight = 2 },
-    { type = "equip", id = "juggernaut_boots",  weight = 2 },
-    { type = "equip", id = "venom_necklace",    weight = 2 },
-    { type = "equip", id = "inferno_necklace",  weight = 2 },
-    { type = "equip", id = "doom_necklace",     weight = 2 },
-    -- 品质6 至臻
-    { type = "equip", id = "xmas_revolver",     weight = 0.5 },
-    { type = "equip", id = "xmas_revolver2",    weight = 0.5 },
-    { type = "equip", id = "xmas_shotgun",      weight = 0.5 },
-    { type = "equip", id = "xmas_bat",          weight = 0.5 },
-    { type = "equip", id = "xmas_candy_cane",   weight = 0.5 },
-    { type = "equip", id = "xmas_lollipop",     weight = 0.5 },
-    { type = "equip", id = "xmas_armor",        weight = 0.5 },
-    { type = "equip", id = "xmas_boots",        weight = 0.5 },
-    { type = "equip", id = "xmas_head",         weight = 0.5 },
-    { type = "equip", id = "overlord_necklace", weight = 0.5 },
-    { type = "equip", id = "doomforge_ring",    weight = 0.5 },
+    -- 品质3 稀有（Lv1基础权重降低，依赖等级提升概率）
+    { type = "equip", id = "metal_hammer",      weight = 5 },
+    { type = "equip", id = "cinderblock_hammer",weight = 5 },
+    { type = "equip", id = "saw_bat",           weight = 5 },
+    { type = "equip", id = "rambo_knife",       weight = 5 },
+    { type = "equip", id = "bone_bow",          weight = 5 },
+    { type = "equip", id = "pistol",            weight = 5 },
+    { type = "equip", id = "grenade",           weight = 5 },
+    { type = "equip", id = "garbage_head",      weight = 5 },
+    { type = "equip", id = "mad_head",          weight = 5 },
+    { type = "equip", id = "hazmat_head",       weight = 5 },
+    { type = "equip", id = "mad_body",          weight = 5 },
+    { type = "equip", id = "hazmat_body",       weight = 5 },
+    { type = "equip", id = "garbage_boots",     weight = 5 },
+    { type = "equip", id = "mad_boots",         weight = 5 },
+    { type = "equip", id = "hazmat_boots",      weight = 5 },
+    { type = "equip", id = "scavenger_necklace", weight = 5 },
+    { type = "equip", id = "explorer_necklace",  weight = 5 },
+    { type = "equip", id = "crystal_shard_ring",  weight = 5 },
+    { type = "equip", id = "turquoise_ring",      weight = 5 },
+    { type = "equip", id = "frost_crystal_ring",  weight = 5 },
+    -- 品质4 史诗（Lv1极低概率，需等级提升才能稳定获取）
+    { type = "equip", id = "katana",            weight = 1.5 },
+    { type = "equip", id = "revolver",          weight = 1.5 },
+    { type = "equip", id = "sport_bow",         weight = 1.5 },
+    { type = "equip", id = "desert_eagle",      weight = 1.5 },
+    { type = "equip", id = "remington_870",     weight = 1.5 },
+    { type = "equip", id = "warchief_necklace", weight = 1.5 },
+    { type = "equip", id = "football_boots",    weight = 1.5 },
+    { type = "equip", id = "military_boots",    weight = 1.5 },
+    { type = "equip", id = "noir_boots",        weight = 1.5 },
+    { type = "equip", id = "football_head",     weight = 1.5 },
+    { type = "equip", id = "military_head",     weight = 1.5 },
+    { type = "equip", id = "noir_head",         weight = 1.5 },
+    { type = "equip", id = "military_body",     weight = 1.5 },
+    { type = "equip", id = "noir_body",         weight = 1.5 },
+    { type = "equip", id = "energy_core_ring",    weight = 1.5 },
+    { type = "equip", id = "demon_spike_ring",    weight = 1.5 },
+    { type = "equip", id = "ruby_signet_ring",    weight = 1.5 },
+    { type = "equip", id = "void_crystal_ring",   weight = 1.5 },
+    -- 品质5 传说（Lv1几乎不可能出，需高等级积累）
+    { type = "equip", id = "akm",               weight = 0.3 },
+    { type = "equip", id = "m16",               weight = 0.3 },
+    { type = "equip", id = "acr",               weight = 0.3 },
+    { type = "equip", id = "remington_700",     weight = 0.3 },
+    { type = "equip", id = "radiant_ring",       weight = 0.3 },
+    { type = "equip", id = "nuclear_ring",       weight = 0.3 },
+    { type = "equip", id = "magma_ring",         weight = 0.3 },
+    { type = "equip", id = "juggernaut_head",   weight = 0.3 },
+    { type = "equip", id = "warlord_head",      weight = 0.3 },
+    { type = "equip", id = "overlord_head",     weight = 0.3 },
+    { type = "equip", id = "juggernaut_body",   weight = 0.3 },
+    { type = "equip", id = "juggernaut_boots",  weight = 0.3 },
+    { type = "equip", id = "venom_necklace",    weight = 0.3 },
+    { type = "equip", id = "inferno_necklace",  weight = 0.3 },
+    { type = "equip", id = "doom_necklace",     weight = 0.3 },
+    -- 品质6 至臻（基础权重0，需抽奖Lv5+解锁，由等级加成激活）
+    { type = "equip", id = "xmas_revolver",     weight = 0 },
+    { type = "equip", id = "xmas_revolver2",    weight = 0 },
+    { type = "equip", id = "xmas_shotgun",      weight = 0 },
+    { type = "equip", id = "xmas_bat",          weight = 0 },
+    { type = "equip", id = "xmas_candy_cane",   weight = 0 },
+    { type = "equip", id = "xmas_lollipop",     weight = 0 },
+    { type = "equip", id = "xmas_armor",        weight = 0 },
+    { type = "equip", id = "xmas_boots",        weight = 0 },
+    { type = "equip", id = "xmas_head",         weight = 0 },
+    { type = "equip", id = "overlord_necklace", weight = 0 },
+    { type = "equip", id = "doomforge_ring",    weight = 0 },
     -- 资源类
     { type = "gold",   amount = 200,  weight = 30, name = "金币",     icon = "image/图层_1 (2).png" },
     { type = "gold",   amount = 500,  weight = 15, name = "金币",     icon = "image/图层_1 (2).png" },
     { type = "gold",   amount = 1000, weight = 5,  name = "金币",     icon = "image/图层_1 (2).png" },
-    { type = "diamond", amount = 50,  weight = 8,  name = "钻石",     icon = "image/图层_4 (1).png" },
-    { type = "diamond", amount = 100, weight = 3,  name = "钻石",     icon = "image/图层_4 (1).png" },
+    { type = "diamond", amount = 500,  weight = 8,  name = "钻石",     icon = "image/图层_4 (1).png" },
+    { type = "diamond", amount = 1000, weight = 3,  name = "钻石",     icon = "image/图层_4 (1).png" },
     { type = "wood",   amount = 300,  weight = 20, name = "木材",     icon = "image/图层_2 (1).png" },
     { type = "stone",  amount = 300,  weight = 20, name = "石材",     icon = "image/图层_3 (1).png" },
     -- 炮塔碎片
@@ -957,15 +1041,22 @@ function MD.GetGachaMaxExp(level)
 end
 
 -- 等级提升高品质权重加成（百分比）
--- 每级对品质3+的装备weight乘以 (1 + level * bonus)
+-- 每级对品质3+的装备weight乘以 (1 + (level-1) * bonus)
+-- 设计意图：低等级时高品质几乎不出，高等级时显著提升
+-- Lv1: Q3≈5%, Q4≈1.5%, Q5≈0.3%, Q6=0%
+-- Lv10: Q3≈15%, Q4≈7%, Q5≈3%, Q6≈1.5%
+-- Lv20: Q3≈28%, Q4≈16%, Q5≈9%, Q6≈5%
 MD.GACHA_LEVEL_BONUS = {
     [1] = 0,        -- 品质1(白) 无加成
     [2] = 0,        -- 品质2(绿) 无加成
-    [3] = 0.03,     -- 品质3(蓝) 每级+3%
-    [4] = 0.05,     -- 品质4(紫) 每级+5%
-    [5] = 0.08,     -- 品质5(金) 每级+8%
-    [6] = 0.12,     -- 品质6(红) 每级+12%
+    [3] = 0.05,     -- 品质3(蓝) 每级+5%（原3%）
+    [4] = 0.10,     -- 品质4(紫) 每级+10%（原5%）
+    [5] = 0.15,     -- 品质5(金) 每级+15%（原8%）
+    [6] = 0.20,     -- 品质6(红) 每级+20%（原12%），Lv5解锁
 }
+
+-- 品质6最低解锁等级（低于此等级Q6权重强制为0）
+MD.GACHA_Q6_MIN_LEVEL = 5
 
 -- 增加抽卡经验，自动升级
 function MD.AddGachaExp(saveData, expGain)
@@ -997,7 +1088,7 @@ function MD.RollGacha(count, gachaLevel)
     for i, item in ipairs(MD.GACHA_POOL) do
         local w = item.weight
         -- 装备类根据品质和等级调整权重
-        if item.type == "equip" and gachaLevel > 1 then
+        if item.type == "equip" then
             -- 查找装备品质
             local quality = 1
             for _, eq in ipairs(MD.EQUIP_DB) do
@@ -1006,9 +1097,14 @@ function MD.RollGacha(count, gachaLevel)
                     break
                 end
             end
-            local bonus = MD.GACHA_LEVEL_BONUS[quality] or 0
-            if bonus > 0 then
-                w = w * (1 + (gachaLevel - 1) * bonus)
+            -- 品质6等级门槛：低于Lv5强制权重为0
+            if quality == 6 and gachaLevel < (MD.GACHA_Q6_MIN_LEVEL or 5) then
+                w = 0
+            elseif gachaLevel > 1 then
+                local bonus = MD.GACHA_LEVEL_BONUS[quality] or 0
+                if bonus > 0 then
+                    w = w * (1 + (gachaLevel - 1) * bonus)
+                end
             end
         end
         adjustedWeights[i] = w
@@ -1059,17 +1155,17 @@ end
 -- 炮塔升级数据（局外用碎片升级）
 ------------------------------------------------------------------------
 MD.TURRET_UPGRADES = {
-    { id = "arrow",    name = "弓箭炮塔", maxLv = 5, fragBase = 5,  fragGrow = 1.5, icon = "image/弓箭炮塔高清.png",
+    { id = "arrow",    name = "弓箭炮塔", fragBase = 5,  fragGrow = 1.5, icon = "image/弓箭炮塔高清.png",
         baseDmg = 8,  baseCD = 1.2, baseRange = 6.0 },
-    { id = "minigun",  name = "机关枪塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/机枪炮塔高清.png",
+    { id = "minigun",  name = "机关枪塔", fragBase = 8,  fragGrow = 1.5, icon = "image/机枪炮塔高清.png",
         baseDmg = 4,  baseCD = 0.3, baseRange = 5.0 },
-    { id = "flame",    name = "喷火炮塔", maxLv = 5, fragBase = 8,  fragGrow = 1.5, icon = "image/喷火炮塔高清.png",
+    { id = "flame",    name = "喷火炮塔", fragBase = 8,  fragGrow = 1.5, icon = "image/喷火炮塔高清.png",
         baseDmg = 12, baseCD = 1.5, baseRange = 3.5 },
-    { id = "sniper",   name = "狙击炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/狙击炮塔高清.png",
+    { id = "sniper",   name = "狙击炮塔", fragBase = 10, fragGrow = 1.6, icon = "image/狙击炮塔高清.png",
         baseDmg = 30, baseCD = 3.0, baseRange = 12.0 },
-    { id = "electric", name = "电能炮塔", maxLv = 5, fragBase = 10, fragGrow = 1.6, icon = "image/电能炮塔高清.png",
+    { id = "electric", name = "电能炮塔", fragBase = 10, fragGrow = 1.6, icon = "image/电能炮塔高清.png",
         baseDmg = 6,  baseCD = 0.8, baseRange = 5.5 },
-    { id = "rocket",   name = "火箭炮塔", maxLv = 5, fragBase = 12, fragGrow = 1.8, icon = "image/火箭炮塔高清.png",
+    { id = "rocket",   name = "火箭炮塔", fragBase = 12, fragGrow = 1.8, icon = "image/火箭炮塔高清.png",
         baseDmg = 25, baseCD = 2.5, baseRange = 8.0 },
 }
 
@@ -1082,6 +1178,24 @@ MD.TURRET_UPGRADE_RES = {
     { wood = 160, stone = 110 },   -- Lv.3 → Lv.4
     { wood = 250, stone = 170 },   -- Lv.4 → Lv.5
 }
+
+--- 获取炮塔升级资源消耗（支持无限等级，超出表范围按公式递增）
+--- @param lv number 当前等级（升级前）
+--- @return table {wood, stone}
+function MD.GetTurretUpgradeRes(lv)
+    local idx = lv + 1
+    if idx <= #MD.TURRET_UPGRADE_RES then
+        return MD.TURRET_UPGRADE_RES[idx]
+    end
+    -- 超出表范围：以最后一条为基础，每多一级 ×1.5
+    local last = MD.TURRET_UPGRADE_RES[#MD.TURRET_UPGRADE_RES]
+    local extra = idx - #MD.TURRET_UPGRADE_RES
+    local mul = 1.5 ^ extra
+    return {
+        wood  = math.floor(last.wood * mul),
+        stone = math.floor(last.stone * mul),
+    }
+end
 
 ------------------------------------------------------------------------
 -- 炮塔词条（每个等级解锁的特殊能力）
@@ -1147,10 +1261,10 @@ MD.TURRET_AFFIXES = {
 function MD.NewSaveData()
     return {
         -- 货币
-        gold = 500,
-        diamond = 4000,
-        wood = 30,
-        stone = 20,
+        gold = 0,
+        diamond = 3000,
+        wood = 0,
+        stone = 0,
 
         -- 关卡进度
         maxLevel = 1,       -- 已解锁最高关卡（第1关默认解锁）
@@ -1159,26 +1273,11 @@ function MD.NewSaveData()
 
         -- 装备（inventory 存实例对象，含随机词条）
         equipped = {},      -- {weapon=1, hat=2, ...} 槽位 -> inventory索引
-        inventory = {       -- 背包装备实例
-            { id = "knife_basic",   level = 1, affixes = { {affixId = "meleeAtk", grade = 1} } },
-            { id = "common_head",   level = 1, affixes = { {affixId = "hp", grade = 1} } },
-            { id = "common_body",   level = 1, affixes = { {affixId = "def", grade = 2} } },
-            { id = "common_boots",  level = 1, affixes = { {affixId = "atkSpd", grade = 1}, {affixId = "goldBonus", grade = 2} } },
-            { id = "bat",           level = 3, affixes = { {affixId = "meleeAtk", grade = 2} } },
-            { id = "pistol",        level = 5, affixes = { {affixId = "critRate", grade = 3}, {affixId = "rangedAtk", grade = 2} } },
-            { id = "katana",        level = 8, affixes = { {affixId = "critDmg", grade = 4}, {affixId = "meleeAtk", grade = 3} } },
-            { id = "akm",           level = 12, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 4} } },
-            { id = "xmas_revolver", level = 15, affixes = { {affixId = "critRate", grade = 5}, {affixId = "critDmg", grade = 5}, {affixId = "atkPct", grade = 5} } },
-            { id = "overlord_necklace", level = 6, affixes = { {affixId = "hp", grade = 3}, {affixId = "def", grade = 3} } },
-            { id = "doomforge_ring", level = 10, affixes = { {affixId = "atkSpd", grade = 5}, {affixId = "critRate", grade = 4} } },
-            { id = "xmas_head",     level = 4, affixes = { {affixId = "hp", grade = 2}, {affixId = "def", grade = 2} } },
-            { id = "xmas_armor",    level = 15, affixes = { {affixId = "def", grade = 5}, {affixId = "hp", grade = 5} } },
-            { id = "xmas_boots",    level = 7, affixes = { {affixId = "atkSpd", grade = 3} } },
-        },
+        inventory = {},     -- 背包装备实例（无初始装备）
 
         -- 角色
         activeChar = "warrior",                     -- 当前使用的角色id
-        unlockedChars = { warrior = true, auntie = true, lisanguang = true, weifenglong = true },  -- 已解锁角色
+        unlockedChars = { warrior = true },  -- 已解锁角色
         charFrags = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },          -- 角色碎片数 {charId = count}
         charStars = { warrior = 1, auntie = 1, lisanguang = 1, weifenglong = 1 },           -- 角色星级 {charId = star}
 
@@ -1218,6 +1317,9 @@ function MD.NewSaveData()
         -- 邮件状态
         mailRead    = {},       -- {["mail_id"]=true} 已读邮件
         mailClaimed = {},       -- {["mail_id"]=true} 已领取附件的邮件
+
+        -- 新手引导
+        firstBattleDone = false, -- 首次战斗是否已完成（完成前跳过大厅直接进战斗）
     }
 end
 

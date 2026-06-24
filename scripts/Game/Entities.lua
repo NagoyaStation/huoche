@@ -1,5 +1,6 @@
 -- Game/Entities.lua - 实体逻辑：玩家、资源节点、丧尸(攻击列车)、浮岛物语风格自动攻击
 local C = require "Game.Config"
+local Audio = require "Game.Audio"
 local E = {}
 
 --- 计算最终伤害（含攻击百分比加成和暴击）
@@ -296,6 +297,16 @@ function E.AutoAttack(G, dt)
         bestTarget.hitAnim = 0.2   -- 受击闪白
         bestTarget.squashAnim = 1.0 -- 受击压缩动画
 
+        -- 播放对应资源采集音效
+        local rt = bestTarget.rtype
+        if rt == "wood" or rt == "bush" then
+            Audio.PlayChopTree()
+        elseif rt == "ore" then
+            Audio.PlayMineOre()
+        elseif rt == "stone" or rt == "pebble" then
+            Audio.PlayMineStone()
+        end
+
         -- 攻击爆点 + 击碎粒子
         E.SpawnBurst(G, bestTarget.x, bestTarget.y)
         local rc = C.CLR.wood_color
@@ -306,6 +317,12 @@ function E.AutoAttack(G, dt)
         E.SpawnParticles(G, bestTarget.x, bestTarget.y, rc, 3)
 
         if bestTarget.hp <= 0 then
+            -- 播放砍破音效（最后一下）
+            if rt == "wood" or rt == "bush" then
+                Audio.PlayChopBreak()
+            elseif rt == "stone" or rt == "pebble" or rt == "ore" then
+                Audio.PlayStoneBreak()
+            end
             -- 节点被破坏，掉落资源
             bestTarget.dead = true
             local resInfo = C.RES[bestTarget.rtype]
@@ -328,11 +345,13 @@ function E.AutoAttack(G, dt)
         local dmg, isCrit = E.CalcDamage(baseZDmg, G)
         bestTarget.hp = bestTarget.hp - dmg
         bestTarget.hitAnim = 0.2
+        Audio.PlayHitZombie()
 
         E.SpawnBurst(G, bestTarget.x, bestTarget.y)
         E.SpawnParticles(G, bestTarget.x, bestTarget.y, {220, 70, 60}, 3)
 
         if bestTarget.hp <= 0 then
+            Audio.PlayKillZombie()
             bestTarget.dead = true
             G.killCount = (G.killCount or 0) + 1
             E.SpawnZombieDeath(G, bestTarget.x, bestTarget.y)
@@ -400,6 +419,8 @@ function E.UpdateSubmitProcess(G, dt)
             startY = p.y
         end
 
+        Audio.PlayThrowRes()
+
         -- 从背包移除
         p.carryQueue[idx] = nil
         if p.carrySmooth[idx] then
@@ -462,7 +483,7 @@ function E.UpdateSubmitFlyItems(G, dt)
             local sd = G.saveData
             if sd then
                 if rtype == "ore" then
-                    sd.diamond = (sd.diamond or 0) + 1
+                    sd.diamond = (sd.diamond or 0) + 10
                 elseif rtype == "wood" or rtype == "bush" then
                     sd.wood = (sd.wood or 0) + 1
                 elseif rtype == "stone" or rtype == "pebble" then
@@ -479,7 +500,7 @@ function E.UpdateSubmitFlyItems(G, dt)
 
             -- 钻石提交时左侧显示获得提示
             if rtype == "ore" then
-                E.SpawnRewardToast(G, "gem", "获得 x1 钻石")
+                E.SpawnRewardToast(G, "gem", "获得 x10 钻石")
             end
 
             -- 白色+黑色描边 "+1" 飘字
@@ -1711,6 +1732,7 @@ end
 --- 激活角色技能
 function E.ActivateCharSkill(G)
     local charId = G.activeCharId or "warrior"
+    Audio.PlaySkill(charId)
 
     if charId == "warrior" then
         -- 投掷炸弹：在脚底放置炸弹，1.5秒后爆炸，范围伤害

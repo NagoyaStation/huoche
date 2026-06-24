@@ -5,20 +5,46 @@
     "id": "1131438649"
   },
   "entry": "main.lua",
-  "version": "1.0.0",
+  "version": "1.0.11",
   "taptap_publish": {
-    "title": "<game title, required>",
-    "description": "<game description>",
-    "category": "<game category: rpg, casual, action, strategy, simulation, trivia, arcade, adventure, card, sports, racing, puzzle, educational, music, word, board>",
-    "screen_orientation": "landscape",
+    "title": "我在尸潮开火车",
+    "description": "极寒末世降临，你驾驶末日号列车，边杀丧尸边收集资源。提交资源升级，解锁炮塔，架起一个个机枪、喷火器，把尸潮轰成碎渣！再用获得的资源深造角色、装备和炮塔，活得更远！\n幸存者们被困在一座座孤立基地，而你驾驶的火车是唯一连系着这些基地的桥梁，火车不停，火种不灭",
+    "category": "action",
+    "screen_orientation": "portrait",
     "collection_type": "sce",
-    "trial_note": "<developer's note>",
+    "trial_note": "各位列车长，你们好！\n我是《我在尸潮开火车》的制作人——也是这款游戏唯一的程序、策划兼打杂。\n我和你们一样是个末日迷，看小说、玩游戏，满脑子末世幻想。而我特别想拥有一座末日堡垒，过一把天选之子的瘾。\n同时，我又是个肉鸽塔防+割草游戏的死忠粉。可最近刷某音、某信上的小游戏，广告和充值入口越来越多，领个奖励搞得像做任务，看广告看得人都麻了。我就纳闷，为什么不能痛痛快快割草、轻轻松松爆装备？我玩小游戏，不就是图个放松吗？\n所以，我把这些脑洞全塞进了《我在尸潮开火车》。\n其实我还想塞更多——家园系统、生存玩法……但游戏目前是我一个人独立开发，可能还有点粗糙。不过你放心，肉鸽塔防那种碾压全场的爽感，一定管够。\n现在只有我自己在爆肝（AI美术真的随缘……时不时抽风），但我特别希望你玩得开心。后续也会往里肝新内容。\n谢谢你们玩我的游戏",
     "app_platforms": "1,2",
-    "developer_id": 166291
+    "developer_id": 166291,
+    "app_id": 870273,
+    "miniapp_id": "tapmcvugiafmfz24yj",
+    "gameplay_demo_video_source": "https://tapcode-sce.spark.xd.com/videos/63e872ae-3305-45f5-ba4d-e4c64771c2f0/1781256556411-uploaded_c0902222.mp4"
   },
   "assets": {
-    "icon": "",
-    "screenshots": [],
-    "promotional_image": ""
+    "icon": "./game_material/icon.png",
+    "screenshots": [
+      "./game_material/screenshot_1.png",
+      "./game_material/screenshot_2.png",
+      "./game_material/screenshot_3.png"
+    ],
+    "promotional_image": "./game_material/promotional.png",
+    "icon_url": "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/icon.png",
+    "screenshot_urls": [
+      "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/screenshot_1.png",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/screenshot_2.png",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/screenshot_3.png"
+    ],
+    "promotional_image_url": "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/promotional.png",
+    "cover_horizontal": "./game_material/cover_horizontal.png",
+    "cover_horizontal_url": "https://tapcode-sce.spark.xd.com/assets/game_material/p_qesd/cover_horizontal.png",
+    "cover_vertical": "./game_material/COVER_VERTICAL_2026-06-12T09-52-34_01.png",
+    "cover_vertical_url": "https://tapcode-sce.spark.xd.com/assets/game_material/我在尸潮开火车/COVER_VERTICAL_2026-06-12T09-52-34_01.png"
+  },
+  "test_qrcode": {
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/p_qesd_1781413877138.png",
+    "generated_at": "2026-06-14T05:11:17.289Z"
+  },
+  "metadata": {
+    "updated_at": "2026-06-14T05:11:17.289Z",
+    "promo_dependent_hash": "5cbddba25399fae892ee27d497839bd1"
   }
 }
